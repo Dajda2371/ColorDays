@@ -27,6 +27,7 @@ function updateTable() {
 
   studentTotal.textContent = studentTotalPoints;
   teacherTotal.textContent = teacherTotalPoints;
+  saveSQLToServer();
 }
 
 function createButtons(container, countsArray, updateFn) {
@@ -40,6 +41,26 @@ function createButtons(container, countsArray, updateFn) {
     container.appendChild(button);
   }
 }
+
+function saveSQLToServer() {
+    fetch('/save-sql', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        studentCounts,
+        teacherCounts
+      })
+    })
+    .then(res => res.json())
+    .then(data => {
+      //alert('SQL saved to backend!');
+      console.log(data);
+    })
+    .catch(err => {
+      alert('Error saving to backend');
+      console.error(err);
+    });
+  }
 
 // Create buttons and set up table
 createButtons(studentButtons, studentCounts, updateTable);
