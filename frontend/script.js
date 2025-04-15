@@ -4,6 +4,8 @@ const teacherCounts = [0, 0, 0, 0, 0, 0];
 const tableBody = document.getElementById('counterTable');
 const studentButtons = document.getElementById('studentButtons');
 const teacherButtons = document.getElementById('teacherButtons');
+const studentTotal = document.getElementById('studentTotal');
+const teacherTotal = document.getElementById('teacherTotal');
 
 function updateTable() {
   tableBody.innerHTML = '';
@@ -16,6 +18,13 @@ function updateTable() {
     `;
     tableBody.appendChild(row);
   }
+
+  // Calculate total points for Students and Teachers
+  const studentTotalPoints = studentCounts.reduce((total, count, index) => total + (count * (index + 1)), 0);
+  const teacherTotalPoints = teacherCounts.reduce((total, count, index) => total + (count * (index + 1)), 0);
+
+  studentTotal.textContent = studentTotalPoints;
+  teacherTotal.textContent = teacherTotalPoints;
 }
 
 function createButtons(container, countsArray, updateFn) {
