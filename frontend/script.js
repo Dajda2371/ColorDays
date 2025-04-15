@@ -19,9 +19,11 @@ function updateTable() {
     tableBody.appendChild(row);
   }
 
-  // Calculate total points for Students and Teachers
+  // Calculate total points for Students
   const studentTotalPoints = studentCounts.reduce((total, count, index) => total + (count * (index + 1)), 0);
-  const teacherTotalPoints = teacherCounts.reduce((total, count, index) => total + (count * (index + 1)), 0);
+
+  // Calculate total points for Teachers (multiplied by 2)
+  const teacherTotalPoints = teacherCounts.reduce((total, count, index) => total + (count * (index + 1) * 2), 0);
 
   studentTotal.textContent = studentTotalPoints;
   teacherTotal.textContent = teacherTotalPoints;
