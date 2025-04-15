@@ -33,7 +33,7 @@ function updateTable() {
 }
 
 function createButtons(container, countsArray, updateFn) {
-  for (let i = 1; i <= 6; i++) {
+  for (let i = 0; i <= 6; i++) { // Includes +0
     const button = document.createElement('button');
     button.textContent = `+${i}`;
     button.addEventListener('click', () => {
