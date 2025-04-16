@@ -92,29 +92,35 @@ function updateTable(data) {
 
 // --- Calculate and update total counts ---
 function updateTotals(data) {
-    console.log("Updating totals...");
-    let studentTotal = 0;
-    let teacherTotal = 0;
+  // Update console log to reflect weighted calculation
+  console.log("Updating totals (with teacher points doubled)...");
+  let studentScoreTotal = 0; // Use a name that reflects score, not just count
+  let teacherScoreTotal = 0; // Use a name that reflects score, not just count
 
-    if (Array.isArray(data)) {
-        data.forEach(item => {
-            if (item.type === 'student') {
-                studentTotal += item.count;
-            } else if (item.type === 'teacher') {
-                teacherTotal += item.count;
-            }
-        });
-    } else {
-         console.error("Data received for totals update is not an array:", data);
-    }
+  if (Array.isArray(data)) {
+      data.forEach(item => {
+          // item has { type: 'student'/'teacher', points: number, count: number }
+          if (item.type === 'student') {
+              // Student score = points * count
+              studentScoreTotal += item.points * item.count;
+          } else if (item.type === 'teacher') {
+              // Teacher score = points * count * 2 (doubled)
+              teacherScoreTotal += item.points * item.count * 2;
+          }
+      });
+  } else {
+       console.error("Data received for totals update is not an array:", data);
+  }
 
+  const studentTotalCell = document.getElementById('studentTotal');
+  const teacherTotalCell = document.getElementById('teacherTotal');
 
-    const studentTotalCell = document.getElementById('studentTotal');
-    const teacherTotalCell = document.getElementById('teacherTotal');
+  // Update the footer cells with the calculated SCORES
+  if (studentTotalCell) studentTotalCell.textContent = studentScoreTotal;
+  if (teacherTotalCell) teacherTotalCell.textContent = teacherScoreTotal;
 
-    if (studentTotalCell) studentTotalCell.textContent = studentTotal;
-    if (teacherTotalCell) teacherTotalCell.textContent = teacherTotal;
-    console.log("Totals update complete:", { studentTotal, teacherTotal });
+  // Update console log
+  console.log("Totals update complete (weighted):", { studentScoreTotal, teacherScoreTotal });
 }
 
 // --- Reset table and totals (e.g., on error) ---
@@ -152,12 +158,12 @@ function createButtons() {
     for (let points = 0; points <= 6; points++) {
         // --- Student Buttons ---
         const sIncButton = document.createElement('button');
-        sIncButton.textContent = `S ${points} +`;
+        sIncButton.textContent = `+${points}`;
         sIncButton.onclick = () => handleCountChange('increment', 'student', points);
         studentButtonsDiv.appendChild(sIncButton);
 
         const sDecButton = document.createElement('button');
-        sDecButton.textContent = `S ${points} -`;
+        sDecButton.textContent = `-${points}`;
         sDecButton.onclick = () => handleCountChange('decrement', 'student', points);
         studentButtonsDiv.appendChild(sDecButton);
 
@@ -166,12 +172,12 @@ function createButtons() {
 
         // --- Teacher Buttons ---
         const tIncButton = document.createElement('button');
-        tIncButton.textContent = `T ${points} +`;
+        tIncButton.textContent = `+${points}`;
         tIncButton.onclick = () => handleCountChange('increment', 'teacher', points);
         teacherButtonsDiv.appendChild(tIncButton);
 
         const tDecButton = document.createElement('button');
-        tDecButton.textContent = `T ${points} -`;
+        tDecButton.textContent = `-${points}`;
         tDecButton.onclick = () => handleCountChange('decrement', 'teacher', points);
         teacherButtonsDiv.appendChild(tDecButton);
 
