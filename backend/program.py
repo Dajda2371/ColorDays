@@ -20,6 +20,7 @@ BACKEND_DIR = Path(__file__).parent.resolve()
 FRONTEND_DIR = (BACKEND_DIR.parent / 'frontend').resolve()
 DATA_DIR = (BACKEND_DIR / 'data').resolve()
 SQL_FILE_PATH = DATA_DIR / 'tables.sql' # Path to the SQL data file
+LOGINS_SQL_FILE_PATH = DATA_DIR / 'logins.sql' # Path to the SQL logins file <--- NEW
 HOST = 'localhost' # Or '0.0.0.0' to be accessible on your network
 PORT = 8000 # Choose a port
 SUPPORTED_CLASSES = ['C1', 'C2', 'C3'] # Must match menu.html and initial tables.sql
@@ -58,13 +59,16 @@ def hash_password(password):
 
 def verify_password(stored_password_info, provided_password):
     """Verifies a provided password against the stored salt and hash."""
+    if not stored_password_info or ':' not in stored_password_info:
+        print("Error: Invalid or missing stored password info.")
+        return False
     try:
         salt_hex, key_hex = stored_password_info.split(':')
         salt = binascii.unhexlify(salt_hex)
         stored_key = binascii.unhexlify(key_hex)
     except (ValueError, binascii.Error):
         # Invalid format or hex decoding failed
-        print("Error: Invalid stored password format.")
+        print(f"Error: Invalid stored password format for hash starting with '{salt_hex[:8]}...'")
         return False
 
     # Password must be bytes
@@ -80,25 +84,13 @@ def verify_password(stored_password_info, provided_password):
     )
 
     # Compare the derived key with the stored key
-    # hashlib.timing_safe_compare helps prevent timing attacks
+    # hmac.compare_digest helps prevent timing attacks
     return hmac.compare_digest(stored_key, new_key)
 
-# --- User Credentials Store ---
-# IMPORTANT: You MUST generate these values using the hash_password function.
-# Do NOT store plain text passwords here.
-# Run a separate script or use the Python interactive console:
-# >>> from program import hash_password # Assuming your file is program.py
-# >>> hash_password("password123")
-# 'copy_the_salt:hash_output_here'
-# >>> hash_password("teachpass")
-# 'copy_the_salt:hash_output_here'
-#
-# Replace these placeholders with the ACTUAL output from hash_password():
-USER_CREDENTIALS = {
-    "admin": "b2572516d38c89749991b0696b864354:e5c2e16640945d0894a33525eec509829829b495cd814b50fd592b456e265ece", # e.g., hash_password("password123")
-    "teacher1": "712be73f712ae28a05f799199a647f0d:da367cf896e24b05cddaea0a618efc365865acbf29e0fccbfc00755ef4d98f4a" # e.g., hash_password("teachpass")
-}
-# --- End Secure Login Configuration ---
+# --- User Credentials Store (Loaded from logins.sql) --- <--- MODIFIED
+# This dictionary will be populated by load_user_data_from_sql()
+user_password_store = {}
+# --- End User Credentials Store ---
 
 # --- Session Configuration ---
 SESSION_COOKIE_NAME = "ColorDaysSession"
@@ -107,14 +99,15 @@ VALID_SESSION_VALUE = "user_is_logged_in_secret_value" # Replace with a secure, 
 
 
 # --- In-Memory Data Store and Lock ---
-# (Data store and lock code remains the same)
 data_store = collections.defaultdict(lambda: collections.defaultdict(lambda: collections.defaultdict(int)))
 data_lock = threading.RLock()
 
 
 # --- SQL File Handling Functions ---
+
+# --- Parsing for tables.sql ---
 def parse_sql_line(line):
-    """Parses a single INSERT statement line."""
+    """Parses a single INSERT statement line for the counts table."""
     # Regex to capture class_name, type, points, count from the specific INSERT format
     match = re.match(
         r"INSERT INTO counts \(class_name, type, points, count\) VALUES \('([^']*)', '([^']*)', (\d+), (\d+)\);",
@@ -127,19 +120,43 @@ def parse_sql_line(line):
             count = int(count_str)
             return class_name, type_val, points, count
         except ValueError:
-            print(f"Warning: Could not parse numbers in line: {line.strip()}")
+            print(f"Warning: Could not parse numbers in counts line: {line.strip()}")
             return None
     else:
         # Ignore comments and empty lines silently
-        if line.strip() and not line.strip().startswith('--'):
-             print(f"Warning: Could not parse line format: {line.strip()}")
+        if line.strip() and not line.strip().startswith('--') and not line.strip().upper().startswith('CREATE TABLE'):
+             print(f"Warning: Could not parse counts line format: {line.strip()}")
         return None
 
+# --- Parsing for logins.sql --- <--- NEW
+def parse_logins_sql_line(line):
+    """Parses a single INSERT statement line for the users table."""
+    # Regex to capture username and password_hash from the specific INSERT format
+    # Allows for optional spaces around commas and parentheses
+    match = re.match(
+        r"INSERT INTO users\s*\(\s*username\s*,\s*password_hash\s*\)\s*VALUES\s*\('([^']*)'\s*,\s*'([^']*)'\s*\);",
+        line.strip(),
+        re.IGNORECASE # Make matching case-insensitive for keywords like INSERT
+    )
+    if match:
+        username, password_hash = match.groups()
+        # Basic validation on the hash format (contains colon, reasonable length)
+        if ':' in password_hash and len(password_hash) > (SALT_BYTES*2 + DK_LENGTH*2):
+            return username, password_hash
+        else:
+            print(f"Warning: Invalid password hash format skipped in logins line: {line.strip()}")
+            return None
+    else:
+        # Ignore comments and empty lines silently
+        if line.strip() and not line.strip().startswith('--') and not line.strip().upper().startswith('CREATE TABLE'):
+             print(f"Warning: Could not parse logins line format: {line.strip()}")
+        return None
 
+# --- Loading for tables.sql ---
 def load_data_from_sql():
     """Loads data from tables.sql into the in-memory data_store."""
     global data_store
-    print(f"Attempting to load data from: {SQL_FILE_PATH}")
+    print(f"Attempting to load counts data from: {SQL_FILE_PATH}")
     # Ensure data directory exists
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -160,24 +177,24 @@ def load_data_from_sql():
                              temp_data[class_name][type_val][points] = count
                              found_classes.add(class_name)
                         else:
-                             print(f"Warning: Invalid data values skipped in line {line_num}: {line.strip()}")
+                             print(f"Warning: Invalid data values skipped in counts line {line_num}: {line.strip()}")
 
-            print(f"Loaded data for classes found in file: {', '.join(sorted(list(found_classes)))}")
+            print(f"Loaded counts data for classes found in file: {', '.join(sorted(list(found_classes)))}")
 
         except Exception as e:
-            print(f"!!! ERROR reading or parsing {SQL_FILE_PATH}: {e}. Data store might be empty or incomplete.")
+            print(f"!!! ERROR reading or parsing {SQL_FILE_PATH}: {e}. Counts data store might be empty or incomplete.")
             # Optionally clear temp_data if error is severe
             # temp_data.clear()
             # found_classes.clear()
 
     else:
-         print(f"Warning: {SQL_FILE_PATH} not found. Will initialize default data.")
+         print(f"Warning: {SQL_FILE_PATH} not found. Will initialize default counts data.")
 
     # Ensure all SUPPORTED_CLASSES have default entries if missing
     needs_save = False
     for class_name in SUPPORTED_CLASSES:
         if class_name not in temp_data: # Check against temp_data, not found_classes
-             print(f"Initializing default zero data for missing class: {class_name}")
+             print(f"Initializing default zero counts data for missing class: {class_name}")
              needs_save = True # Need to save the defaults we're adding
              for type_val in ['student', 'teacher']:
                  for points_val in range(7): # 0 to 6
@@ -189,24 +206,69 @@ def load_data_from_sql():
 
     # If we added defaults or the file didn't exist, save the current state
     if needs_save or not file_exists:
-        print("Saving initial/default data state to tables.sql...")
+        print("Saving initial/default counts data state to tables.sql...")
         # This call will acquire the RLock again, which is allowed
         if not save_data_to_sql():
-             print("!!! CRITICAL: Failed to save initial data. File might be missing or unwritable.")
+             print("!!! CRITICAL: Failed to save initial counts data. File might be missing or unwritable.")
 
-    print("Data loading/initialization complete.")
+    print("Counts data loading/initialization complete.")
+
+# --- Loading for logins.sql --- <--- NEW
+def load_user_data_from_sql():
+    """Loads user data from logins.sql into the in-memory user_password_store."""
+    global user_password_store
+    print(f"Attempting to load user data from: {LOGINS_SQL_FILE_PATH}")
+    # Ensure data directory exists (might be redundant but safe)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    temp_user_store = {}
+    file_exists = LOGINS_SQL_FILE_PATH.exists()
+    users_loaded_count = 0
+
+    if file_exists:
+        try:
+            with open(LOGINS_SQL_FILE_PATH, 'r', encoding='utf-8') as f:
+                for line_num, line in enumerate(f, 1):
+                    parsed = parse_logins_sql_line(line)
+                    if parsed:
+                        username, password_hash = parsed
+                        if username in temp_user_store:
+                            print(f"Warning: Duplicate username '{username}' found in {LOGINS_SQL_FILE_PATH} line {line_num}. Using the last entry.")
+                        temp_user_store[username] = password_hash
+                        users_loaded_count += 1 # Count only successfully parsed users
+
+            print(f"Loaded {users_loaded_count} user(s) from {LOGINS_SQL_FILE_PATH}.")
+
+        except Exception as e:
+            print(f"!!! ERROR reading or parsing {LOGINS_SQL_FILE_PATH}: {e}. User data store might be empty or incomplete.")
+            temp_user_store.clear() # Clear potentially partial data on error
+            users_loaded_count = 0
+
+    else:
+         print(f"Warning: {LOGINS_SQL_FILE_PATH} not found. No users loaded. Login will not work.")
+
+    # Update the global user store (no lock needed if only done at startup)
+    user_password_store = temp_user_store
+
+    if users_loaded_count == 0:
+        print("!!! WARNING: No user accounts loaded. Login functionality will be unavailable.")
+        print(f"!!! Ensure {LOGINS_SQL_FILE_PATH} exists, is readable, and contains valid INSERT statements.")
+        print(f"!!! Example INSERT: INSERT INTO users (username, password_hash) VALUES ('admin', '{hash_password('your_password')}');")
+
+    print("User data loading complete.")
 
 
+# --- Saving for tables.sql ---
 def save_data_to_sql():
     """Saves the current in-memory data_store back to tables.sql. Returns True on success, False on failure."""
     global data_store
-    print(f"Attempting to save data to: {SQL_FILE_PATH}")
+    print(f"Attempting to save counts data to: {SQL_FILE_PATH}")
     # Acquire lock. RLock allows acquiring again if the thread already holds it.
     with data_lock:
         try:
             sql_lines = []
             sql_lines.append(f"-- Data saved on {datetime.datetime.now().isoformat()} --")
-            sql_lines.append("-- This file is used as the primary data storage. --")
+            sql_lines.append("-- This file is used as the primary data storage for counts. --")
             sql_lines.append("")
 
             # Iterate through the in-memory store and generate INSERT statements
@@ -229,7 +291,7 @@ def save_data_to_sql():
                 f.write("\n") # Add a final newline
                 print(f"DEBUG: Data written to file buffer.")
             # 'with open' automatically closes the file here, flushing the buffer.
-            print(f"Data successfully saved to {SQL_FILE_PATH}") # Success message
+            print(f"Counts data successfully saved to {SQL_FILE_PATH}") # Success message
             return True
 
         except PermissionError as e: # Catch specific permission error first
@@ -290,9 +352,9 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self._send_response(204) # No Content for OPTIONS
 
-    # (do_GET remains the same - including login redirect logic)
+    # (do_GET remains largely the same - including login redirect logic)
     def do_GET(self):
-        global data_store
+        global data_store # Keep access to counts data
         parsed_path = urllib.parse.urlparse(self.path)
         path = parsed_path.path
         query = urllib.parse.parse_qs(parsed_path.query)
@@ -385,12 +447,14 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
     # Handle POST requests (/login, /api/increment, /api/decrement)
     def do_POST(self):
-        global data_store
+        global data_store # Keep access to counts data
+        global user_password_store # Access loaded user data <--- NEW
         parsed_path = urllib.parse.urlparse(self.path)
         path = parsed_path.path
 
         # Read request body
         content_length = int(self.headers.get('Content-Length', 0))
+        # Allow empty body for /logout
         if content_length == 0 and path != '/logout':
              self._send_response(400, {"error": "Empty request body"})
              return
@@ -404,14 +468,22 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 submitted_password = credentials.get('password')
 
                 login_successful = False
-                stored_info = USER_CREDENTIALS.get(username)
+                # --- MODIFIED: Look up user in the loaded store ---
+                stored_info = user_password_store.get(username)
+                # --- END MODIFICATION ---
 
                 # Check if user exists and password was provided
                 if stored_info and submitted_password:
                     # Verify the password using the stored salt and hash info
                     if verify_password(stored_info, submitted_password):
                         login_successful = True
-                    # !!! END INSECURE CHECK !!!
+                    else:
+                        print(f"Password verification failed for user: {username}") # Added detail
+                elif not stored_info:
+                     print(f"Login attempt failed: Username '{username}' not found.")
+                elif not submitted_password:
+                     print(f"Login attempt failed: No password provided for user '{username}'.")
+
 
                 if login_successful:
                     # Prepare the session cookie
@@ -427,7 +499,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                     print(f"Login successful for user: {username}, session cookie set.")
                     self._send_response(200, {"success": True, "message": "Login successful"}, headers=custom_headers)
                 else:
-                    print(f"Login failed for user attempt: {username}")
+                    # Generic error message to client, specific logs server-side
                     self._send_response(401, {"error": "Invalid username or password"}) # Unauthorized
 
             except json.JSONDecodeError:
@@ -469,142 +541,130 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             self._send_response(400, {"error": "Invalid JSON payload"})
             return
 
-        class_name = data.get('className')
-        type_val = data.get('type')
-        points_val = data.get('points')
+        # --- Handle /api/increment ---
+        if path == '/api/increment':
+            class_name = data.get('className')
+            type_val = data.get('type')
+            points_val = data.get('points')
 
-        # Basic validation
-        if not all([class_name, type_val, points_val is not None]):
-            self._send_response(400, {"error": "Missing data: className, type, or points"})
-            return
-        if type_val not in ['student', 'teacher']:
-            self._send_response(400, {"error": "Invalid type"})
-            return
-        if not isinstance(points_val, int) or not (0 <= points_val <= 6):
-             self._send_response(400, {"error": "Invalid points value"})
-             return
-        # Maybe validate class_name against SUPPORTED_CLASSES?
-        # if class_name not in SUPPORTED_CLASSES:
-        #     self._send_response(400, {"error": f"Unsupported class name: {class_name}"})
-        #     return
+            # Basic validation
+            if not all([class_name, type_val, points_val is not None]):
+                self._send_response(400, {"error": "Missing data: className, type, or points"})
+                return
+            if type_val not in ['student', 'teacher']:
+                self._send_response(400, {"error": "Invalid type"})
+                return
+            if not isinstance(points_val, int) or not (0 <= points_val <= 6):
+                 self._send_response(400, {"error": "Invalid points value"})
+                 return
 
-        # --- Critical Section: Modify in-memory data and save to file ---
-        success = False
-        message = "Operation failed"
-        status_code = 500 # Default to internal error
-        save_needed = False
-        action_verb = "processed" # Default verb
+            success = False
+            message = "Increment failed"
+            status_code = 500
+            save_needed = False
 
-        # Acquire the reentrant lock
-        with data_lock:
-            try:
-                # Use .get() with defaults to safely access potentially missing keys
-                current_count = data_store.get(class_name, {}).get(type_val, {}).get(points_val, 0)
-
-                if path == '/api/increment':
-                    # Increment in memory using defaultdict's auto-creation
+            with data_lock:
+                try:
+                    current_count = data_store.get(class_name, {}).get(type_val, {}).get(points_val, 0)
                     data_store[class_name][type_val][points_val] = current_count + 1
                     save_needed = True
-                    action_verb = "incremented"
 
-                elif path == '/api/decrement':
+                    if save_needed:
+                        print(f"DEBUG: Change detected (increment), attempting save...")
+                        if save_data_to_sql():
+                            success = True
+                            message = "Count incremented"
+                            status_code = 200
+                        else:
+                            success = False
+                            message = "Count incremented in memory, but CRITICAL error saving to file."
+                            status_code = 500
+                except Exception as e:
+                    print(f"!!! UNEXPECTED ERROR during POST {path} operation (within lock):")
+                    print(traceback.format_exc())
+                    success = False
+                    message = "An internal error occurred during the increment operation."
+                    status_code = 500
+
+            if status_code == 200:
+                 self._send_response(status_code, {"success": success, "message": message})
+            else:
+                 self._send_response(status_code, {"error": message})
+            return # Handled
+
+        # --- Handle /api/decrement ---
+        elif path == '/api/decrement':
+            class_name = data.get('className')
+            type_val = data.get('type')
+            points_val = data.get('points')
+
+            # Basic validation (repeated for clarity, could be refactored)
+            if not all([class_name, type_val, points_val is not None]):
+                self._send_response(400, {"error": "Missing data: className, type, or points"})
+                return
+            if type_val not in ['student', 'teacher']:
+                self._send_response(400, {"error": "Invalid type"})
+                return
+            if not isinstance(points_val, int) or not (0 <= points_val <= 6):
+                 self._send_response(400, {"error": "Invalid points value"})
+                 return
+
+            success = False
+            message = "Decrement failed"
+            status_code = 500
+            save_needed = False
+
+            with data_lock:
+                try:
+                    current_count = data_store.get(class_name, {}).get(type_val, {}).get(points_val, 0)
                     if current_count > 0:
-                        # Decrement in memory
                         data_store[class_name][type_val][points_val] = current_count - 1
                         save_needed = True
-                        action_verb = "decremented"
                     else:
-                        # Count is already zero, do nothing to file
                         success = False # Operation didn't change state
                         message = "Count already zero"
                         status_code = 400 # Bad Request
                         save_needed = False # No change, no save needed
-                else:
-                    # Endpoint not found (Shouldn't happen due to checks above, but good practice)
+
+                    if save_needed:
+                        print(f"DEBUG: Change detected (decrement), attempting save...")
+                        if save_data_to_sql():
+                            success = True
+                            message = "Count decremented"
+                            status_code = 200
+                        else:
+                            success = False
+                            message = "Count decremented in memory, but CRITICAL error saving to file."
+                            status_code = 500
+                except Exception as e:
+                    print(f"!!! UNEXPECTED ERROR during POST {path} operation (within lock):")
+                    print(traceback.format_exc())
                     success = False
-                    message = "API endpoint not found"
-                    status_code = 404
-                    save_needed = False
+                    message = "An internal error occurred during the decrement operation."
+                    status_code = 500
 
-                # If an action was performed that requires saving
-                if save_needed:
-                    print(f"DEBUG: Change detected ({action_verb}), attempting save...")
-                    if save_data_to_sql(): # This call acquires the RLock again
-                        success = True
-                        message = f"Count {action_verb}"
-                        status_code = 200
-                    else:
-                        # Save failed! Critical error.
-                        success = False
-                        message = f"Count {action_verb} in memory, but CRITICAL error saving to file."
-                        status_code = 500 # Internal Server Error
+            if status_code == 200:
+                 self._send_response(status_code, {"success": success, "message": message})
+            else:
+                 self._send_response(status_code, {"error": message})
+            return # Handled
 
-            except Exception as e:
-                print(f"!!! UNEXPECTED ERROR during POST {path} operation (within lock):")
-                print(traceback.format_exc())
-                success = False
-                message = "An internal error occurred during the operation."
-                status_code = 500
-        # --- End Critical Section (Lock Released) ---
-
-        # Send response outside the lock
-        if status_code == 200:
-             self._send_response(status_code, {"success": success, "message": message})
+        # --- Handle unknown authenticated POST paths ---
         else:
-             # For errors (4xx, 5xx), send an "error" field instead of "message"
-             self._send_response(status_code, {"error": message})
-
-        # --- Handle unknown POST paths ---
-        # This part is now implicitly handled because if path is not /login, /logout,
-        # /api/increment, or /api/decrement, it will fall through without matching
-        # any specific logic after the authentication check. We should add an explicit
-        # 404 check if no other path matched.
-        # Let's refine the structure slightly for clarity:
-
-        # (Previous code for /login, /logout, auth check remains the same)
-        # ...
-
-        # elif path == '/api/increment':
-        #     # ... increment logic ...
-        #     # Send response
-        #     return # Explicitly return after handling
-
-        # elif path == '/api/decrement':
-        #     # ... decrement logic ...
-        #     # Send response
-        #     return # Explicitly return after handling
-
-        # else: # If path wasn't login, logout, increment, or decrement (and user was authenticated)
-        #     print(f"Authenticated POST request to unknown path: {path}")
-        #     self._send_response(404, {"error": "API endpoint not found"})
+            print(f"Authenticated POST request to unknown path: {path}")
+            self._send_response(404, {"error": "API endpoint not found"})
 
 
 # --- Main Execution ---
 if __name__ == "__main__":
     print("--- Starting Color Days Server ---")
 
-    # Check if placeholder hashes are still present
-    if 'PLACEHOLDER_SALT_HEX' in USER_CREDENTIALS.get('admin', ''):
-        print("\n" + "="*60)
-        print("WARNING: Placeholder admin password hash detected!")
-        print("You MUST generate a real hash using the 'hash_password' function.")
-        print("Example (run in python interpreter or a separate script):")
-        print("  from program import hash_password")
-        print("  admin_hash = hash_password('password123')")
-        print("  print(f\"Admin hash: {admin_hash}\")")
-        print("Then copy the 'salt:hash' output into USER_CREDENTIALS['admin'].")
-        print("="*60 + "\n")
-    if 'PLACEHOLDER_SALT_HEX' in USER_CREDENTIALS.get('teacher1', ''):
-        print("\n" + "="*60)
-        print("WARNING: Placeholder teacher1 password hash detected!")
-        print("Generate a real hash for 'teachpass' similarly.")
-        print("  teacher_hash = hash_password('teachpass')")
-        print("  print(f\"Teacher1 hash: {teacher_hash}\")")
-        print("Then copy the 'salt:hash' output into USER_CREDENTIALS['teacher1'].")
-        print("="*60 + "\n")
-
-
+    # --- Load Data ---
+    # Load counts data first
     load_data_from_sql()
+    # Load user login data <--- NEW
+    load_user_data_from_sql()
+    # --- End Load Data ---
 
     # Server setup using ThreadingMixIn for basic concurrency
     class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
@@ -615,7 +675,8 @@ if __name__ == "__main__":
 
     print(f"\nServing HTTP on {HOST}:{PORT}...")
     print(f"Frontend root: {FRONTEND_DIR}")
-    print(f"Using data file: {SQL_FILE_PATH}")
+    print(f"Using counts data file: {SQL_FILE_PATH}")
+    print(f"Using logins data file: {LOGINS_SQL_FILE_PATH}") # <--- NEW
     print(f"Using hashlib.pbkdf2_hmac with {ITERATIONS} iterations.")
     print(f"\nAccess the application via: http://{HOST}:{PORT}/")
     print(f"(Will redirect to /login.html if not logged in)")
