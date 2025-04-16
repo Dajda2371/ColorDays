@@ -1,59 +1,111 @@
 import webbrowser
-import http.server
-import socketserver
 import os
 import json
+from http.server import SimpleHTTPRequestHandler, HTTPServer
 
-PORT = 8000
+BACKEND = os.path.dirname(os.path.abspath(__file__))
+FRONTEND_DIR = os.path.join(BACKEND, '../frontend')
+DATA = os.path.join(BACKEND, 'data')
+SQL_FILE = os.path.join(DATA, 'tables.sql')  # Ensure this is pointing to the correct file
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-FRONTEND_DIR = os.path.join(BASE_DIR, "../frontend")
-DATA_DIR = os.path.join(BASE_DIR, "data")
-SQL_FILE = os.path.join(DATA_DIR, "tables.sql")
+os.makedirs(os.path.dirname(SQL_FILE), exist_ok=True)
 
-os.makedirs(DATA_DIR, exist_ok=True)  # Make sure /data exists
-os.chdir(FRONTEND_DIR)  # Serve frontend files
+def generate_sql(student_counts, teacher_counts):
+    values = []
+    for points, count in enumerate(student_counts):
+        values.append(f"('student', {points}, {count})")
+    for points, count in enumerate(teacher_counts):
+        values.append(f"('teacher', {points}, {count})")
+    return "INSERT INTO counts (type, points, count) VALUES\n" + ",\n".join(values) + ";\n"
 
-class CustomHandler(http.server.SimpleHTTPRequestHandler):
+def parse_sql():
+    if not os.path.exists(SQL_FILE):
+        return [0]*7, [0]*7
+
+    student = [0]*7
+    teacher = [0]*7
+
+    with open(SQL_FILE, 'r') as f:
+        lines = f.readlines()
+
+    for line in lines:
+        if line.strip().startswith("('"):
+            parts = line.strip().strip(",").strip("();").split(",")
+            typ = parts[0].strip(" '")
+            points = int(parts[1])
+            count = int(parts[2])
+            if typ == "student":
+                student[points] = count
+            elif typ == "teacher":
+                teacher[points] = count
+
+    return student, teacher
+
+class MyHandler(SimpleHTTPRequestHandler):
     def do_POST(self):
         if self.path == '/save-sql':
-            content_length = int(self.headers['Content-Length'])
-            post_data = self.rfile.read(content_length)
+            length = int(self.headers.get('Content-Length'))
+            body = self.rfile.read(length)
+            data = json.loads(body)
+
+            with open(SQL_FILE, 'w') as f:
+                f.write("INSERT INTO counts (type, points, count) VALUES\n")
+                values = []
+                for i, count in enumerate(data['studentCounts']):
+                    values.append(f"('student', {i}, {count})")
+                for i, count in enumerate(data['teacherCounts']):
+                    values.append(f"('teacher', {i}, {count})")
+                f.write(',\n'.join(values) + ';')
+
+            self.send_response(200)
+            self.end_headers()
+        else:
+            super().do_POST()
+
+    def do_GET(self):
+        if self.path == '/load-sql':
             try:
-                data = json.loads(post_data.decode('utf-8'))
-                student_counts = data.get('studentCounts', [])
-                teacher_counts = data.get('teacherCounts', [])
+                studentCounts = [0] * 7
+                teacherCounts = [0] * 7
 
-                sql_lines = ["-- SQL Export of point_counts", "DELETE FROM point_counts;"]
-                for i in range(0, 7):
-                    student = student_counts[i] if i < len(student_counts) else 0
-                    teacher = teacher_counts[i] if i < len(teacher_counts) else 0
-                    sql_lines.append(f"INSERT INTO point_counts (role, points, count) VALUES ('student', {i}, {student});")
-                    sql_lines.append(f"INSERT INTO point_counts (role, points, count) VALUES ('teacher', {i}, {teacher});")
-
-                with open(SQL_FILE, 'w') as f:
-                    f.write("\n".join(sql_lines))
+                if os.path.exists(SQL_FILE):
+                    with open(SQL_FILE, 'r') as f:
+                        lines = f.readlines()
+                        for line in lines:
+                            if line.strip().startswith("('"):
+                                parts = line.strip().strip(",").strip("();").split(",")
+                                typ = parts[0].strip(" '")
+                                points = int(parts[1])
+                                count = int(parts[2])
+                                if typ == 'student':
+                                    studentCounts[points] = count
+                                elif typ == 'teacher':
+                                    teacherCounts[points] = count
 
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
-                self.wfile.write(b'{"message": "SQL saved"}')
-
+                self.wfile.write(json.dumps({
+                    'studentCounts': studentCounts,
+                    'teacherCounts': teacherCounts
+                }).encode())
             except Exception as e:
                 self.send_response(500)
-                self.send_header('Content-Type', 'application/json')
                 self.end_headers()
-                error_msg = json.dumps({ "error": str(e) }).encode('utf-8')
-                self.wfile.write(error_msg)
+                self.wfile.write(f"Error loading SQL: {e}".encode())
         else:
-            self.send_error(404, 'Not Found')
-
-Handler = CustomHandler
+            super().do_GET()
 
 def run():
-    webbrowser.open(f"http://localhost:{PORT}/index.html")
+    webbrowser.open(f"http://localhost:8000/")
 
-with socketserver.TCPServer(("", PORT), Handler) as httpd:
-    run()  # Comment out for headless
-    print(f"Server running at http://localhost:{PORT}")
-    httpd.serve_forever()
+PORT = 8000
+
+# Change to the frontend directory after the server is started
+os.chdir(FRONTEND_DIR)
+
+# Start the server with backend access
+with HTTPServer(('localhost', PORT), MyHandler) as server:
+    run()
+    print(f"Serving at http://localhost:{PORT}")
+    server.serve_forever()
