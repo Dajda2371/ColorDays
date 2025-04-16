@@ -3,10 +3,10 @@ import os
 import json
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 
-DATA_PATH = './backend/data/tables.sql'
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.join(BASE_DIR, '../frontend')
-SQL_FILE = os.path.join(BASE_DIR, 'data', 'tables.sql')
+SQL_FILE = os.path.join(BASE_DIR, 'backend', 'data', 'tables.sql')  # Ensure this is pointing to the correct file
+DATA_PATH = './backend/data/tables.sql'
 
 os.makedirs(os.path.dirname(SQL_FILE), exist_ok=True)
 
@@ -97,12 +97,15 @@ class MyHandler(SimpleHTTPRequestHandler):
             super().do_GET()
 
 def run():
-    webbrowser.open(f"http://localhost:8000/index.html")
+    webbrowser.open(f"http://localhost:8000/")
 
 PORT = 8000
 
-os.chdir(FRONTEND_DIR)
+# Start the server with backend access
 with HTTPServer(('localhost', PORT), MyHandler) as server:
     run()
     print(f"Serving at http://localhost:{PORT}")
     server.serve_forever()
+
+# Change to the frontend directory after the server is started
+os.chdir(FRONTEND_DIR)
