@@ -22,10 +22,7 @@ function updateTable() {
     tableBody.appendChild(row);
   }
 
-    // Calculate total points for Students
   const studentTotalPoints = studentCounts.reduce((sum, count, i) => sum + count * i, 0);
-
-    // Calculate total points for Teachers (multiplied by 2)
   const teacherTotalPoints = teacherCounts.reduce((sum, count, i) => sum + count * i * 2, 0);
 
   studentTotal.textContent = studentTotalPoints;
@@ -40,7 +37,7 @@ function createButtons(container, countsArray, updateFn) {
       countsArray[i]++;
       updateFn();
       if (dataLoaded) {
-        hasUserInteracted = true; // mark actual interaction
+        hasUserInteracted = true;
         saveSQLToServer();
       }
     });
@@ -49,9 +46,8 @@ function createButtons(container, countsArray, updateFn) {
 }
 
 function saveSQLToServer() {
-  if (!dataLoaded || !hasUserInteracted) return; // don't save too early
+  if (!dataLoaded || !hasUserInteracted) return;
 
-  console.log("Saving to server:", studentCounts, teacherCounts);
   fetch('/save-sql', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -63,19 +59,16 @@ function loadSQLFromServer() {
   fetch('/load-sql')
     .then(res => res.json())
     .then(data => {
-      console.log("Loaded from server:", data); // Debug output
-
       for (let i = 0; i <= 6; i++) {
-        studentCounts[i] = data.studentCounts[i] || 0;
-        teacherCounts[i] = data.teacherCounts[i] || 0;
+        studentCounts[i] = data.studentCounts?.[i] ?? 0;
+        teacherCounts[i] = data.teacherCounts?.[i] ?? 0;
       }
-
       updateTable();
-      dataLoaded = true; // Now allow save on user action
+      dataLoaded = true;
     })
     .catch(err => {
       console.error("Load failed:", err);
-      dataLoaded = true; // Still allow future saves
+      dataLoaded = true;
     });
 }
 

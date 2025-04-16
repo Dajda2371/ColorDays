@@ -2,8 +2,8 @@ import webbrowser
 import os
 import json
 from http.server import SimpleHTTPRequestHandler, HTTPServer
-import urllib.parse
 
+DATA_PATH = './backend/data/tables.sql'
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.join(BASE_DIR, '../frontend')
 SQL_FILE = os.path.join(BASE_DIR, 'data', 'tables.sql')
@@ -43,45 +43,66 @@ def parse_sql():
 
 class MyHandler(SimpleHTTPRequestHandler):
     def do_POST(self):
-        if self.path == "/save-sql":
-            length = int(self.headers['Content-Length'])
-            data = self.rfile.read(length)
-            payload = json.loads(data)
+        if self.path == '/save-sql':
+            length = int(self.headers.get('Content-Length'))
+            body = self.rfile.read(length)
+            data = json.loads(body)
 
-            student_counts = payload.get("studentCounts", [0]*7)
-            teacher_counts = payload.get("teacherCounts", [0]*7)
-
-            sql = generate_sql(student_counts, teacher_counts)
             with open(SQL_FILE, 'w') as f:
-                f.write(sql)
+                f.write("INSERT INTO counts (type, points, count) VALUES\n")
+                values = []
+                for i, count in enumerate(data['studentCounts']):
+                    values.append(f"('student', {i}, {count})")
+                for i, count in enumerate(data['teacherCounts']):
+                    values.append(f"('teacher', {i}, {count})")
+                f.write(',\n'.join(values) + ';')
 
             self.send_response(200)
             self.end_headers()
-            self.wfile.write(b'{"status":"saved"}')
-
         else:
-            self.send_response(404)
-            self.end_headers()
+            super().do_POST()
 
     def do_GET(self):
-        if self.path == "/load-sql":
-            student_counts, teacher_counts = parse_sql()
-            response = {
-                "studentCounts": student_counts,
-                "teacherCounts": teacher_counts
-            }
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps(response).encode())
+        if self.path == '/load-sql':
+            try:
+                studentCounts = [0] * 7
+                teacherCounts = [0] * 7
+
+                if os.path.exists(SQL_FILE):
+                    with open(SQL_FILE, 'r') as f:
+                        lines = f.readlines()
+                        for line in lines:
+                            if line.strip().startswith("('"):
+                                parts = line.strip().strip(",").strip("();").split(",")
+                                typ = parts[0].strip(" '")
+                                points = int(parts[1])
+                                count = int(parts[2])
+                                if typ == 'student':
+                                    studentCounts[points] = count
+                                elif typ == 'teacher':
+                                    teacherCounts[points] = count
+
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    'studentCounts': studentCounts,
+                    'teacherCounts': teacherCounts
+                }).encode())
+            except Exception as e:
+                self.send_response(500)
+                self.end_headers()
+                self.wfile.write(f"Error loading SQL: {e}".encode())
         else:
             super().do_GET()
 
 def run():
     webbrowser.open(f"http://localhost:8000/index.html")
 
+PORT = 8000
+
 os.chdir(FRONTEND_DIR)
-with HTTPServer(("", 8000), MyHandler) as httpd:
+with HTTPServer(('localhost', PORT), MyHandler) as server:
     run()
-    print("Server running at http://localhost:8000")
-    httpd.serve_forever()
+    print(f"Serving at http://localhost:{PORT}")
+    server.serve_forever()
