@@ -103,6 +103,7 @@ class MyHandler(SimpleHTTPRequestHandler):
     def do_POST(self):
         # --- LOGIN HANDLING ---
         if self.path == '/login':
+            # ... (login logic remains the same - sets cookie on success) ...
             try:
                 length = int(self.headers.get('Content-Length'))
                 body = self.rfile.read(length)
@@ -152,9 +153,25 @@ class MyHandler(SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({'success': False, 'message': f'Server error during login: {e}'}).encode())
                 print(f"Error during login processing: {e}")
 
-        # --- SAVE COUNTS DATA (remains the same) ---
+        # --- SAVE COUNTS DATA ---
         elif self.path == '/save-sql':
+            # *** ADD AUTHENTICATION CHECK HERE ***
+            cookies = self.get_cookies()
+            is_logged_in = cookies.get(SESSION_COOKIE_NAME) and \
+                           cookies[SESSION_COOKIE_NAME].value == VALID_SESSION_VALUE
+
+            if not is_logged_in:
+                print(f"Denied POST request to /save-sql - User not logged in.")
+                self.send_response(401) # Unauthorized
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'success': False, 'message': 'Authentication required'}).encode())
+                return # Stop processing if not logged in
+            # **************************************
+
+            # --- Proceed with saving only if logged in ---
             try:
+                print("Processing authenticated POST request to /save-sql...") # Log access
                 length = int(self.headers.get('Content-Length'))
                 body = self.rfile.read(length)
                 data = json.loads(body)
@@ -172,7 +189,7 @@ class MyHandler(SimpleHTTPRequestHandler):
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
                 self.wfile.write(json.dumps({'success': True, 'message': 'Counts saved'}).encode())
-                print("Counts data saved.")
+                print("Counts data saved successfully.")
             except json.JSONDecodeError:
                  self.send_response(400); self.send_header('Content-Type', 'application/json'); self.end_headers()
                  self.wfile.write(json.dumps({'success': False, 'message': 'Invalid JSON format for saving counts'}).encode())
@@ -182,10 +199,12 @@ class MyHandler(SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({'success': False, 'message': f'Error saving counts: {e}'}).encode())
                 print(f"Error saving counts: {e}")
         else:
+            # Handle other POST requests if any, or send error
             self.send_error(405, "Method Not Allowed")
 
 
     def do_GET(self):
+        # ... (do_GET remains the same as before, already protects relevant GET endpoints) ...
         cookies = self.get_cookies()
         is_logged_in = cookies.get(SESSION_COOKIE_NAME) and \
                        cookies[SESSION_COOKIE_NAME].value == VALID_SESSION_VALUE
@@ -193,79 +212,50 @@ class MyHandler(SimpleHTTPRequestHandler):
         # --- PROTECT index.html and root path ---
         if self.path == '/' or self.path == '/index.html':
             if is_logged_in:
-                # User is logged in, serve index.html (adjust path if needed)
                 print(f"Serving protected path '{self.path}' - User logged in.")
-                # Ensure we serve index.html specifically for '/'
-                if self.path == '/':
-                    self.path = '/index.html' # Tell SimpleHTTPRequestHandler to serve index.html
-                super().do_GET() # Let the parent class handle serving the file
+                if self.path == '/': self.path = '/index.html'
+                super().do_GET()
             else:
-                # User not logged in, redirect to login page
                 print(f"Redirecting request for '{self.path}' to login - User not logged in.")
-                self.send_response(302) # Found (Temporary Redirect)
-                self.send_header('Location', '/login.html')
-                self.end_headers()
-            return # Stop further processing for these paths here
-        # -----------------------------------------
-
+                self.send_response(302); self.send_header('Location', '/login.html'); self.end_headers()
+            return
         # --- Allow access to login page and its resources ---
         if self.path == '/login.html' or self.path == '/login.js' or self.path == '/style.css':
              print(f"Serving public resource: {self.path}")
              super().do_GET()
              return
-        # ----------------------------------------------------
-
         # --- LOAD COUNTS DATA (only if logged in) ---
-        # You might also want to protect this endpoint
         if self.path == '/load-sql':
             if is_logged_in:
                 try:
                     studentCounts, teacherCounts = parse_sql()
-                    self.send_response(200)
-                    self.send_header('Content-Type', 'application/json')
-                    self.end_headers()
-                    self.wfile.write(json.dumps({
-                        'studentCounts': studentCounts,
-                        'teacherCounts': teacherCounts
-                    }).encode())
+                    self.send_response(200); self.send_header('Content-Type', 'application/json'); self.end_headers()
+                    self.wfile.write(json.dumps({'studentCounts': studentCounts, 'teacherCounts': teacherCounts}).encode())
                 except Exception as e:
-                    self.send_response(500)
-                    self.send_header('Content-Type', 'application/json')
-                    self.end_headers()
+                    self.send_response(500); self.send_header('Content-Type', 'application/json'); self.end_headers()
                     self.wfile.write(json.dumps({'error': f"Error loading counts: {e}"}).encode())
                     print(f"Error loading counts: {e}")
             else:
-                # Not logged in, deny access to data
                 print(f"Denied access to /load-sql - User not logged in.")
-                self.send_response(401) # Unauthorized
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
+                self.send_response(401); self.send_header('Content-Type', 'application/json'); self.end_headers()
                 self.wfile.write(json.dumps({'error': 'Authentication required'}).encode())
             return
-        # -----------------------------------------
-
         # --- Handle other frontend files (e.g., script.js for index.html) ---
-        # If they are needed by index.html, they also need the login check
-        # OR make them public if they don't contain sensitive logic.
-        # For now, let's assume script.js is needed by index.html and protect it.
         if self.path == '/script.js':
              if is_logged_in:
                  print(f"Serving protected resource: {self.path}")
                  super().do_GET()
              else:
                  print(f"Denied access to {self.path} - User not logged in.")
-                 self.send_error(401, "Unauthorized") # Send 401 for protected resources
+                 self.send_error(401, "Unauthorized")
              return
-        # -------------------------------------------------------------------
-
-        # --- Default: Let parent handle if path wasn't matched above ---
-        # This might serve files we didn't explicitly handle. Consider if this is safe.
-        # For a stricter approach, you might send 404 here instead.
+        # --- Default ---
         print(f"Serving potentially unprotected resource via default handler: {self.path}")
         super().do_GET()
 
 
 def run_server():
+    # ... (run_server remains the same) ...
     PORT = 8000
     try:
         with HTTPServer(('localhost', PORT), MyHandler) as server:
