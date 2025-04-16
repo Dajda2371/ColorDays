@@ -9,6 +9,7 @@ import threading # For locking access to the file
 import datetime
 import collections # For defaultdict
 import traceback # For detailed error printing
+from http.cookies import SimpleCookie # <-- Added for login cookies
 
 # --- Configuration ---
 BACKEND_DIR = Path(__file__).parent.resolve()
@@ -18,6 +19,21 @@ SQL_FILE_PATH = DATA_DIR / 'tables.sql' # Path to the SQL data file
 HOST = 'localhost' # Or '0.0.0.0' to be accessible on your network
 PORT = 8000 # Choose a port
 SUPPORTED_CLASSES = ['C1', 'C2', 'C3'] # Must match menu.html and initial tables.sql
+
+# --- Login Configuration (Placeholder - INSECURE) ---
+# !!! WARNING: This is a placeholder and highly insecure. Use proper password hashing (bcrypt, argon2) in a real app. !!!
+USERS_DATA = {
+    "admin": "placeholder_hash_admin",
+    "teacher1": "placeholder_hash_teacher1"
+}
+PLACEHOLDER_HASH_TO_PASSWORD = {
+    "placeholder_hash_admin": "password123", # Store actual passwords INSECURELY
+    "placeholder_hash_teacher1": "teachpass"
+}
+SESSION_COOKIE_NAME = "ColorDaysSession"
+VALID_SESSION_VALUE = "user_is_logged_in_secret_value" # Replace with a secure, random session ID mechanism
+# --- End Login Configuration ---
+
 
 # --- In-Memory Data Store and Lock ---
 # Use defaultdict for easier handling of missing keys
@@ -164,15 +180,35 @@ def save_data_to_sql():
 
 class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
+    # Helper to parse cookies from request headers
+    def get_cookies(self):
+        """Parses the Cookie header and returns a SimpleCookie object."""
+        cookies = SimpleCookie()
+        cookie_header = self.headers.get('Cookie')
+        if cookie_header:
+            cookies.load(cookie_header)
+        return cookies
+
+    # Helper to check if user is logged in based on session cookie
+    def is_logged_in(self):
+        """Checks if a valid session cookie is present."""
+        cookies = self.get_cookies()
+        session_cookie = cookies.get(SESSION_COOKIE_NAME)
+        if session_cookie and session_cookie.value == VALID_SESSION_VALUE:
+            return True
+        return False
+
     # Helper to send JSON responses with CORS headers
     def _send_response(self, status_code, data=None, content_type='application/json', headers=None):
+        """Sends an HTTP response, handling JSON encoding and CORS headers."""
         try:
             self.send_response(status_code)
             self.send_header('Content-type', content_type)
             # --- CORS Headers ---
-            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Access-Control-Allow-Origin', '*') # Consider restricting in production
             self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-            self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+            self.send_header('Access-Control-Allow-Headers', 'Content-Type, Cookie') # Allow Cookie header
+            self.send_header('Access-Control-Allow-Credentials', 'true') # Needed if frontend sends credentials
             # --- End CORS ---
             if headers:
                 for key, value in headers.items():
@@ -232,8 +268,19 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         # File Serving Logic
         try:
             # Default to menu.html if root path is requested
-            if path == '/':
-                file_path = FRONTEND_DIR / 'menu.html'
+            # Check for login.html request specifically
+            if path == '/login.html':
+                 file_path = FRONTEND_DIR / 'login.html'
+            elif path == '/':
+                 # Redirect root to login page if not logged in, else menu
+                 if self.is_logged_in():
+                     file_path = FRONTEND_DIR / 'menu.html'
+                 else:
+                     # Send redirect header
+                     self.send_response(302) # Found (redirect)
+                     self.send_header('Location', '/login.html')
+                     self.end_headers()
+                     return # Stop processing further
             else:
                 # Construct safe path within FRONTEND_DIR
                 safe_subpath = path.lstrip('/')
@@ -276,7 +323,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                  pass # Ignore errors during error reporting
 
 
-    # Handle POST requests (/api/increment, /api/decrement)
+    # Handle POST requests (/login, /api/increment, /api/decrement)
     def do_POST(self):
         global data_store
         parsed_path = urllib.parse.urlparse(self.path)
@@ -284,10 +331,77 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
         # Read request body
         content_length = int(self.headers.get('Content-Length', 0))
-        if content_length == 0:
+        if content_length == 0 and path != '/logout': # Allow empty body for logout
              self._send_response(400, {"error": "Empty request body"})
              return
         body = self.rfile.read(content_length)
+
+        # --- LOGIN Endpoint ---
+        if path == '/login':
+            try:
+                credentials = json.loads(body)
+                username = credentials.get('username')
+                submitted_password = credentials.get('password')
+
+                login_successful = False
+                if username in USERS_DATA:
+                    # !!! INSECURE PASSWORD CHECK - Replace with hashing !!!
+                    placeholder_hash = USERS_DATA[username]
+                    expected_password = PLACEHOLDER_HASH_TO_PASSWORD.get(placeholder_hash)
+                    if expected_password and submitted_password == expected_password:
+                        login_successful = True
+                    # !!! END INSECURE CHECK !!!
+
+                if login_successful:
+                    # Prepare the session cookie
+                    cookie = SimpleCookie()
+                    cookie[SESSION_COOKIE_NAME] = VALID_SESSION_VALUE
+                    cookie[SESSION_COOKIE_NAME]['path'] = '/' # Make cookie valid for all paths
+                    # Optional security attributes (recommended):
+                    # cookie[SESSION_COOKIE_NAME]['httponly'] = True # Prevents JS access
+                    # cookie[SESSION_COOKIE_NAME]['samesite'] = 'Lax' # CSRF protection
+                    cookie_header_val = cookie.output(header='').strip()
+                    custom_headers = {'Set-Cookie': cookie_header_val}
+
+                    print(f"Login successful for user: {username}, session cookie set.")
+                    self._send_response(200, {"success": True, "message": "Login successful"}, headers=custom_headers)
+                else:
+                    print(f"Login failed for user attempt: {username}")
+                    self._send_response(401, {"error": "Invalid username or password"}) # Unauthorized
+
+            except json.JSONDecodeError:
+                 print("Error: Invalid JSON received for login.")
+                 self._send_response(400, {"error": "Invalid JSON format in request body"}) # Bad Request
+            except Exception as e:
+                print(f"Error during login processing: {e}")
+                print(traceback.format_exc())
+                self._send_response(500, {"error": f"Server error during login"}) # Internal Server Error
+            return # Stop processing after handling /login
+
+        # --- LOGOUT Endpoint ---
+        elif path == '/logout':
+             # Prepare an expired cookie to clear the browser's cookie
+             cookie = SimpleCookie()
+             cookie[SESSION_COOKIE_NAME] = "" # Clear value
+             cookie[SESSION_COOKIE_NAME]['path'] = '/'
+             cookie[SESSION_COOKIE_NAME]['expires'] = 'Thu, 01 Jan 1970 00:00:00 GMT' # Expire immediately
+             cookie[SESSION_COOKIE_NAME]['max-age'] = 0 # Another way to expire
+             custom_headers = {'Set-Cookie': cookie.output(header='').strip()}
+             print("Logout request received, clearing session cookie.")
+             self._send_response(200, {"success": True, "message": "Logged out successfully"}, headers=custom_headers)
+             return # Stop processing after handling /logout
+
+        # --- Authentication Check for Protected Endpoints ---
+        if not self.is_logged_in():
+            print(f"Denied POST request to {path} - User not logged in.")
+            self._send_response(401, {"error": "Authentication required"}) # Unauthorized
+            return # Stop processing if not logged in
+        # --- End Authentication Check ---
+
+        # --- Protected Endpoints (/api/increment, /api/decrement) ---
+        print(f"Processing authenticated POST request to {path}...") # Log access
+
+        # Parse JSON body (already read, just need to decode)
         try:
             data = json.loads(body)
         except json.JSONDecodeError:
@@ -318,6 +432,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         message = "Operation failed"
         status_code = 500 # Default to internal error
         save_needed = False
+        action_verb = "processed" # Default verb
 
         # Acquire the reentrant lock
         with data_lock:
@@ -344,7 +459,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                         status_code = 400 # Bad Request
                         save_needed = False # No change, no save needed
                 else:
-                    # Endpoint not found
+                    # Endpoint not found (Shouldn't happen due to checks above, but good practice)
                     success = False
                     message = "API endpoint not found"
                     status_code = 404
@@ -378,6 +493,30 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
              # For errors (4xx, 5xx), send an "error" field instead of "message"
              self._send_response(status_code, {"error": message})
 
+        # --- Handle unknown POST paths ---
+        # This part is now implicitly handled because if path is not /login, /logout,
+        # /api/increment, or /api/decrement, it will fall through without matching
+        # any specific logic after the authentication check. We should add an explicit
+        # 404 check if no other path matched.
+        # Let's refine the structure slightly for clarity:
+
+        # (Previous code for /login, /logout, auth check remains the same)
+        # ...
+
+        # elif path == '/api/increment':
+        #     # ... increment logic ...
+        #     # Send response
+        #     return # Explicitly return after handling
+
+        # elif path == '/api/decrement':
+        #     # ... decrement logic ...
+        #     # Send response
+        #     return # Explicitly return after handling
+
+        # else: # If path wasn't login, logout, increment, or decrement (and user was authenticated)
+        #     print(f"Authenticated POST request to unknown path: {path}")
+        #     self._send_response(404, {"error": "API endpoint not found"})
+
 
 # --- Main Execution ---
 if __name__ == "__main__":
@@ -395,7 +534,8 @@ if __name__ == "__main__":
     print(f"\nServing HTTP on {HOST}:{PORT}...")
     print(f"Frontend root: {FRONTEND_DIR}")
     print(f"Using data file: {SQL_FILE_PATH}")
-    print(f"\nAccess the application via: http://{HOST}:{PORT}/menu.html\n")
+    print(f"\nAccess the application via: http://{HOST}:{PORT}/")
+    print(f"(Will redirect to /login.html if not logged in)")
 
     try:
         httpd.serve_forever()
