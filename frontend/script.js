@@ -1,155 +1,236 @@
-const studentCounts = Array(7).fill(0);
-const teacherCounts = Array(7).fill(0);
+// --- Global variable to store the current class name ---
+let currentClassName = null;
 
-const tableBody = document.getElementById('counterTable');
-const studentButtons = document.getElementById('studentButtons');
-const teacherButtons = document.getElementById('teacherButtons');
-const studentTotal = document.getElementById('studentTotal');
-const teacherTotal = document.getElementById('teacherTotal');
-
-let dataLoaded = false;
-let hasUserInteracted = false;
-
-// --- Helper function to handle fetch responses and check for auth errors ---
-async function handleFetchResponse(response) {
-  if (!response.ok) {
-    // Check if the error is specifically an Unauthorized error
-    if (response.status === 401) {
-      console.error("Authentication required. Redirecting to login page.");
-      // Redirect the user to the login page
-      window.location.href = '/login.html';
-      // Throw an error to stop further processing in the calling function
-      throw new Error('Unauthorized');
-    } else {
-      // Handle other HTTP errors (e.g., 404, 500)
-      const errorText = await response.text(); // Try to get error text from server
-      console.error(`HTTP error ${response.status}: ${errorText}`);
-      throw new Error(`HTTP error ${response.status}`);
-    }
-  }
-
-  // If response is OK, try to parse JSON, handling potential empty responses
-  try {
-      const contentType = response.headers.get("content-type");
-      if (contentType && contentType.indexOf("application/json") !== -1) {
-          return await response.json(); // Parse JSON if content type is correct
-      } else {
-          // Handle non-JSON responses if necessary, or just return null/undefined
-          console.log("Response was OK but not JSON.");
-          return null; // Or handle as appropriate for your API (e.g., for /save-sql)
-      }
-  } catch (jsonError) {
-      console.error("Failed to parse JSON response:", jsonError);
-      throw new Error("Invalid JSON response from server");
-  }
-}
-// --- End Helper Function ---
-
-
-function updateTable() {
-  tableBody.innerHTML = '';
-  for (let i = 0; i <= 6; i++) {
-    const row = document.createElement('tr');
-    row.innerHTML = `
-      <td>${i}</td>
-      <td>${studentCounts[i]}</td>
-      <td>${teacherCounts[i]}</td>
-    `;
-    tableBody.appendChild(row);
-  }
-
-  const studentTotalPoints = studentCounts.reduce((sum, count, i) => sum + count * i, 0);
-  const teacherTotalPoints = teacherCounts.reduce((sum, count, i) => sum + count * i * 2, 0);
-
-  studentTotal.textContent = studentTotalPoints;
-  teacherTotal.textContent = teacherTotalPoints;
-}
-
-function createButtons(container, countsArray, updateFn) {
-  for (let i = 0; i <= 6; i++) {
-    const button = document.createElement('button');
-    button.textContent = `+${i}`;
-    button.addEventListener('click', () => {
-      countsArray[i]++;
-      updateFn();
-      if (dataLoaded) {
-        hasUserInteracted = true;
-        saveSQLToServer(); // Call the async save function
-      }
-    });
-    container.appendChild(button);
-  }
-}
-
-// --- Modified saveSQLToServer to use the helper ---
-async function saveSQLToServer() {
-  // Don't save if data hasn't loaded or user hasn't clicked anything yet
-  if (!dataLoaded || !hasUserInteracted) return;
-
-  console.log("Attempting to save counts..."); // Log save attempt
-
-  try {
-    const response = await fetch('/save-sql', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ studentCounts, teacherCounts })
-    });
-    // Use the helper to check response and handle errors (including 401)
-    await handleFetchResponse(response);
-    console.log("Counts saved successfully (response OK).");
-    // Optionally reset hasUserInteracted if you only want to save changes since last save
-    // hasUserInteracted = false;
-  } catch (error) {
-    // Errors (network, 401, other HTTP, JSON parse) are caught here
-    // The helper function already logged details and handled 401 redirect
-    console.error("Save operation failed:", error.message);
-    // Decide how to handle save failures - maybe notify the user?
-  }
-}
-
-// --- Modified loadSQLFromServer to use the helper ---
-async function loadSQLFromServer() {
-  console.log("Attempting to load counts...");
-  try {
-    const response = await fetch('/load-sql');
-    // Use the helper to check response and handle errors (including 401)
-    const data = await handleFetchResponse(response);
-
-    // Only process data if it was successfully parsed (handleFetchResponse returns null/data)
-    if (data && data.studentCounts && data.teacherCounts) {
-      for (let i = 0; i <= 6; i++) {
-        // Use nullish coalescing for safety, although parse_sql should return arrays
-        studentCounts[i] = data.studentCounts[i] ?? 0;
-        teacherCounts[i] = data.teacherCounts[i] ?? 0;
-      }
-      updateTable();
-      console.log("Counts loaded successfully.");
-    } else if (data === null) {
-        // Handle cases where response was OK but not JSON or empty
-        console.log("Load response OK, but no JSON data received.");
-        updateTable(); // Update table even with default zeros
-    } else {
-        // This case might occur if handleFetchResponse logic changes or data is unexpected
-        console.warn("Load response OK, but data format was unexpected:", data);
-        updateTable(); // Update table with defaults
-    }
-
-    dataLoaded = true; // Mark data as loaded (or attempted to load)
-
-  } catch (error) {
-    // Errors (network, 401, other HTTP, JSON parse) are caught here
-    // The helper function already logged details and handled 401 redirect
-    console.error("Load operation failed:", error.message);
-    // Even on failure, mark as loaded to prevent potential retry loops
-    // and allow UI interaction (saving might still fail later if auth is the issue)
-    dataLoaded = true;
-    updateTable(); // Ensure table shows initial state (zeros) on load failure
-  }
-}
-
-// --- DOMContentLoaded remains the same, calls the async load function ---
+// --- Wait for the DOM to be fully loaded ---
 document.addEventListener('DOMContentLoaded', () => {
-  createButtons(studentButtons, studentCounts, updateTable);
-  createButtons(teacherButtons, teacherCounts, updateTable);
-  loadSQLFromServer(); // Call the async function to load initial data
+    const urlParams = new URLSearchParams(window.location.search);
+    currentClassName = urlParams.get('class'); // Store class name globally
+
+    if (!currentClassName) {
+        alert("No class selected. Redirecting to the menu.");
+        window.location.href = 'menu.html'; // Redirect if no class
+        return; // Stop further execution
+    }
+
+    // Update the heading with the class name
+    const classNameElement = document.getElementById('className');
+    if (classNameElement) {
+        classNameElement.textContent = `Class: ${decodeURIComponent(currentClassName)}`;
+    } else {
+        console.error("Element with ID 'className' not found.");
+    }
+
+    // Create the buttons immediately (they don't depend on fetched counts)
+    createButtons();
+
+    // Fetch initial data for the table
+    fetchData();
 });
+
+// --- Fetch data from the backend ---
+async function fetchData() {
+    if (!currentClassName) {
+        console.error("Cannot fetch data, className is not set.");
+        return;
+    }
+
+    console.log(`Fetching data for class: ${currentClassName}`);
+    try {
+        // Construct the correct API URL
+        const apiUrl = `/api/counts?class=${encodeURIComponent(currentClassName)}`;
+        const response = await fetch(apiUrl);
+
+        if (!response.ok) {
+            // Handle HTTP errors (like 404, 500)
+            throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+
+        const data = await response.json(); // Parse the JSON response (expecting a list)
+        console.log("Data received from backend:", data);
+
+        // Update the UI elements
+        updateTable(data);
+        updateTotals(data);
+
+    } catch (error) {
+        console.error("Error fetching data:", error);
+        // Optionally display an error message to the user on the page
+        // e.g., document.getElementById('errorMessage').textContent = "Failed to load data.";
+        // Reset table/totals to 0 or show error state?
+        resetTableAndTotals(); // Example: reset to 0 on error
+    }
+}
+
+// --- Update the table cells with fetched data ---
+function updateTable(data) {
+    console.log("Updating table...");
+    // 1. Reset all count cells to 0 first
+    for (let i = 0; i <= 6; i++) {
+        const studentCell = document.getElementById(`student${i}`);
+        const teacherCell = document.getElementById(`teacher${i}`);
+        if (studentCell) studentCell.textContent = '0';
+        if (teacherCell) teacherCell.textContent = '0';
+    }
+
+    // 2. Fill in counts from the fetched data array
+    if (Array.isArray(data)) {
+        data.forEach(item => {
+            // Construct the ID of the cell to update
+            const cellId = `${item.type}${item.points}`; // e.g., "student3", "teacher5"
+            const cell = document.getElementById(cellId);
+            if (cell) {
+                cell.textContent = item.count; // Update the cell content
+            } else {
+                console.warn(`Cell with ID ${cellId} not found in the HTML!`);
+            }
+        });
+    } else {
+        console.error("Data received for table update is not an array:", data);
+    }
+     console.log("Table update complete.");
+}
+
+// --- Calculate and update total counts ---
+function updateTotals(data) {
+    console.log("Updating totals...");
+    let studentTotal = 0;
+    let teacherTotal = 0;
+
+    if (Array.isArray(data)) {
+        data.forEach(item => {
+            if (item.type === 'student') {
+                studentTotal += item.count;
+            } else if (item.type === 'teacher') {
+                teacherTotal += item.count;
+            }
+        });
+    } else {
+         console.error("Data received for totals update is not an array:", data);
+    }
+
+
+    const studentTotalCell = document.getElementById('studentTotal');
+    const teacherTotalCell = document.getElementById('teacherTotal');
+
+    if (studentTotalCell) studentTotalCell.textContent = studentTotal;
+    if (teacherTotalCell) teacherTotalCell.textContent = teacherTotal;
+    console.log("Totals update complete:", { studentTotal, teacherTotal });
+}
+
+// --- Reset table and totals (e.g., on error) ---
+function resetTableAndTotals() {
+    console.warn("Resetting table and totals to 0.");
+     for (let i = 0; i <= 6; i++) {
+        const studentCell = document.getElementById(`student${i}`);
+        const teacherCell = document.getElementById(`teacher${i}`);
+        if (studentCell) studentCell.textContent = '0';
+        if (teacherCell) teacherCell.textContent = '0';
+    }
+    const studentTotalCell = document.getElementById('studentTotal');
+    const teacherTotalCell = document.getElementById('teacherTotal');
+    if (studentTotalCell) studentTotalCell.textContent = '0';
+    if (teacherTotalCell) teacherTotalCell.textContent = '0';
+}
+
+
+// --- Create increment and decrement buttons ---
+function createButtons() {
+    console.log("Creating buttons...");
+    const studentButtonsDiv = document.getElementById('studentButtons');
+    const teacherButtonsDiv = document.getElementById('teacherButtons');
+
+    if (!studentButtonsDiv || !teacherButtonsDiv) {
+        console.error("Button container divs not found!");
+        return;
+    }
+
+    // Clear any existing buttons first
+    studentButtonsDiv.innerHTML = '';
+    teacherButtonsDiv.innerHTML = '';
+
+    // Loop through points 0 to 6
+    for (let points = 0; points <= 6; points++) {
+        // --- Student Buttons ---
+        const sIncButton = document.createElement('button');
+        sIncButton.textContent = `S ${points} +`;
+        sIncButton.onclick = () => handleCountChange('increment', 'student', points);
+        studentButtonsDiv.appendChild(sIncButton);
+
+        const sDecButton = document.createElement('button');
+        sDecButton.textContent = `S ${points} -`;
+        sDecButton.onclick = () => handleCountChange('decrement', 'student', points);
+        studentButtonsDiv.appendChild(sDecButton);
+
+        // Add a space or break for readability if desired
+        // studentButtonsDiv.appendChild(document.createTextNode(' '));
+
+        // --- Teacher Buttons ---
+        const tIncButton = document.createElement('button');
+        tIncButton.textContent = `T ${points} +`;
+        tIncButton.onclick = () => handleCountChange('increment', 'teacher', points);
+        teacherButtonsDiv.appendChild(tIncButton);
+
+        const tDecButton = document.createElement('button');
+        tDecButton.textContent = `T ${points} -`;
+        tDecButton.onclick = () => handleCountChange('decrement', 'teacher', points);
+        teacherButtonsDiv.appendChild(tDecButton);
+
+        // Add a space or break for readability if desired
+        // teacherButtonsDiv.appendChild(document.createTextNode(' '));
+    }
+    console.log("Button creation complete.");
+}
+
+// --- Handle increment/decrement button clicks ---
+async function handleCountChange(action, type, points) {
+    if (!currentClassName) {
+        console.error("Cannot change count, className is not set.");
+        alert("Error: Class context lost. Please refresh or go back to menu.");
+        return;
+    }
+
+    const apiUrl = `/api/${action}`; // action is 'increment' or 'decrement'
+    const payload = {
+        className: currentClassName,
+        type: type,
+        points: points
+    };
+
+    console.log(`Sending ${action} request to ${apiUrl} with payload:`, payload);
+
+    try {
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+        });
+
+        // Check for specific "already zero" error on decrement
+        if (action === 'decrement' && response.status === 400) {
+             const errorData = await response.json().catch(() => ({})); // Try to parse error message
+             console.warn(`Cannot decrement: ${errorData.message || errorData.error || 'Count is already zero.'}`);
+             // Optionally provide subtle feedback to the user
+             // e.g., briefly flash the button red
+             return; // Stop processing, don't refetch data
+        }
+
+        if (!response.ok) {
+            // Handle other errors
+            const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response from server.' }));
+            throw new Error(`HTTP error! Status: ${response.status} - ${errorData.error || errorData.message || 'Unknown server error'}`);
+        }
+
+        // If the request was successful (200 OK)
+        const result = await response.json();
+        console.log(`${action} successful:`, result);
+
+        // Refresh the data from the server to show the updated state
+        fetchData();
+
+    } catch (error) {
+        console.error(`Error during ${action}:`, error);
+        alert(`Failed to ${action} count. ${error.message}`); // Inform the user
+    }
+}
