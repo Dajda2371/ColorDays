@@ -10,6 +10,10 @@ import datetime
 import collections # For defaultdict
 import traceback # For detailed error printing
 from http.cookies import SimpleCookie # <-- Added for login cookies
+import hashlib # <-- Use built-in hashlib
+import hmac # <-- Use built-in hmac for secure comparison
+import os      # <-- Use built-in os for random salt
+import binascii # <-- For converting bytes to hex and back
 
 # --- Configuration ---
 BACKEND_DIR = Path(__file__).parent.resolve()
@@ -20,30 +24,95 @@ HOST = 'localhost' # Or '0.0.0.0' to be accessible on your network
 PORT = 8000 # Choose a port
 SUPPORTED_CLASSES = ['C1', 'C2', 'C3'] # Must match menu.html and initial tables.sql
 
-# --- Login Configuration (Placeholder - INSECURE) ---
-# !!! WARNING: This is a placeholder and highly insecure. Use proper password hashing (bcrypt, argon2) in a real app. !!!
-USERS_DATA = {
-    "admin": "placeholder_hash_admin",
-    "teacher1": "placeholder_hash_teacher1"
+# --- Secure Login Configuration (Using hashlib.pbkdf2_hmac) ---
+
+# Parameters for PBKDF2
+HASH_ALGORITHM = 'sha256'
+# Iterations: Higher is more secure but slower. Start high (e.g., 260000+)
+# Adjust based on your server performance and security needs.
+# OWASP recommendation (as of late 2023) is 600,000 for PBKDF2-HMAC-SHA256
+ITERATIONS = 390000 # Example value, tune as needed
+SALT_BYTES = 16     # Size of the salt (16 bytes is common)
+DK_LENGTH = 32      # Desired key length in bytes (e.g., 32 for SHA256)
+
+# --- Helper Functions for Hashing ---
+
+def hash_password(password):
+    """Hashes a password using PBKDF2-HMAC-SHA256."""
+    salt = os.urandom(SALT_BYTES)
+    # Password must be bytes
+    pwd_bytes = password.encode('utf-8')
+    # Calculate the hash
+    key = hashlib.pbkdf2_hmac(
+        HASH_ALGORITHM,
+        pwd_bytes,
+        salt,
+        ITERATIONS,
+        dklen=DK_LENGTH
+    )
+    # Store salt and key as hex strings for easier storage
+    salt_hex = binascii.hexlify(salt).decode('ascii')
+    key_hex = binascii.hexlify(key).decode('ascii')
+    # Return in 'salt:key' format
+    return f"{salt_hex}:{key_hex}"
+
+def verify_password(stored_password_info, provided_password):
+    """Verifies a provided password against the stored salt and hash."""
+    try:
+        salt_hex, key_hex = stored_password_info.split(':')
+        salt = binascii.unhexlify(salt_hex)
+        stored_key = binascii.unhexlify(key_hex)
+    except (ValueError, binascii.Error):
+        # Invalid format or hex decoding failed
+        print("Error: Invalid stored password format.")
+        return False
+
+    # Password must be bytes
+    provided_pwd_bytes = provided_password.encode('utf-8')
+
+    # Calculate the hash for the provided password using the stored salt
+    new_key = hashlib.pbkdf2_hmac(
+        HASH_ALGORITHM,
+        provided_pwd_bytes,
+        salt,
+        ITERATIONS,
+        dklen=DK_LENGTH
+    )
+
+    # Compare the derived key with the stored key
+    # hashlib.timing_safe_compare helps prevent timing attacks
+    return hmac.compare_digest(stored_key, new_key)
+
+# --- User Credentials Store ---
+# IMPORTANT: You MUST generate these values using the hash_password function.
+# Do NOT store plain text passwords here.
+# Run a separate script or use the Python interactive console:
+# >>> from program import hash_password # Assuming your file is program.py
+# >>> hash_password("password123")
+# 'copy_the_salt:hash_output_here'
+# >>> hash_password("teachpass")
+# 'copy_the_salt:hash_output_here'
+#
+# Replace these placeholders with the ACTUAL output from hash_password():
+USER_CREDENTIALS = {
+    "admin": "b2572516d38c89749991b0696b864354:e5c2e16640945d0894a33525eec509829829b495cd814b50fd592b456e265ece", # e.g., hash_password("password123")
+    "teacher1": "712be73f712ae28a05f799199a647f0d:da367cf896e24b05cddaea0a618efc365865acbf29e0fccbfc00755ef4d98f4a" # e.g., hash_password("teachpass")
 }
-PLACEHOLDER_HASH_TO_PASSWORD = {
-    "placeholder_hash_admin": "password123", # Store actual passwords INSECURELY
-    "placeholder_hash_teacher1": "teachpass"
-}
+# --- End Secure Login Configuration ---
+
+# --- Session Configuration ---
 SESSION_COOKIE_NAME = "ColorDaysSession"
 VALID_SESSION_VALUE = "user_is_logged_in_secret_value" # Replace with a secure, random session ID mechanism
-# --- End Login Configuration ---
+# --- End Session Configuration ---
 
 
 # --- In-Memory Data Store and Lock ---
-# Use defaultdict for easier handling of missing keys
-# Structure: data_store[class_name][type][points] = count
+# (Data store and lock code remains the same)
 data_store = collections.defaultdict(lambda: collections.defaultdict(lambda: collections.defaultdict(int)))
-# Use a Reentrant Lock (RLock) to allow the same thread to acquire the lock multiple times
 data_lock = threading.RLock()
 
-# --- SQL File Handling Functions ---
 
+# --- SQL File Handling Functions ---
 def parse_sql_line(line):
     """Parses a single INSERT statement line."""
     # Regex to capture class_name, type, points, count from the specific INSERT format
@@ -177,12 +246,10 @@ def save_data_to_sql():
 
 
 # --- HTTP Request Handler ---
-
 class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
-    # Helper to parse cookies from request headers
+    # (Helper methods: get_cookies, is_logged_in, _send_response remain the same)
     def get_cookies(self):
-        """Parses the Cookie header and returns a SimpleCookie object."""
         cookies = SimpleCookie()
         cookie_header = self.headers.get('Cookie')
         if cookie_header:
@@ -191,7 +258,6 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
     # Helper to check if user is logged in based on session cookie
     def is_logged_in(self):
-        """Checks if a valid session cookie is present."""
         cookies = self.get_cookies()
         session_cookie = cookies.get(SESSION_COOKIE_NAME)
         if session_cookie and session_cookie.value == VALID_SESSION_VALUE:
@@ -200,7 +266,6 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
     # Helper to send JSON responses with CORS headers
     def _send_response(self, status_code, data=None, content_type='application/json', headers=None):
-        """Sends an HTTP response, handling JSON encoding and CORS headers."""
         try:
             self.send_response(status_code)
             self.send_header('Content-type', content_type)
@@ -225,7 +290,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self._send_response(204) # No Content for OPTIONS
 
-    # Handle GET requests (serving files and /api/counts)
+    # (do_GET remains the same - including login redirect logic)
     def do_GET(self):
         global data_store
         parsed_path = urllib.parse.urlparse(self.path)
@@ -246,14 +311,9 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                     class_data = data_store[class_name]
                     # Format data for JSON response, ensuring all points 0-6 exist
                     for type_val in ['student', 'teacher']:
-                        for points_val in range(7): # 0 to 6
-                            count = class_data.get(type_val, {}).get(points_val, 0) # Get count, default 0
-                            response_data.append({
-                                "type": type_val,
-                                "points": points_val,
-                                "count": count
-                            })
-                    # Sort for predictable order (optional but good practice)
+                        for points_val in range(7):
+                            count = class_data.get(type_val, {}).get(points_val, 0)
+                            response_data.append({"type": type_val, "points": points_val, "count": count})
                     response_data.sort(key=lambda x: (x['type'], x['points']))
                 else:
                     # Class not found in memory, return default structure with zeros
@@ -331,7 +391,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
         # Read request body
         content_length = int(self.headers.get('Content-Length', 0))
-        if content_length == 0 and path != '/logout': # Allow empty body for logout
+        if content_length == 0 and path != '/logout':
              self._send_response(400, {"error": "Empty request body"})
              return
         body = self.rfile.read(content_length)
@@ -344,11 +404,12 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 submitted_password = credentials.get('password')
 
                 login_successful = False
-                if username in USERS_DATA:
-                    # !!! INSECURE PASSWORD CHECK - Replace with hashing !!!
-                    placeholder_hash = USERS_DATA[username]
-                    expected_password = PLACEHOLDER_HASH_TO_PASSWORD.get(placeholder_hash)
-                    if expected_password and submitted_password == expected_password:
+                stored_info = USER_CREDENTIALS.get(username)
+
+                # Check if user exists and password was provided
+                if stored_info and submitted_password:
+                    # Verify the password using the stored salt and hash info
+                    if verify_password(stored_info, submitted_password):
                         login_successful = True
                     # !!! END INSECURE CHECK !!!
 
@@ -371,11 +432,11 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
             except json.JSONDecodeError:
                  print("Error: Invalid JSON received for login.")
-                 self._send_response(400, {"error": "Invalid JSON format in request body"}) # Bad Request
+                 self._send_response(400, {"error": "Invalid JSON format in request body"})
             except Exception as e:
                 print(f"Error during login processing: {e}")
                 print(traceback.format_exc())
-                self._send_response(500, {"error": f"Server error during login"}) # Internal Server Error
+                self._send_response(500, {"error": f"Server error during login"})
             return # Stop processing after handling /login
 
         # --- LOGOUT Endpoint ---
@@ -521,7 +582,28 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 # --- Main Execution ---
 if __name__ == "__main__":
     print("--- Starting Color Days Server ---")
-    # Load initial data from SQL file (or create/initialize if needed)
+
+    # Check if placeholder hashes are still present
+    if 'PLACEHOLDER_SALT_HEX' in USER_CREDENTIALS.get('admin', ''):
+        print("\n" + "="*60)
+        print("WARNING: Placeholder admin password hash detected!")
+        print("You MUST generate a real hash using the 'hash_password' function.")
+        print("Example (run in python interpreter or a separate script):")
+        print("  from program import hash_password")
+        print("  admin_hash = hash_password('password123')")
+        print("  print(f\"Admin hash: {admin_hash}\")")
+        print("Then copy the 'salt:hash' output into USER_CREDENTIALS['admin'].")
+        print("="*60 + "\n")
+    if 'PLACEHOLDER_SALT_HEX' in USER_CREDENTIALS.get('teacher1', ''):
+        print("\n" + "="*60)
+        print("WARNING: Placeholder teacher1 password hash detected!")
+        print("Generate a real hash for 'teachpass' similarly.")
+        print("  teacher_hash = hash_password('teachpass')")
+        print("  print(f\"Teacher1 hash: {teacher_hash}\")")
+        print("Then copy the 'salt:hash' output into USER_CREDENTIALS['teacher1'].")
+        print("="*60 + "\n")
+
+
     load_data_from_sql()
 
     # Server setup using ThreadingMixIn for basic concurrency
@@ -534,8 +616,10 @@ if __name__ == "__main__":
     print(f"\nServing HTTP on {HOST}:{PORT}...")
     print(f"Frontend root: {FRONTEND_DIR}")
     print(f"Using data file: {SQL_FILE_PATH}")
+    print(f"Using hashlib.pbkdf2_hmac with {ITERATIONS} iterations.")
     print(f"\nAccess the application via: http://{HOST}:{PORT}/")
     print(f"(Will redirect to /login.html if not logged in)")
+
 
     try:
         httpd.serve_forever()
