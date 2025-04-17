@@ -130,26 +130,33 @@ def parse_sql_line(line):
 
 # --- Parsing for logins.sql --- <--- NEW
 def parse_logins_sql_line(line):
-    """Parses a single INSERT statement line for the users table."""
-    # Regex to capture username and password_hash from the specific INSERT format
-    # Allows for optional spaces around commas and parentheses
+    """Parses a single valid INSERT line for the users table."""
+    line = line.strip()
+
+    # Skip empty lines or comments
+    if not line or line.startswith('--'):
+        return None
+
+    # Must start with an actual INSERT line
+    if not line.upper().startswith("INSERT INTO USERS"):
+        return None
+
+    # Regex to extract username and password_hash
     match = re.match(
-        r"INSERT INTO users\s*\(\s*username\s*,\s*password_hash\s*\)\s*VALUES\s*\('([^']*)'\s*,\s*'([^']*)'\s*\);",
-        line.strip(),
-        re.IGNORECASE # Make matching case-insensitive for keywords like INSERT
+        r"INSERT INTO users\s*\(\s*username\s*,\s*password_hash\s*\)\s*VALUES\s*\(\s*'([^']+)'\s*,\s*'([^']+)'\s*\);",
+        line,
+        re.IGNORECASE
     )
+
     if match:
         username, password_hash = match.groups()
-        # Basic validation on the hash format (contains colon, reasonable length)
-        if ':' in password_hash and len(password_hash) > (SALT_BYTES*2 + DK_LENGTH*2):
+        if ':' in password_hash:
             return username, password_hash
         else:
-            print(f"Warning: Invalid password hash format skipped in logins line: {line.strip()}")
+            print(f"Warning: Skipped user due to bad hash format: {line}")
             return None
     else:
-        # Ignore comments and empty lines silently
-        if line.strip() and not line.strip().startswith('--') and not line.strip().upper().startswith('CREATE TABLE'):
-             print(f"Warning: Could not parse logins line format: {line.strip()}")
+        print(f"Warning: Could not parse logins line format: {line}")
         return None
 
 # --- Loading for tables.sql ---
@@ -218,7 +225,6 @@ def load_user_data_from_sql():
     """Loads user data from logins.sql into the in-memory user_password_store."""
     global user_password_store
     print(f"Attempting to load user data from: {LOGINS_SQL_FILE_PATH}")
-    # Ensure data directory exists (might be redundant but safe)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     temp_user_store = {}
@@ -232,28 +238,24 @@ def load_user_data_from_sql():
                     parsed = parse_logins_sql_line(line)
                     if parsed:
                         username, password_hash = parsed
-                        if username in temp_user_store:
-                            print(f"Warning: Duplicate username '{username}' found in {LOGINS_SQL_FILE_PATH} line {line_num}. Using the last entry.")
                         temp_user_store[username] = password_hash
-                        users_loaded_count += 1 # Count only successfully parsed users
+                        users_loaded_count += 1
 
             print(f"Loaded {users_loaded_count} user(s) from {LOGINS_SQL_FILE_PATH}.")
 
         except Exception as e:
             print(f"!!! ERROR reading or parsing {LOGINS_SQL_FILE_PATH}: {e}. User data store might be empty or incomplete.")
-            temp_user_store.clear() # Clear potentially partial data on error
-            users_loaded_count = 0
+            temp_user_store.clear()
 
     else:
-         print(f"Warning: {LOGINS_SQL_FILE_PATH} not found. No users loaded. Login will not work.")
+        print(f"Warning: {LOGINS_SQL_FILE_PATH} not found. No users loaded. Login will not work.")
 
-    # Update the global user store (no lock needed if only done at startup)
     user_password_store = temp_user_store
 
     if users_loaded_count == 0:
         print("!!! WARNING: No user accounts loaded. Login functionality will be unavailable.")
         print(f"!!! Ensure {LOGINS_SQL_FILE_PATH} exists, is readable, and contains valid INSERT statements.")
-        print(f"!!! Example INSERT: INSERT INTO users (username, password_hash) VALUES ('admin', '{hash_password('your_password')}');")
+        print(f"!!! Example INSERT: INSERT INTO users (username, password_hash) VALUES ('admin', '{hash_password('password123')}');")
 
     print("User data loading complete.")
 
