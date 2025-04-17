@@ -27,7 +27,7 @@ loginForm.addEventListener('submit', async function(event) {
             // Login successful
             console.log('Login successful!');
             // Redirect to the main application page
-            window.location.href = 'index.html'; // Redirect to index.html in the same directory
+            window.location.href = 'menu.html'; // Redirect to index.html in the same directory
         } else {
             // Login failed - display error message from server
             console.error('Login failed:', result.message);
