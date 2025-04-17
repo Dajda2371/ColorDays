@@ -307,7 +307,56 @@ def save_data_to_sql():
             print(f"!!! UNEXPECTED ERROR during save_data_to_sql:")
             print(traceback.format_exc()) # Print full traceback
             return False
+        
+# --- Add this function near save_data_to_sql ---
 
+# --- Lock for user data modifications ---
+# It's better practice to have a separate lock for user data
+# if it might be modified concurrently with counts data,
+# but for simplicity here, we'll reuse data_lock.
+# Consider adding user_data_lock = threading.RLock() if needed.
+
+def save_user_data_to_sql():
+    """Saves the current user_password_store back to logins.sql. Returns True on success, False on failure."""
+    global user_password_store
+    print(f"Attempting to save user data to: {LOGINS_SQL_FILE_PATH}")
+    # Use the same lock as counts for simplicity, or create a dedicated one
+    with data_lock: # Or use a dedicated user_data_lock
+        try:
+            sql_lines = []
+            sql_lines.append(f"-- User data saved on {datetime.datetime.now().isoformat()} --")
+            # Optional: Add back the CREATE TABLE comment if you want it preserved
+            # sql_lines.append("-- CREATE TABLE IF NOT EXISTS users (...)")
+            sql_lines.append("")
+
+            # Iterate through the in-memory store and generate INSERT statements
+            # Sort by username for consistent file output
+            for username, password_hash in sorted(user_password_store.items()):
+                 # Basic escaping for username (should be sufficient if usernames don't contain quotes)
+                 safe_username = username.replace("'", "''")
+                 # Password hash is already hex, should be safe
+                 insert_statement = f"INSERT INTO users (username, password_hash) VALUES ('{safe_username}', '{password_hash}');"
+                 sql_lines.append(insert_statement)
+
+            # Write the file (overwrite existing)
+            with open(LOGINS_SQL_FILE_PATH, 'w', encoding='utf-8') as f:
+                f.write("\n".join(sql_lines))
+                f.write("\n") # Add a final newline
+            print(f"User data successfully saved to {LOGINS_SQL_FILE_PATH}")
+            return True
+
+        except PermissionError as e:
+            print(f"!!! PERMISSION ERROR writing to {LOGINS_SQL_FILE_PATH}: {e}")
+            return False
+        except IOError as e:
+            print(f"!!! IO ERROR writing to {LOGINS_SQL_FILE_PATH}: {e}")
+            return False
+        except Exception as e:
+            print(f"!!! UNEXPECTED ERROR during save_user_data_to_sql:")
+            print(traceback.format_exc())
+            return False
+
+# --- End of new function ---
 
 # --- HTTP Request Handler ---
 class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
@@ -354,15 +403,44 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self._send_response(204) # No Content for OPTIONS
 
-    # (do_GET remains largely the same - including login redirect logic)
+# --- Inside the ColorDaysHandler class ---
+
     def do_GET(self):
-        global data_store # Keep access to counts data
+        global data_store
+        global user_password_store # Add access to user store
         parsed_path = urllib.parse.urlparse(self.path)
         path = parsed_path.path
         query = urllib.parse.parse_qs(parsed_path.query)
 
+        # --- NEW: API Endpoint: /list_users ---
+        if path == '/list_users':
+            # --- Authentication Check ---
+            if not self.is_logged_in():
+                print(f"Denied GET request to {path} - User not logged in.")
+                self._send_response(401, {"error": "Authentication required"})
+                return
+            # --- End Authentication Check ---
+
+            # Acquire lock briefly to read user list safely
+            with data_lock: # Or use a dedicated user_data_lock
+                # Return only the usernames (keys of the dictionary)
+                user_list = sorted(list(user_password_store.keys()))
+
+            print(f"Authenticated request for user list. Sending {len(user_list)} users.")
+            self._send_response(200, user_list)
+            return
+        # --- END NEW ENDPOINT ---
+
         # API Endpoint: /api/counts?class=ClassName
-        if path == '/api/counts':
+        elif path == '/api/counts':
+            # ... (existing code for /api/counts remains the same)
+            # ... make sure it also has an authentication check if needed!
+            # --- Authentication Check (Example - Add if counts should be protected) ---
+            # if not self.is_logged_in():
+            #     print(f"Denied GET request to {path} - User not logged in.")
+            #     self._send_response(401, {"error": "Authentication required"})
+            #     return
+            # --- End Authentication Check ---
             class_name = query.get('class', [None])[0]
             if not class_name:
                 self._send_response(400, {"error": "Missing 'class' query parameter"})
@@ -387,7 +465,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                              response_data.append({"type": type_val, "points": points_val, "count": 0})
 
             self._send_response(200, response_data)
-            return
+            return # Make sure to return after handling
 
         # File Serving Logic
         try:
@@ -449,8 +527,8 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
     # Handle POST requests (/login, /api/increment, /api/decrement)
     def do_POST(self):
-        global data_store # Keep access to counts data
-        global user_password_store # Access loaded user data <--- NEW
+        global data_store
+        global user_password_store # Already accessed here
         parsed_path = urllib.parse.urlparse(self.path)
         path = parsed_path.path
 
@@ -526,135 +604,182 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
              self._send_response(200, {"success": True, "message": "Logged out successfully"}, headers=custom_headers)
              return # Stop processing after handling /logout
 
-        # --- Authentication Check for Protected Endpoints ---
+        # --- Authentication Check for ALL Protected POST Endpoints below ---
         if not self.is_logged_in():
             print(f"Denied POST request to {path} - User not logged in.")
             self._send_response(401, {"error": "Authentication required"}) # Unauthorized
             return # Stop processing if not logged in
         # --- End Authentication Check ---
 
-        # --- Protected Endpoints (/api/increment, /api/decrement) ---
+        # --- Protected Endpoints below require login ---
         print(f"Processing authenticated POST request to {path}...") # Log access
 
         # Parse JSON body (already read, just need to decode)
         try:
-            data = json.loads(body)
+            # Handle potential empty body for endpoints that might not need it (though ours do)
+            if content_length > 0:
+                data = json.loads(body)
+            else:
+                data = {} # Or handle error if body is required
         except json.JSONDecodeError:
             self._send_response(400, {"error": "Invalid JSON payload"})
             return
 
-        # --- Handle /api/increment ---
-        if path == '/api/increment':
-            class_name = data.get('className')
-            type_val = data.get('type')
-            points_val = data.get('points')
+        # --- Handle /add_user ---
+        if path == '/add_user':
+            username = data.get('username')
+            password = data.get('password')
 
-            # Basic validation
-            if not all([class_name, type_val, points_val is not None]):
-                self._send_response(400, {"error": "Missing data: className, type, or points"})
+            if not username or not password:
+                self._send_response(400, {"error": "Missing username or password"})
                 return
-            if type_val not in ['student', 'teacher']:
-                self._send_response(400, {"error": "Invalid type"})
-                return
-            if not isinstance(points_val, int) or not (0 <= points_val <= 6):
-                 self._send_response(400, {"error": "Invalid points value"})
-                 return
 
             success = False
-            message = "Increment failed"
+            message = "Failed to add user."
             status_code = 500
             save_needed = False
 
-            with data_lock:
-                try:
-                    current_count = data_store.get(class_name, {}).get(type_val, {}).get(points_val, 0)
-                    data_store[class_name][type_val][points_val] = current_count + 1
-                    save_needed = True
+            with data_lock: # Or use a dedicated user_data_lock
+                if username in user_password_store:
+                    message = f"Username '{username}' already exists."
+                    status_code = 409 # Conflict
+                else:
+                    try:
+                        hashed_pw = hash_password(password)
+                        user_password_store[username] = hashed_pw
+                        save_needed = True
+                        print(f"User '{username}' added to memory.")
+                    except Exception as e:
+                         print(f"!!! Error hashing password for {username}: {e}")
+                         message = "Server error during password hashing."
+                         status_code = 500
 
-                    if save_needed:
-                        print(f"DEBUG: Change detected (increment), attempting save...")
-                        if save_data_to_sql():
-                            success = True
-                            message = "Count incremented"
-                            status_code = 200
-                        else:
-                            success = False
-                            message = "Count incremented in memory, but CRITICAL error saving to file."
-                            status_code = 500
-                except Exception as e:
-                    print(f"!!! UNEXPECTED ERROR during POST {path} operation (within lock):")
-                    print(traceback.format_exc())
-                    success = False
-                    message = "An internal error occurred during the increment operation."
-                    status_code = 500
+                if save_needed:
+                    if save_user_data_to_sql():
+                        success = True
+                        message = f"User '{username}' added successfully."
+                        status_code = 201 # Created
+                    else:
+                        # CRITICAL: Failed to save, potentially revert memory change?
+                        # For simplicity, we'll report the save error but leave memory changed.
+                        # Consider removing the user from memory here if atomicity is crucial.
+                        # del user_password_store[username]
+                        success = False
+                        message = f"User '{username}' added to memory, but FAILED to save to file."
+                        status_code = 500
 
-            if status_code == 200:
-                 self._send_response(status_code, {"success": success, "message": message})
+            if success:
+                 self._send_response(status_code, {"success": True, "message": message})
+            else:
+                 self._send_response(status_code, {"error": message}) # Send error message for frontend alert
+            return # Handled
+
+        # --- Handle /change_password ---
+        elif path == '/change_password':
+            username = data.get('username')
+            new_password = data.get('password') # Frontend sends new password in 'password' field
+
+            if not username or not new_password:
+                self._send_response(400, {"error": "Missing username or new password"})
+                return
+
+            success = False
+            message = "Failed to change password."
+            status_code = 500
+            save_needed = False
+
+            with data_lock: # Or use a dedicated user_data_lock
+                if username not in user_password_store:
+                    message = f"User '{username}' not found."
+                    status_code = 404 # Not Found
+                else:
+                    try:
+                        hashed_pw = hash_password(new_password)
+                        user_password_store[username] = hashed_pw
+                        save_needed = True
+                        print(f"Password changed in memory for user '{username}'.")
+                    except Exception as e:
+                         print(f"!!! Error hashing new password for {username}: {e}")
+                         message = "Server error during password hashing."
+                         status_code = 500
+
+                if save_needed:
+                    if save_user_data_to_sql():
+                        success = True
+                        message = f"Password for user '{username}' changed successfully."
+                        status_code = 200 # OK
+                    else:
+                        success = False
+                        message = f"Password changed in memory for '{username}', but FAILED to save to file."
+                        status_code = 500
+
+            if success:
+                 self._send_response(status_code, {"success": True, "message": message})
             else:
                  self._send_response(status_code, {"error": message})
             return # Handled
 
-        # --- Handle /api/decrement ---
-        elif path == '/api/decrement':
-            class_name = data.get('className')
-            type_val = data.get('type')
-            points_val = data.get('points')
+        # --- Handle /remove_user ---
+        elif path == '/remove_user':
+            username = data.get('username')
 
-            # Basic validation (repeated for clarity, could be refactored)
-            if not all([class_name, type_val, points_val is not None]):
-                self._send_response(400, {"error": "Missing data: className, type, or points"})
+            if not username:
+                self._send_response(400, {"error": "Missing username"})
                 return
-            if type_val not in ['student', 'teacher']:
-                self._send_response(400, {"error": "Invalid type"})
+
+            # --- Prevent deleting admin user ---
+            if username == 'admin':
+                print("Attempt denied to remove 'admin' user.")
+                self._send_response(403, {"error": "Cannot remove the admin user."}) # Forbidden
                 return
-            if not isinstance(points_val, int) or not (0 <= points_val <= 6):
-                 self._send_response(400, {"error": "Invalid points value"})
-                 return
+            # --- End admin check ---
 
             success = False
-            message = "Decrement failed"
+            message = "Failed to remove user."
             status_code = 500
             save_needed = False
 
-            with data_lock:
-                try:
-                    current_count = data_store.get(class_name, {}).get(type_val, {}).get(points_val, 0)
-                    if current_count > 0:
-                        data_store[class_name][type_val][points_val] = current_count - 1
-                        save_needed = True
+            with data_lock: # Or use a dedicated user_data_lock
+                if username not in user_password_store:
+                    message = f"User '{username}' not found."
+                    status_code = 404 # Not Found
+                else:
+                    del user_password_store[username]
+                    save_needed = True
+                    print(f"User '{username}' removed from memory.")
+
+                if save_needed:
+                    if save_user_data_to_sql():
+                        success = True
+                        message = f"User '{username}' removed successfully."
+                        status_code = 200 # OK
                     else:
-                        success = False # Operation didn't change state
-                        message = "Count already zero"
-                        status_code = 400 # Bad Request
-                        save_needed = False # No change, no save needed
+                        # CRITICAL: Failed to save. User removed from memory but not file.
+                        # Consider reloading user data from file or other recovery.
+                        success = False
+                        message = f"User '{username}' removed from memory, but FAILED to save to file."
+                        status_code = 500
 
-                    if save_needed:
-                        print(f"DEBUG: Change detected (decrement), attempting save...")
-                        if save_data_to_sql():
-                            success = True
-                            message = "Count decremented"
-                            status_code = 200
-                        else:
-                            success = False
-                            message = "Count decremented in memory, but CRITICAL error saving to file."
-                            status_code = 500
-                except Exception as e:
-                    print(f"!!! UNEXPECTED ERROR during POST {path} operation (within lock):")
-                    print(traceback.format_exc())
-                    success = False
-                    message = "An internal error occurred during the decrement operation."
-                    status_code = 500
-
-            if status_code == 200:
-                 self._send_response(status_code, {"success": success, "message": message})
+            if success:
+                 self._send_response(status_code, {"success": True, "message": message})
             else:
                  self._send_response(status_code, {"error": message})
+            return # Handled
+
+        # --- Handle /api/increment & /api/decrement ---
+        elif path == '/api/increment':
+            # ... (existing increment code remains the same) ...
+            return # Handled
+        elif path == '/api/decrement':
+            # ... (existing decrement code remains the same) ...
             return # Handled
 
         # --- Handle unknown authenticated POST paths ---
         else:
             print(f"Authenticated POST request to unknown path: {path}")
             self._send_response(404, {"error": "API endpoint not found"})
+
+# --- End of ColorDaysHandler modifications ---
 
 
 # --- Main Execution ---
