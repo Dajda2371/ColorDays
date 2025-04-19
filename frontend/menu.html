@@ -29,30 +29,33 @@
           background-color: #ddd;
         }
 
-        /* --- Style for the Logout Button --- */
-        #logoutButton {
-            position: fixed;   /* Position relative to the viewport */
+        /* --- Style for the Header Buttons Container --- */
+        #headerButtons {
+            position: fixed;   /* Position container relative to the viewport */
             top: 15px;         /* Distance from the top edge */
             right: 15px;        /* Distance from the right edge */
+            display: flex;     /* Arrange buttons horizontally */
+            gap: 10px;         /* Space between the buttons */
+            z-index: 1000;     /* Ensure it stays on top of other content */
+        }
+        /* --- End Header Buttons Container Style --- */
+
+        /* --- Common Style for Buttons within the Container --- */
+        .header-button {
             padding: 8px 15px; /* Adjust padding as needed */
             cursor: pointer;
             background-color: #f0f0f0; /* Optional: style it */
             border: 1px solid #ccc;
             border-radius: 4px;
-            z-index: 1000;     /* Ensure it stays on top of other content */
-            /* Remove margin-left if it was previously set for inline layout */
-            /* margin-left: 20px; */ /* No longer needed with fixed positioning */
         }
-        /* --- End Logout Button Style --- */
+        /* --- End Common Button Style --- */
 
-        /* Remove .header-controls if it's no longer needed or adjust */
-        /* .header-controls {
-            display: flex;
-            align-items: center;
-            margin-bottom: 20px;
-        } */
+        /* Remove specific fixed positioning from individual logout button ID */
+        #logoutButton {
+            /* No fixed positioning needed here anymore */
+        }
 
-        /* Add some padding to the body so content doesn't start under the fixed button */
+        /* Add some padding to the body so content doesn't start under the fixed buttons */
         body {
             padding-top: 60px; /* Adjust this value based on button height + desired space */
         }
@@ -61,8 +64,13 @@
 </head>
 <body>
 
-  <!-- Logout Button - Positioned via CSS now -->
-  <button id="logoutButton">Logout</button>
+  <!-- Container for Header Buttons -->
+  <div id="headerButtons">
+    <!-- Config Button (Links to config.html) -->
+    <button id="configButton" class="header-button" onclick="window.location.href='config.html'">Config</button>
+    <!-- Logout Button -->
+    <button id="logoutButton" class="header-button">Logout</button>
+  </div>
 
   <h1>Color Days Counter</h1>
   <h2>Select Your Class:</h2>
@@ -77,6 +85,7 @@
 
     <script>
         const logoutButton = document.getElementById('logoutButton'); // Get the logout button
+        // No need to get configButton unless you add specific JS logic for it
 
         // --- Logout Functionality (Keep this as is) ---
         async function handleLogout() {
@@ -84,14 +93,16 @@
             try {
                 const response = await fetch('/logout', {
                     method: 'POST',
-                    credentials: 'include'
+                    credentials: 'include' // Important for sending/receiving cookies
                 });
 
                 if (response.ok) {
                     console.log("Logout successful on server. Redirecting to login.");
+                    // Redirect to login page after successful logout
                     window.location.href = '/login.html';
                 } else {
-                    const result = await response.json().catch(() => ({}));
+                    // Try to parse error message if available
+                    const result = await response.json().catch(() => ({})); // Default to empty object if JSON fails
                     console.error('Logout request failed:', response.status, result.error || 'Unknown server error');
                     alert(`Logout failed: ${result.error || 'Server error'}`);
                 }
