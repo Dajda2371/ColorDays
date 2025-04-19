@@ -221,19 +221,19 @@ def load_data_from_sql():
     print("Counts data loading/initialization complete.")
 
 # --- Loading for logins.sql --- <--- NEW
-def load_user_data_from_sql():
-    """Loads user data from logins.sql into the in-memory user_password_store."""
+def load_user_data_from_sql(path=LOGINS_SQL_FILE_PATH):
+    """Loads user data from the given logins.sql path into the in-memory user_password_store."""
     global user_password_store
-    print(f"Attempting to load user data from: {LOGINS_SQL_FILE_PATH}")
+    print(f"Attempting to load user data from: {path}")
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     temp_user_store = {}
-    file_exists = LOGINS_SQL_FILE_PATH.exists()
+    file_exists = path.exists()
     users_loaded_count = 0
 
     if file_exists:
         try:
-            with open(LOGINS_SQL_FILE_PATH, 'r', encoding='utf-8') as f:
+            with open(path, 'r', encoding='utf-8') as f:
                 for line_num, line in enumerate(f, 1):
                     parsed = parse_logins_sql_line(line)
                     if parsed:
@@ -241,23 +241,24 @@ def load_user_data_from_sql():
                         temp_user_store[username] = password_hash
                         users_loaded_count += 1
 
-            print(f"Loaded {users_loaded_count} user(s) from {LOGINS_SQL_FILE_PATH}.")
+            print(f"Loaded {users_loaded_count} user(s) from {path}.")
 
         except Exception as e:
-            print(f"!!! ERROR reading or parsing {LOGINS_SQL_FILE_PATH}: {e}. User data store might be empty or incomplete.")
+            print(f"!!! ERROR reading or parsing {path}: {e}. User data store might be empty or incomplete.")
             temp_user_store.clear()
 
     else:
-        print(f"Warning: {LOGINS_SQL_FILE_PATH} not found. No users loaded. Login will not work.")
+        print(f"Warning: {path} not found. No users loaded. Login will not work.")
 
     user_password_store = temp_user_store
 
     if users_loaded_count == 0:
         print("!!! WARNING: No user accounts loaded. Login functionality will be unavailable.")
-        print(f"!!! Ensure {LOGINS_SQL_FILE_PATH} exists, is readable, and contains valid INSERT statements.")
+        print(f"!!! Ensure {path} exists, is readable, and contains valid INSERT statements.")
         print(f"!!! Example INSERT: INSERT INTO users (username, password_hash) VALUES ('admin', '{hash_password('password123')}');")
 
     print("User data loading complete.")
+    return user_password_store
 
 
 # --- Saving for tables.sql ---
@@ -399,9 +400,86 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             print(f"!!! Error sending response (status {status_code}): {e}")
             # Avoid sending another response if headers already sent etc.
 
+    def send_json(self, data, status=200):
+        response = json.dumps(data).encode('utf-8')
+        self.send_response(status)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(response)))
+        self.end_headers()
+        self.wfile.write(response)
+
     # Handle CORS preflight requests
     def do_OPTIONS(self):
         self._send_response(204) # No Content for OPTIONS
+
+    # Inside your request handler (e.g., in do_GET or do_POST):
+
+    def handle_get_users(self):
+        users = load_user_data_from_sql(LOGINS_SQL_FILE_PATH)
+        user_list = []
+        for username, password_hash in users.items():
+            if password_hash is None:
+                status = "not_set"
+            elif len(password_hash.split(':')[0]) == 10:  # crude check for random string
+                status = password_hash.split(':')[0]
+            else:
+                status = "set"
+            user_list.append({"username": username, "password": status})
+        self.send_json(user_list)
+
+    def handle_add_user(self):
+        length = int(self.headers.get('Content-Length'))
+        body = self.rfile.read(length)
+        data = json.loads(body)
+        username = data.get("username")
+        if not username:
+            self.send_error(400, "Missing username")
+            return
+        users = load_user_data_from_sql(LOGINS_SQL_FILE_PATH)
+        if username in users:
+            self.send_error(409, "User already exists")
+            return
+        with open(LOGINS_SQL_FILE_PATH, 'a') as f:
+            f.write(f"INSERT INTO users (username, password_hash) VALUES ('{username}', NULL);\n")
+        self.send_response(200)
+        self.end_headers()
+
+    def handle_remove_user(self):
+        length = int(self.headers.get('Content-Length'))
+        body = self.rfile.read(length)
+        data = json.loads(body)
+        username = data.get("username")
+        if username == "admin":
+            self.send_error(403, "Cannot delete admin")
+            return
+        lines = []
+        with open(LOGINS_SQL_FILE_PATH, 'r') as f:
+            for line in f:
+                if f"('{username}'," not in line:
+                    lines.append(line)
+        with open(LOGINS_SQL_FILE_PATH, 'w') as f:
+            f.writelines(lines)
+        self.send_response(200)
+        self.end_headers()
+
+    def handle_reset_password(self):
+        length = int(self.headers.get('Content-Length'))
+        body = self.rfile.read(length)
+        data = json.loads(body)
+        username = data.get("username")
+        new_password = data.get("new_password")
+        hashed = hash_password(new_password)
+        lines = []
+        with open(LOGINS_SQL_FILE_PATH, 'r') as f:
+            for line in f:
+                if f"('{username}'," in line:
+                    lines.append(f"INSERT INTO users (username, password_hash) VALUES ('{username}', '{hashed}');\n")
+                else:
+                    lines.append(line)
+        with open(LOGINS_SQL_FILE_PATH, 'w') as f:
+            f.writelines(lines)
+        self.send_response(200)
+        self.end_headers()
 
 # --- Inside the ColorDaysHandler class ---
 
@@ -413,7 +491,10 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         query = urllib.parse.parse_qs(parsed_path.query)
 
         # --- NEW: API Endpoint: /list_users ---
-        if path == '/list_users':
+        if self.path == "/api/users":
+            self.handle_get_users()
+
+        elif path == '/list_users':
             # --- Authentication Check ---
             if not self.is_logged_in():
                 print(f"Denied GET request to {path} - User not logged in.")
@@ -765,6 +846,13 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             else:
                  self._send_response(status_code, {"error": message})
             return # Handled
+        
+        elif self.path == "/api/users":
+            self.handle_add_user()
+        elif self.path == "/api/users/remove":
+            self.handle_remove_user()
+        elif self.path == "/api/users/reset":
+            self.handle_reset_password()
 
         # --- Handle /api/increment & /api/decrement ---
         elif path == '/api/increment':

@@ -24,14 +24,20 @@
   </section>
 
   <section>
-    <h2>Remove User</h2>
-    <input type="text" id="removeUsername" placeholder="Username" />
-    <button onclick="removeUser()">Remove User</button>
-  </section>
-
-  <section>
     <h2>Current Users</h2>
     <ul id="userList"></ul>
+    <table id="userTable" border="1" cellspacing="0" cellpadding="8">
+      <thead>
+        <tr>
+          <th>Username</th>
+          <th>Password Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="userTableBody">
+        <!-- JS will populate this -->
+      </tbody>
+    </table>
   </section>
 
   <p style="margin-top: 2rem;"><a href="menu.html">Back to Class Selection</a></p>
