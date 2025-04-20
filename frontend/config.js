@@ -58,17 +58,64 @@ async function loadUsers() {
 
 async function addUser() {
   const username = prompt("Enter new username:");
-  if (!username || users[username]) {
-    alert("Invalid or existing username.");
+  // Basic validation for username
+  if (!username) { // Check if prompt was cancelled or empty
+    alert("Username cannot be empty.");
     return;
   }
-  const res = await fetch("/api/users", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username })
-  });
-  if (res.ok) loadUsers();
-  else alert("Failed to add user");
+  // Check if username already exists (using the locally loaded 'users' object)
+  // Note: This check is based on the last 'loadUsers' call, might be slightly stale.
+  if (users[username]) {
+    alert("Username already exists locally. Refresh if needed."); // Clarified message
+    return;
+  }
+
+  // --- ADDED: Prompt for password ---
+  const password = prompt(`Enter initial password for user "${username}":`);
+  // Basic validation for password
+  if (!password) { // Check if prompt was cancelled or empty
+    alert("Password cannot be empty.");
+    return;
+  }
+  // --- END ADDED ---
+
+  // Optional: Add password complexity validation here if desired
+
+  try { // Added try...catch for fetch errors
+    const res = await fetch("/add_user", { // Target the correct endpoint
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      // --- MODIFIED: Include password in the body ---
+      body: JSON.stringify({ username, password })
+      // --- END MODIFIED ---
+    });
+
+    // Improved response handling
+    if (res.ok) {
+      let successMessage = "User added successfully!";
+      try {
+        const result = await res.json(); // Attempt to parse success response
+        if (result && result.message) {
+          successMessage = result.message;
+        }
+      } catch (e) { /* Ignore if response not JSON */ }
+      alert(successMessage);
+      loadUsers(); // Refresh the user list on success
+    } else {
+      // Attempt to get error message from backend
+      let errorMessage = "Failed to add user";
+      try {
+        const errorData = await res.json();
+        if (errorData && errorData.error) {
+          errorMessage = `Failed to add user: ${errorData.error}`;
+        }
+      } catch (e) { /* Ignore if response not JSON */ }
+      alert(errorMessage + ` (Status: ${res.status})`);
+    }
+  } catch (error) {
+      console.error("Network or other error adding user:", error);
+      alert("An error occurred while trying to add the user. Check the console.");
+  }
 }
 
 async function removeUser(username) {
