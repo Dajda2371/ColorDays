@@ -71,7 +71,7 @@ async function addUser() {
   }
 
   // --- ADDED: Prompt for password ---
-  const password = prompt(`Enter initial password for user "${username}":`);
+  const password = generatePassword(length = 10); // Generate a random password
   // Basic validation for password
   if (!password) { // Check if prompt was cancelled or empty
     alert("Password cannot be empty.");
