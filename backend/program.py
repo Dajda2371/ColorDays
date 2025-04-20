@@ -427,20 +427,71 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             user_list.append({"username": username, "password": status})
         self.send_json(user_list)
 
+    def handle_post_users(self):
+        global user_password_store
+
+        if not self.is_logged_in():
+            print("Denied POST to /api/users - not authenticated.")
+            self._send_response(401, {"error": "Authentication required"})
+            return
+
+        content_length = int(self.headers.get('Content-Length', 0))
+        if content_length == 0:
+            self._send_response(400, {"error": "Missing request body"})
+            return
+
+        try:
+            post_data = json.loads(self.rfile.read(content_length))
+            username = post_data.get("username", "").strip()
+
+            if not username:
+                self._send_response(400, {"error": "Username required"})
+                return
+
+            if username in user_password_store:
+                self._send_response(400, {"error": "User already exists"})
+                return
+
+            # Save with password status 'not set'
+            user_password_store[username] = "NOT_SET"
+            save_user_data_to_sql(user_password_store)  # Make sure this is defined
+
+            print(f"User '{username}' added.")
+            self._send_response(200, {"message": "User added"})
+
+        except Exception as e:
+            print(f"Error in handle_post_users: {e}")
+            traceback.print_exc()
+            self._send_response(500, {"error": "Failed to process request"})
+
     def handle_add_user(self):
-        length = int(self.headers.get('Content-Length'))
+        length = int(self.headers.get('Content-Length', 0))
         body = self.rfile.read(length)
-        data = json.loads(body)
+        print("Raw body:", repr(body))
+
+        if not body:
+            self.send_error(400, "Missing request body")
+            return
+
+        try:
+            data = json.loads(body)
+        except json.JSONDecodeError:
+            self.send_error(400, "Invalid JSON")
+            return
+
         username = data.get("username")
         if not username:
             self.send_error(400, "Missing username")
             return
+
         users = load_user_data_from_sql(LOGINS_SQL_FILE_PATH)
         if username in users:
             self.send_error(409, "User already exists")
             return
+
         with open(LOGINS_SQL_FILE_PATH, 'a') as f:
             f.write(f"INSERT INTO users (username, password_hash) VALUES ('{username}', NULL);\n")
+
         self.send_response(200)
         self.end_headers()
 
@@ -485,14 +536,15 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         global data_store
-        global user_password_store # Add access to user store
+        global user_password_store  # Add access to user store
         parsed_path = urllib.parse.urlparse(self.path)
         path = parsed_path.path
         query = urllib.parse.parse_qs(parsed_path.query)
 
-        # --- NEW: API Endpoint: /list_users ---
+        # --- NEW: API Endpoint: /api/users ---
         if self.path == "/api/users":
             self.handle_get_users()
+            return  # <-- Important! Prevents falling through to file serving
 
         elif path == '/list_users':
             # --- Authentication Check ---
@@ -502,96 +554,77 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 return
             # --- End Authentication Check ---
 
-            # Acquire lock briefly to read user list safely
-            with data_lock: # Or use a dedicated user_data_lock
-                # Return only the usernames (keys of the dictionary)
+            with data_lock:  # Or use a dedicated user_data_lock
                 user_list = sorted(list(user_password_store.keys()))
 
             print(f"Authenticated request for user list. Sending {len(user_list)} users.")
             self._send_response(200, user_list)
             return
-        # --- END NEW ENDPOINT ---
 
         # API Endpoint: /api/counts?class=ClassName
         elif path == '/api/counts':
-            # ... (existing code for /api/counts remains the same)
-            # ... make sure it also has an authentication check if needed!
-            # --- Authentication Check (Example - Add if counts should be protected) ---
+            # Uncomment if auth is required
             # if not self.is_logged_in():
             #     print(f"Denied GET request to {path} - User not logged in.")
             #     self._send_response(401, {"error": "Authentication required"})
             #     return
-            # --- End Authentication Check ---
+
             class_name = query.get('class', [None])[0]
             if not class_name:
                 self._send_response(400, {"error": "Missing 'class' query parameter"})
                 return
 
             response_data = []
-            # Acquire lock briefly to ensure consistent read
             with data_lock:
                 if class_name in data_store:
                     class_data = data_store[class_name]
-                    # Format data for JSON response, ensuring all points 0-6 exist
                     for type_val in ['student', 'teacher']:
                         for points_val in range(7):
                             count = class_data.get(type_val, {}).get(points_val, 0)
                             response_data.append({"type": type_val, "points": points_val, "count": count})
                     response_data.sort(key=lambda x: (x['type'], x['points']))
                 else:
-                    # Class not found in memory, return default structure with zeros
                     print(f"Warning: Class '{class_name}' requested via API but not found in memory. Returning zeros.")
                     for type_val in ['student', 'teacher']:
                         for points_val in range(7):
-                             response_data.append({"type": type_val, "points": points_val, "count": 0})
+                            response_data.append({"type": type_val, "points": points_val, "count": 0})
 
             self._send_response(200, response_data)
-            return # Make sure to return after handling
+            return
 
-        # File Serving Logic
+        # --- File Serving Logic ---
         try:
-            # Default to menu.html if root path is requested
-            # Check for login.html request specifically
             if path == '/login.html':
-                 file_path = FRONTEND_DIR / 'login.html'
+                file_path = FRONTEND_DIR / 'login.html'
             elif path == '/':
-                 # Redirect root to login page if not logged in, else menu
-                 if self.is_logged_in():
-                     file_path = FRONTEND_DIR / 'menu.html'
-                 else:
-                     # Send redirect header
-                     self.send_response(302) # Found (redirect)
-                     self.send_header('Location', '/login.html')
-                     self.end_headers()
-                     return # Stop processing further
+                if self.is_logged_in():
+                    file_path = FRONTEND_DIR / 'menu.html'
+                else:
+                    self.send_response(302)
+                    self.send_header('Location', '/login.html')
+                    self.end_headers()
+                    return
             else:
-                # Construct safe path within FRONTEND_DIR
                 safe_subpath = path.lstrip('/')
-                # Basic check for potentially malicious paths
                 if '..' in safe_subpath:
-                     raise FileNotFoundError("Invalid path component '..'")
+                    raise FileNotFoundError("Invalid path component '..'")
                 file_path = (FRONTEND_DIR / safe_subpath).resolve()
-
-                # Security check: Ensure the resolved path is still within FRONTEND_DIR
                 if not file_path.is_relative_to(FRONTEND_DIR):
-                     raise FileNotFoundError("Attempted path traversal outside frontend directory")
+                    raise FileNotFoundError("Attempted path traversal outside frontend directory")
 
             if file_path.is_file():
-                # Determine content type
-                content_type = 'text/plain' # Default
+                content_type = 'text/plain'
                 if file_path.suffix == '.html': content_type = 'text/html'
                 elif file_path.suffix == '.css': content_type = 'text/css'
                 elif file_path.suffix == '.js': content_type = 'application/javascript'
                 elif file_path.suffix == '.json': content_type = 'application/json'
-                # Add more types if needed (images, etc.)
 
                 with open(file_path, 'rb') as f:
                     content = f.read()
                 self._send_response(200, data=content, content_type=content_type)
             else:
-                 # If it's not a file, maybe it's a directory index request? Deny for now.
-                 print(f"File not found or is directory: {file_path}")
-                 self._send_response(404, {"error": "Resource not found"}, content_type='application/json')
+                print(f"File not found or is directory: {file_path}")
+                self._send_response(404, {"error": "Resource not found"}, content_type='application/json')
 
         except FileNotFoundError as e:
             print(f"File serving error (404): {e}")
@@ -599,12 +632,10 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         except Exception as e:
             print(f"!!! Error serving file {path}: {e}")
             print(traceback.format_exc())
-            # Avoid sending error if response already started
             try:
                 self._send_response(500, {"error": "Internal server error serving file"}, content_type='application/json')
             except:
-                 pass # Ignore errors during error reporting
-
+                pass
 
     # Handle POST requests (/login, /api/increment, /api/decrement)
     def do_POST(self):
