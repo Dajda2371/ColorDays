@@ -415,15 +415,18 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
     # Inside your request handler (e.g., in do_GET or do_POST):
 
     def handle_get_users(self):
-        users = load_user_data_from_sql(LOGINS_SQL_FILE_PATH)
+        users = load_user_data_from_sql() # <--- Corrected line (no argument)
         user_list = []
         for username, password_hash in users.items():
-            if password_hash is None:
+            # Determine status based on the hash format from the file
+            if password_hash is None or password_hash.upper() == 'NULL': # Check for NULL explicitly if handle_add_user writes it
                 status = "not_set"
-            elif len(password_hash.split(':')[0]) == 10:  # crude check for random string
-                status = password_hash.split(':')[0]
+            # You might need a more robust check than just length if handle_add_user writes NULL
+            # Let's assume parse_logins_sql_line filters out bad hashes, so what's loaded is valid or None/NULL
             else:
-                status = "set"
+                 status = "set" # If it has a valid hash format, it's set
+
+            # The frontend expects 'password' field, map status to it
             user_list.append({"username": username, "password": status})
         self.send_json(user_list)
 
@@ -563,6 +566,17 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             self._send_response(200, user_list)
             return
         # --- END NEW ENDPOINT ---
+
+        elif path == '/api/users':
+            # Note: handle_get_users currently doesn't check authentication
+            # Add authentication check here if needed:
+            # if not self.is_logged_in():
+            #     print(f"Denied GET request to {path} - User not logged in.")
+            #     self._send_response(401, {"error": "Authentication required"})
+            #     return
+            print(f"Handling GET request for {path}") # Add log
+            self.handle_get_users() # Call the handler function
+            return # Make sure to return after handling
 
         # API Endpoint: /api/counts?class=ClassName
         elif path == '/api/counts':
