@@ -452,12 +452,17 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 self._send_response(400, {"error": "User already exists"})
                 return
 
-            # Save with password status 'not set'
+            # Add the user with NOT_SET as the password
             user_password_store[username] = "NOT_SET"
-            save_user_data_to_sql(user_password_store)  # Make sure this is defined
 
-            print(f"User '{username}' added.")
-            self._send_response(200, {"message": "User added"})
+            # Call your save function here!
+            success = save_user_data_to_sql()
+
+            if success:
+                print(f"User '{username}' added and saved.")
+                self._send_response(200, {"message": "User added"})
+            else:
+                self._send_response(500, {"error": "Failed to save user data"})
 
         except Exception as e:
             print(f"Error in handle_post_users: {e}")
