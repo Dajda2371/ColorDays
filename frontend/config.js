@@ -19,11 +19,15 @@ function renderUsers() {
   Object.entries(users).forEach(([username, info]) => {
     const tr = document.createElement("tr");
 
-    const status = !info.password
-      ? "not set"
-      : /^[a-zA-Z0-9]{10}$/.test(info.password)
-      ? info.password
-      : "set";
+    let status;
+
+    if (!info.password) {
+      status = "not set";
+    } else if (info.password === "_NULL_") {
+      status = "not set";
+    } else {
+      status = "set";
+    }
 
     tr.innerHTML = `
       <td>${username}</td>
@@ -70,23 +74,14 @@ async function addUser() {
     return;
   }
 
-  // --- ADDED: Prompt for password ---
-  const password = generatePassword(length = 10); // Generate a random password
-  // Basic validation for password
-  if (!password) { // Check if prompt was cancelled or empty
-    alert("Password cannot be empty.");
-    return;
-  }
-  // --- END ADDED ---
-
-  // Optional: Add password complexity validation here if desired
+  // const password = null; // Set password to null initially
 
   try { // Added try...catch for fetch errors
     const res = await fetch("/add_user", { // Target the correct endpoint
       method: "POST",
       headers: { "Content-Type": "application/json" },
       // --- MODIFIED: Include password in the body ---
-      body: JSON.stringify({ username, password })
+      body: JSON.stringify({ username, password: null }) // Send null password
       // --- END MODIFIED ---
     });
 

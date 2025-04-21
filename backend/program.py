@@ -150,7 +150,7 @@ def parse_logins_sql_line(line):
 
     if match:
         username, password_hash = match.groups()
-        if ':' in password_hash:
+        if ':' in password_hash or password_hash.upper() == '_NULL_':
             return username, password_hash
         else:
             print(f"Warning: Skipped user due to bad hash format: {line}")
@@ -777,9 +777,14 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             username = data.get('username')
             password = data.get('password')
 
-            if not username or not password:
-                self._send_response(400, {"error": "Missing username or password"})
+            if not username:
+                self._send_response(400, {"error": "Missing username"})
                 return
+            
+            if not password:
+                pass_null = True
+            else:
+                pass_null = False
 
             success = False
             message = "Failed to add user."
@@ -791,15 +796,21 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                     message = f"Username '{username}' already exists."
                     status_code = 409 # Conflict
                 else:
-                    try:
-                        hashed_pw = hash_password(password)
+                    if pass_null == False:
+                        try:
+                            hashed_pw = hash_password(password)
+                            user_password_store[username] = hashed_pw
+                            save_needed = True
+                            print(f"User '{username}' added to memory.")
+                        except Exception as e:
+                            print(f"!!! Error hashing password for {username}: {e}")
+                            message = "Server error during password hashing."
+                            status_code = 500
+                    else:
+                        hashed_pw = "_NULL_" # Explicitly set to null
                         user_password_store[username] = hashed_pw
+                        print(f"User '{username}' added to memory with NULL password.")
                         save_needed = True
-                        print(f"User '{username}' added to memory.")
-                    except Exception as e:
-                         print(f"!!! Error hashing password for {username}: {e}")
-                         message = "Server error during password hashing."
-                         status_code = 500
 
                 if save_needed:
                     if save_user_data_to_sql():
