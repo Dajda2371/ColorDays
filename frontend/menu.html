@@ -1,46 +1,120 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Select Class - Color Days</title>
-  <link rel="stylesheet" href="style.css">
-  <style>
-    /* Add specific styles for the menu if needed */
-    .classList {
-      list-style: none;
-      padding: 0;
-      margin-top: 1rem;
-    }
-    .classList li {
-      margin-bottom: 10px;
-    }
-    .classList a {
-      display: inline-block;
-      padding: 10px 25px;
-      background-color: #eee;
-      border: 1px solid #ccc;
-      text-decoration: none;
-      color: #333;
-      border-radius: 5px;
-      transition: background-color 0.2s ease;
-    }
-    .classList a:hover {
-      background-color: #ddd;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Color Days - Menu</title>
+    <link rel="stylesheet" href="style.css"> <!-- Assuming you have a style.css -->
+    <style>
+        /* Existing styles */
+        .classList {
+          list-style: none;
+          padding: 0;
+          margin-top: 1rem;
+        }
+        .classList li {
+          margin-bottom: 10px;
+        }
+        .classList a {
+          display: inline-block;
+          padding: 10px 25px;
+          background-color: #eee;
+          border: 1px solid #ccc;
+          text-decoration: none;
+          color: #333;
+          border-radius: 5px;
+          transition: background-color 0.2s ease;
+        }
+        .classList a:hover {
+          background-color: #ddd;
+        }
+
+        /* --- Style for the Header Buttons Container --- */
+        #headerButtons {
+            position: fixed;   /* Position container relative to the viewport */
+            top: 15px;         /* Distance from the top edge */
+            right: 15px;        /* Distance from the right edge */
+            display: flex;     /* Arrange buttons horizontally */
+            gap: 10px;         /* Space between the buttons */
+            z-index: 1000;     /* Ensure it stays on top of other content */
+        }
+        /* --- End Header Buttons Container Style --- */
+
+        /* --- Common Style for Buttons within the Container --- */
+        .header-button {
+            padding: 8px 15px; /* Adjust padding as needed */
+            cursor: pointer;
+            background-color: #f0f0f0; /* Optional: style it */
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        /* --- End Common Button Style --- */
+
+        /* Remove specific fixed positioning from individual logout button ID */
+        #logoutButton {
+            /* No fixed positioning needed here anymore */
+        }
+
+        /* Add some padding to the body so content doesn't start under the fixed buttons */
+        body {
+            padding-top: 60px; /* Adjust this value based on button height + desired space */
+        }
+
+    </style>
 </head>
 <body>
+
+  <!-- Container for Header Buttons -->
+  <div id="headerButtons">
+    <!-- Config Button (Links to config.html) -->
+    <button id="configButton" class="header-button" onclick="window.location.href='config.html'">Config</button>
+    <!-- Logout Button -->
+    <button id="logoutButton" class="header-button">Logout</button>
+  </div>
 
   <h1>Color Days Counter</h1>
   <h2>Select Your Class:</h2>
 
-  <ul class="classList">
-    <!-- Add list items for each class you want -->
-    <li><a href="index.html?class=C1">Class 1</a></li>
-    <li><a href="index.html?class=C2">Class 2</a></li>
-    <li><a href="index.html?class=C3">Class 3</a></li>
-    <!-- Add more classes as needed -->
-  </ul>
+    <ul class="classList">
+      <!-- Add list items for each class you want -->
+      <li><a href="index.html?class=C1">Class 1</a></li>
+      <li><a href="index.html?class=C2">Class 2</a></li>
+      <li><a href="index.html?class=C3">Class 3</a></li>
+      <!-- Add more classes as needed -->
+    </ul>
+
+    <script>
+        const logoutButton = document.getElementById('logoutButton'); // Get the logout button
+        // No need to get configButton unless you add specific JS logic for it
+
+        // --- Logout Functionality (Keep this as is) ---
+        async function handleLogout() {
+            console.log("Attempting logout...");
+            try {
+                const response = await fetch('/logout', {
+                    method: 'POST',
+                    credentials: 'include' // Important for sending/receiving cookies
+                });
+
+                if (response.ok) {
+                    console.log("Logout successful on server. Redirecting to login.");
+                    // Redirect to login page after successful logout
+                    window.location.href = '/login.html';
+                } else {
+                    // Try to parse error message if available
+                    const result = await response.json().catch(() => ({})); // Default to empty object if JSON fails
+                    console.error('Logout request failed:', response.status, result.error || 'Unknown server error');
+                    alert(`Logout failed: ${result.error || 'Server error'}`);
+                }
+            } catch (error) {
+                console.error('Error during logout fetch:', error);
+                alert('An error occurred during logout. Please check your connection.');
+            }
+        }
+
+        logoutButton.addEventListener('click', handleLogout);
+        // --- END Logout Functionality ---
+    </script>
 
 </body>
 </html>

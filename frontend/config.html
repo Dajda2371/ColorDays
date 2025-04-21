@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>User Configuration</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <h1>Configuration Page</h1>
+
+  <!-- <section>
+    <h2>Add User</h2>
+    <input type="text" id="newUsername" placeholder="Username" />
+    <input type="password" id="newPassword" placeholder="Password" />
+  </section> -->
+
+  <!-- <section>
+    <h2>Change Password</h2>
+    <input type="text" id="changeUsername" placeholder="Username" />
+    <input type="password" id="changePassword" placeholder="New Password" />
+    <button onclick="changePassword()">Change Password</button>
+  </section> -->
+
+  <section>
+    <h2>User Management</h2>
+    <ul id="userList"></ul>
+    <table id="userTable" border="1" cellspacing="0" cellpadding="8">
+      <thead>
+        <tr>
+          <th>Username</th>
+          <th>Password Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="userTableBody">
+        <!-- JS will populate this -->
+      </tbody>
+    </table>
+    <button onclick="addUser()">Add User</button>
+  </section>
+
+  <section>
+    <h2>Class Management</h2>
+    <ul id="classList"></ul>
+    <table id="classTable" border="1" cellspacing="0" cellpadding="8">
+      <thead>
+        <tr>
+          <th>Class</th>
+          <th>Teacher</th>
+          <th>Counts</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="classTableBody">
+        <!-- JS will populate this -->
+      </tbody>
+    </table>
+    <button onclick="addClass()">Add Class</button>
+  </section>
+
+  <p style="margin-top: 2rem;"><a href="menu.html">Back to Class Selection</a></p>
+
+  <script src="config.js"></script>
+</body>
+</html>
