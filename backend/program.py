@@ -521,42 +521,59 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         self.send_response(200)
         self.end_headers()
 
-    def handle_set_password(self):
-        length = int(self.headers.get('Content-Length'))
-        body = self.rfile.read(length)
-        data = json.loads(body)
+    def handle_reset_password(self, data): # Accept parsed data
         username = data.get("username")
         new_password = data.get("new_password")
-        lines = []
-        with open(LOGINS_SQL_FILE_PATH, 'r') as f:
-            for line in f:
-                if f"('{username}'," in line:
-                    lines.append(f"INSERT INTO users (username, password_hash) VALUES ('{username}', '{new_password}');\n")
-                else:
-                    lines.append(line)
-        with open(LOGINS_SQL_FILE_PATH, 'w') as f:
-            f.writelines(lines)
-        self.send_response(200)
-        self.end_headers()
 
-    def handle_reset_password(self):
-        length = int(self.headers.get('Content-Length'))
-        body = self.rfile.read(length)  
-        data = json.loads(body)
-        username = data.get("username")
-        new_password = data.get("new_password")
+        # --- Add checks for missing data ---
+        if not username or not new_password:
+            print("Error: Missing username or new_password in handle_reset_password data.")
+            self._send_response(400, {"error": "Missing username or new_password"})
+            return
+        # --- End checks ---
+
         hashed = hash_password(new_password)
-        lines = []
-        with open(LOGINS_SQL_FILE_PATH, 'r') as f:
-            for line in f:
-                if f"('{username}'," in line:
-                    lines.append(f"INSERT INTO users (username, password_hash) VALUES ('{username}', '{hashed}');\n")
+
+        # --- IMPORTANT: Use the in-memory store and save function ---
+        # This file manipulation logic is prone to errors and bypasses locking/memory store.
+        # Replace the file reading/writing block with the correct logic:
+
+        success = False
+        message = "Failed to set password."
+        status_code = 500
+        save_needed = False
+
+        with data_lock: # Use the lock
+            if username not in user_password_store:
+                message = f"User '{username}' not found."
+                status_code = 404 # Not Found
+            else:
+                try:
+                    # Update the in-memory store
+                    user_password_store[username] = hashed
+                    save_needed = True
+                    print(f"Password set/reset in memory for user '{username}'.")
+                except Exception as e:
+                    print(f"!!! Error hashing new password for {username}: {e}")
+                    message = "Server error during password hashing."
+                    status_code = 500
+
+            if save_needed:
+                # Call the proper save function
+                if save_user_data_to_sql():
+                    success = True
+                    message = f"Password for user '{username}' set/reset successfully."
+                    status_code = 200 # OK
                 else:
-                    lines.append(line)
-        with open(LOGINS_SQL_FILE_PATH, 'w') as f:
-            f.writelines(lines)
-        self.send_response(200)
-        self.end_headers()
+                    success = False
+                    # User store might be inconsistent if save fails!
+                    message = f"Password set/reset in memory for '{username}', but FAILED to save to file."
+                    status_code = 500
+
+        if success:
+            self._send_response(status_code, {"success": True, "message": message})
+        else:
+            self._send_response(status_code, {"error": message})
 
 # --- Inside the ColorDaysHandler class ---
 
@@ -946,11 +963,11 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             self.handle_add_user()
             return # Handled
         elif self.path == "/api/users/remove":
-            self.handle_remove_user()
+            self.handle_remove_user(data)
         elif self.path == "/api/users/set":
-            self.handle_set_password()
+            self.handle_reset_password(data)
         elif self.path == "/api/users/reset":
-            self.handle_reset_password()
+            self.handle_reset_password(data)
 
         # --- Handle /api/increment & /api/decrement ---
         elif path == '/api/increment':
