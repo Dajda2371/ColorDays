@@ -129,6 +129,17 @@ function generatePassword(length = 10) {
   return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
 }
 
+async function setPassword(username) {
+  const newPassword = generatePassword();
+  const res = await fetch("/api/users/set", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, new_password: newPassword })
+  });
+  if (res.ok) loadUsers();
+  else alert("Failed to reset password");
+}
+
 async function resetPassword(username) {
   const newPassword = generatePassword();
   const res = await fetch("/api/users/reset", {

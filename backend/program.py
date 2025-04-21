@@ -521,9 +521,27 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         self.send_response(200)
         self.end_headers()
 
-    def handle_reset_password(self):
+    def handle_set_password(self):
         length = int(self.headers.get('Content-Length'))
         body = self.rfile.read(length)
+        data = json.loads(body)
+        username = data.get("username")
+        new_password = data.get("new_password")
+        lines = []
+        with open(LOGINS_SQL_FILE_PATH, 'r') as f:
+            for line in f:
+                if f"('{username}'," in line:
+                    lines.append(f"INSERT INTO users (username, password_hash) VALUES ('{username}', '{new_password}');\n")
+                else:
+                    lines.append(line)
+        with open(LOGINS_SQL_FILE_PATH, 'w') as f:
+            f.writelines(lines)
+        self.send_response(200)
+        self.end_headers()
+
+    def handle_reset_password(self):
+        length = int(self.headers.get('Content-Length'))
+        body = self.rfile.read(length)  
         data = json.loads(body)
         username = data.get("username")
         new_password = data.get("new_password")
@@ -929,6 +947,8 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             return # Handled
         elif self.path == "/api/users/remove":
             self.handle_remove_user()
+        elif self.path == "/api/users/set":
+            self.handle_set_password()
         elif self.path == "/api/users/reset":
             self.handle_reset_password()
 
