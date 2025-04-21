@@ -503,23 +503,50 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         self.send_response(200)
         self.end_headers()
 
-    def handle_remove_user(self):
-        length = int(self.headers.get('Content-Length'))
-        body = self.rfile.read(length)
-        data = json.loads(body)
+    def handle_remove_user(self, data): # Accept parsed data
         username = data.get("username")
-        if username == "admin":
-            self.send_error(403, "Cannot delete admin")
+
+        if not username:
+            self._send_response(400, {"error": "Missing username"})
             return
-        lines = []
-        with open(LOGINS_SQL_FILE_PATH, 'r') as f:
-            for line in f:
-                if f"('{username}'," not in line:
-                    lines.append(line)
-        with open(LOGINS_SQL_FILE_PATH, 'w') as f:
-            f.writelines(lines)
-        self.send_response(200)
-        self.end_headers()
+
+        # --- Prevent deleting admin user ---
+        if username == 'admin':
+            print("Attempt denied to remove 'admin' user.")
+            self._send_response(403, {"error": "Cannot remove the admin user."}) # Forbidden
+            return
+        # --- End admin check ---
+
+        success = False
+        message = "Failed to remove user."
+        status_code = 500
+        save_needed = False
+
+        with data_lock: # Use the lock
+            if username not in user_password_store:
+                message = f"User '{username}' not found."
+                status_code = 404 # Not Found
+            else:
+                del user_password_store[username] # Remove from memory
+                save_needed = True
+                print(f"User '{username}' removed from memory.")
+
+            if save_needed:
+                if save_user_data_to_sql(): # Save changes
+                    success = True
+                    message = f"User '{username}' removed successfully."
+                    status_code = 200 # OK
+                else:
+                    # CRITICAL: Failed to save. User removed from memory but not file.
+                    # Consider reloading user data from file or other recovery.
+                    success = False
+                    message = f"User '{username}' removed from memory, but FAILED to save to file."
+                    status_code = 500
+
+        if success:
+            self._send_response(status_code, {"success": True, "message": message})
+        else:
+            self._send_response(status_code, {"error": message})
 
     def handle_reset_password(self, data): # Accept parsed data
         username = data.get("username")
