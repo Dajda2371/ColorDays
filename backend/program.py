@@ -903,13 +903,18 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             return # Handled
 
         # --- Handle /change_password ---
-        elif path == '/change_password':
+        elif path == '/api/auth/change':
             username = data.get('username')
-            new_password = data.get('password') # Frontend sends new password in 'password' field
+            old_password = data.get('oldPassword')
+            new_password = data.get('newPassword')
+            verification_needed = data.get('verificationNeeded')
 
             if not username or not new_password:
                 self._send_response(400, {"error": "Missing username or new password"})
                 return
+            
+            if not verification_needed:
+                self._send_response(400, {"error": "Verification Error"})
 
             success = False
             message = "Failed to change password."
@@ -921,15 +926,22 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                     message = f"User '{username}' not found."
                     status_code = 404 # Not Found
                 else:
+                    if verification_needed == True:
+                        verify_password(username, old_password)
+                        if not verify_password(username, old_password):
+                            message = "Old password verification failed."
+                            status_code = 401
+                            return
+
                     try:
                         hashed_pw = hash_password(new_password)
                         user_password_store[username] = hashed_pw
                         save_needed = True
                         print(f"Password changed in memory for user '{username}'.")
                     except Exception as e:
-                         print(f"!!! Error hashing new password for {username}: {e}")
-                         message = "Server error during password hashing."
-                         status_code = 500
+                        print(f"!!! Error hashing new password for {username}: {e}")
+                        message = "Server error during password hashing."
+                        status_code = 500
 
                 if save_needed:
                     if save_user_data_to_sql():
