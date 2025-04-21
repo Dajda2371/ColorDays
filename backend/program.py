@@ -57,11 +57,17 @@ def hash_password(password):
     # Return in 'salt:key' format
     return f"{salt_hex}:{key_hex}"
 
-def verify_password(stored_password_info, provided_password):
+def verify_password(stored_password_info, provided_password, username):
     """Verifies a provided password against the stored salt and hash."""
     if not stored_password_info or ':' not in stored_password_info:
-        print("Error: Invalid or missing stored password info.")
-        return False
+        if stored_password_info[0] == '_' and stored_password_info[-1] == '_':
+            _stored_password_info_ = stored_password_info[1:-1]
+            if _stored_password_info_ == provided_password:
+                print(f"User '{username}' logged in with pregenerated password '{provided_password}'.")
+                return True # Special case
+        else:
+            print("Error: Invalid or missing stored password info.")
+            return False
     try:
         salt_hex, key_hex = stored_password_info.split(':')
         salt = binascii.unhexlify(salt_hex)
@@ -766,14 +772,14 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 # Check if user exists and password was provided
                 if stored_info and submitted_password:
                     # Verify the password using the stored salt and hash info
-                    if verify_password(stored_info, submitted_password):
+                    if verify_password(stored_info, submitted_password, username):
                         login_successful = True
                     else:
                         print(f"Password verification failed for user: {username}") # Added detail
                 elif not stored_info:
-                     print(f"Login attempt failed: Username '{username}' not found.")
+                    print(f"Login attempt failed: Username '{username}' not found.")
                 elif not submitted_password:
-                     print(f"Login attempt failed: No password provided for user '{username}'.")
+                    print(f"Login attempt failed: No password provided for user '{username}'.")
 
 
                 if login_successful:
