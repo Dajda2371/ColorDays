@@ -23,7 +23,7 @@ function renderUsers() {
 
     if (!info.password) {
       status = "not set";
-    } else if (info.password === "_NULL_") {
+    } else if (info.password === "not_set") {
       status = "not set";
     } else {
       status = "set";

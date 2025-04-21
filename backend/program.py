@@ -419,7 +419,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         user_list = []
         for username, password_hash in users.items():
             # Determine status based on the hash format from the file
-            if password_hash is None or password_hash.upper() == 'NULL': # Check for NULL explicitly if handle_add_user writes it
+            if password_hash is None or password_hash.upper() == '_NULL_': # Check for NULL explicitly if handle_add_user writes it
                 status = "not_set"
             # You might need a more robust check than just length if handle_add_user writes NULL
             # Let's assume parse_logins_sql_line filters out bad hashes, so what's loaded is valid or None/NULL
