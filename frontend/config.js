@@ -36,7 +36,7 @@ function renderUsers() {
       <td>${status}</td>
       <td>
         ${
-          status === "not set" || /^[a-zA-Z0-9]{10}$/.test(info.password)
+          status === "not set" // || /^[a-zA-Z0-9]{10}$/.test(info.password)
             ? `<button onclick="setPassword('${username}')">Set Password</button>`
             : `<button onclick="resetPassword('${username}')">Reset Password</button>`
         }
