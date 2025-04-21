@@ -559,7 +559,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             return
         # --- End checks ---
 
-        hashed = hash_password(new_password)
+        hashed = f"_{new_password}_"
 
         # --- IMPORTANT: Use the in-memory store and save function ---
         # This file manipulation logic is prone to errors and bypasses locking/memory store.
