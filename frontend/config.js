@@ -25,8 +25,10 @@ function renderUsers() {
       status = "not set";
     } else if (info.password === "not_set") {
       status = "not set";
-    } else {
+    } else if (info.password === "set") {
       status = "set";
+    } else {
+      status = info.password;
     }
 
     tr.innerHTML = `

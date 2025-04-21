@@ -150,7 +150,7 @@ def parse_logins_sql_line(line):
 
     if match:
         username, password_hash = match.groups()
-        if ':' in password_hash or password_hash.upper() == '_NULL_':
+        if ':' in password_hash or password_hash.upper() == '_NULL_' or (password_hash[0] == '_' and password_hash[-1] == '_'):
             return username, password_hash
         else:
             print(f"Warning: Skipped user due to bad hash format: {line}")
@@ -423,8 +423,10 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 status = "not_set"
             # You might need a more robust check than just length if handle_add_user writes NULL
             # Let's assume parse_logins_sql_line filters out bad hashes, so what's loaded is valid or None/NULL
+            elif password_hash[0] == '_' and password_hash[-1] == '_':
+                status = password_hash[1:-1] # Extract the password between underscores
             else:
-                 status = "set" # If it has a valid hash format, it's set
+                status = "set" # If it has a valid hash format, it's set
 
             # The frontend expects 'password' field, map status to it
             user_list.append({"username": username, "password": status})
