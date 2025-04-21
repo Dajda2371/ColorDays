@@ -150,7 +150,7 @@ def parse_logins_sql_line(line):
 
     if match:
         username, password_hash = match.groups()
-        if ':' in password_hash:
+        if ':' in password_hash or password_hash.upper() == '_NULL_' or (password_hash[0] == '_' and password_hash[-1] == '_'):
             return username, password_hash
         else:
             print(f"Warning: Skipped user due to bad hash format: {line}")
@@ -258,6 +258,7 @@ def load_user_data_from_sql():
         print(f"!!! Example INSERT: INSERT INTO users (username, password_hash) VALUES ('admin', '{hash_password('password123')}');")
 
     print("User data loading complete.")
+    return user_password_store # Return the loaded user_password_store for use in the handler
 
 
 # --- Saving for tables.sql ---
@@ -399,9 +400,209 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             print(f"!!! Error sending response (status {status_code}): {e}")
             # Avoid sending another response if headers already sent etc.
 
+    def send_json(self, data, status=200):
+        response = json.dumps(data).encode('utf-8')
+        self.send_response(status)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(response)))
+        self.end_headers()
+        self.wfile.write(response)
+
     # Handle CORS preflight requests
     def do_OPTIONS(self):
         self._send_response(204) # No Content for OPTIONS
+
+    # Inside your request handler (e.g., in do_GET or do_POST):
+
+    def handle_get_users(self):
+        users = load_user_data_from_sql() # <--- Corrected line (no argument)
+        user_list = []
+        for username, password_hash in users.items():
+            # Determine status based on the hash format from the file
+            if password_hash is None or password_hash.upper() == '_NULL_': # Check for NULL explicitly if handle_add_user writes it
+                status = "not_set"
+            # You might need a more robust check than just length if handle_add_user writes NULL
+            # Let's assume parse_logins_sql_line filters out bad hashes, so what's loaded is valid or None/NULL
+            elif password_hash[0] == '_' and password_hash[-1] == '_':
+                status = password_hash[1:-1] # Extract the password between underscores
+            else:
+                status = "set" # If it has a valid hash format, it's set
+
+            # The frontend expects 'password' field, map status to it
+            user_list.append({"username": username, "password": status})
+        self.send_json(user_list)
+
+    def handle_post_users(self):
+        global user_password_store
+
+        if not self.is_logged_in():
+            print("Denied POST to /api/users - not authenticated.")
+            self._send_response(401, {"error": "Authentication required"})
+            return
+
+        content_length = int(self.headers.get('Content-Length', 0))
+        if content_length == 0:
+            self._send_response(400, {"error": "Missing request body"})
+            return
+
+        try:
+            post_data = json.loads(self.rfile.read(content_length))
+            username = post_data.get("username", "").strip()
+
+            if not username:
+                self._send_response(400, {"error": "Username required"})
+                return
+
+            if username in user_password_store:
+                self._send_response(400, {"error": "User already exists"})
+                return
+
+            # Add the user with NOT_SET as the password
+            user_password_store[username] = "NOT_SET"
+
+            # Call your save function here!
+            success = save_user_data_to_sql()
+
+            if success:
+                print(f"User '{username}' added and saved.")
+                self._send_response(200, {"message": "User added"})
+            else:
+                self._send_response(500, {"error": "Failed to save user data"})
+
+        except Exception as e:
+            print(f"Error in handle_post_users: {e}")
+            traceback.print_exc()
+            self._send_response(500, {"error": "Failed to process request"})
+
+    def handle_add_user(self):
+        length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(length)
+        print("Raw body:", repr(body))
+
+        if not body:
+            self.send_error(400, "Missing request body")
+            return
+
+        try:
+            data = json.loads(body)
+        except json.JSONDecodeError:
+            self.send_error(400, "Invalid JSON")
+            return
+
+        username = data.get("username")
+        if not username:
+            self.send_error(400, "Missing username")
+            return
+
+        users = load_user_data_from_sql(LOGINS_SQL_FILE_PATH)
+        if username in users:
+            self.send_error(409, "User already exists")
+            return
+
+        with open(LOGINS_SQL_FILE_PATH, 'a') as f:
+            f.write(f"INSERT INTO users (username, password_hash) VALUES ('{username}', NULL);\n")
+
+        self.send_response(200)
+        self.end_headers()
+
+    def handle_remove_user(self, data): # Accept parsed data
+        username = data.get("username")
+
+        if not username:
+            self._send_response(400, {"error": "Missing username"})
+            return
+
+        # --- Prevent deleting admin user ---
+        if username == 'admin':
+            print("Attempt denied to remove 'admin' user.")
+            self._send_response(403, {"error": "Cannot remove the admin user."}) # Forbidden
+            return
+        # --- End admin check ---
+
+        success = False
+        message = "Failed to remove user."
+        status_code = 500
+        save_needed = False
+
+        with data_lock: # Use the lock
+            if username not in user_password_store:
+                message = f"User '{username}' not found."
+                status_code = 404 # Not Found
+            else:
+                del user_password_store[username] # Remove from memory
+                save_needed = True
+                print(f"User '{username}' removed from memory.")
+
+            if save_needed:
+                if save_user_data_to_sql(): # Save changes
+                    success = True
+                    message = f"User '{username}' removed successfully."
+                    status_code = 200 # OK
+                else:
+                    # CRITICAL: Failed to save. User removed from memory but not file.
+                    # Consider reloading user data from file or other recovery.
+                    success = False
+                    message = f"User '{username}' removed from memory, but FAILED to save to file."
+                    status_code = 500
+
+        if success:
+            self._send_response(status_code, {"success": True, "message": message})
+        else:
+            self._send_response(status_code, {"error": message})
+
+    def handle_reset_password(self, data): # Accept parsed data
+        username = data.get("username")
+        new_password = data.get("new_password")
+
+        # --- Add checks for missing data ---
+        if not username or not new_password:
+            print("Error: Missing username or new_password in handle_reset_password data.")
+            self._send_response(400, {"error": "Missing username or new_password"})
+            return
+        # --- End checks ---
+
+        hashed = f"_{new_password}_"
+
+        # --- IMPORTANT: Use the in-memory store and save function ---
+        # This file manipulation logic is prone to errors and bypasses locking/memory store.
+        # Replace the file reading/writing block with the correct logic:
+
+        success = False
+        message = "Failed to set password."
+        status_code = 500
+        save_needed = False
+
+        with data_lock: # Use the lock
+            if username not in user_password_store:
+                message = f"User '{username}' not found."
+                status_code = 404 # Not Found
+            else:
+                try:
+                    # Update the in-memory store
+                    user_password_store[username] = hashed
+                    save_needed = True
+                    print(f"Password set/reset in memory for user '{username}'.")
+                except Exception as e:
+                    print(f"!!! Error hashing new password for {username}: {e}")
+                    message = "Server error during password hashing."
+                    status_code = 500
+
+            if save_needed:
+                # Call the proper save function
+                if save_user_data_to_sql():
+                    success = True
+                    message = f"Password for user '{username}' set/reset successfully."
+                    status_code = 200 # OK
+                else:
+                    success = False
+                    # User store might be inconsistent if save fails!
+                    message = f"Password set/reset in memory for '{username}', but FAILED to save to file."
+                    status_code = 500
+
+        if success:
+            self._send_response(status_code, {"success": True, "message": message})
+        else:
+            self._send_response(status_code, {"error": message})
 
 # --- Inside the ColorDaysHandler class ---
 
@@ -412,7 +613,6 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         path = parsed_path.path
         query = urllib.parse.parse_qs(parsed_path.query)
 
-        # --- NEW: API Endpoint: /list_users ---
         if path == '/list_users':
             # --- Authentication Check ---
             if not self.is_logged_in():
@@ -430,6 +630,17 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             self._send_response(200, user_list)
             return
         # --- END NEW ENDPOINT ---
+
+        elif path == '/api/users':
+            # Note: handle_get_users currently doesn't check authentication
+            # Add authentication check here if needed:
+            # if not self.is_logged_in():
+            #     print(f"Denied GET request to {path} - User not logged in.")
+            #     self._send_response(401, {"error": "Authentication required"})
+            #     return
+            print(f"Handling GET request for {path}") # Add log
+            self.handle_get_users() # Call the handler function
+            return # Make sure to return after handling
 
         # API Endpoint: /api/counts?class=ClassName
         elif path == '/api/counts':
@@ -630,9 +841,14 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             username = data.get('username')
             password = data.get('password')
 
-            if not username or not password:
-                self._send_response(400, {"error": "Missing username or password"})
+            if not username:
+                self._send_response(400, {"error": "Missing username"})
                 return
+            
+            if not password:
+                pass_null = True
+            else:
+                pass_null = False
 
             success = False
             message = "Failed to add user."
@@ -644,15 +860,21 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                     message = f"Username '{username}' already exists."
                     status_code = 409 # Conflict
                 else:
-                    try:
-                        hashed_pw = hash_password(password)
+                    if pass_null == False:
+                        try:
+                            hashed_pw = hash_password(password)
+                            user_password_store[username] = hashed_pw
+                            save_needed = True
+                            print(f"User '{username}' added to memory.")
+                        except Exception as e:
+                            print(f"!!! Error hashing password for {username}: {e}")
+                            message = "Server error during password hashing."
+                            status_code = 500
+                    else:
+                        hashed_pw = "_NULL_" # Explicitly set to null
                         user_password_store[username] = hashed_pw
+                        print(f"User '{username}' added to memory with NULL password.")
                         save_needed = True
-                        print(f"User '{username}' added to memory.")
-                    except Exception as e:
-                         print(f"!!! Error hashing password for {username}: {e}")
-                         message = "Server error during password hashing."
-                         status_code = 500
 
                 if save_needed:
                     if save_user_data_to_sql():
@@ -765,6 +987,16 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             else:
                  self._send_response(status_code, {"error": message})
             return # Handled
+        
+        elif self.path == "/api/users":
+            self.handle_add_user()
+            return # Handled
+        elif self.path == "/api/users/remove":
+            self.handle_remove_user(data)
+        elif self.path == "/api/users/set":
+            self.handle_reset_password(data)
+        elif self.path == "/api/users/reset":
+            self.handle_reset_password(data)
 
         # --- Handle /api/increment & /api/decrement ---
         elif path == '/api/increment':
