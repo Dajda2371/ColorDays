@@ -64,7 +64,13 @@ def verify_password(stored_password_info, provided_password, username):
             _stored_password_info_ = stored_password_info[1:-1]
             if _stored_password_info_ == provided_password:
                 print(f"User '{username}' logged in with pregenerated password '{provided_password}'.")
-                return True # Special case
+                change_pw_cookie_headers = create_cookies(
+                CHANGE_PASSWORD_COOKIE_NAME,
+                "required", # Use a simple value like "required" or "true"
+                path='/change-password', # Path where frontend checks this
+                max_age=3600 # Optional: Give it a lifetime (e.g., 1 hour)
+            )
+                return True, change_pw_cookie_headers # Special case
             else:
                 return False
         else:
@@ -104,6 +110,7 @@ user_password_store = {}
 USERNAME_COOKIE_NAME = "ColorDaysUser"
 SESSION_COOKIE_NAME = "ColorDaysSession"
 VALID_SESSION_VALUE = "user_is_logged_in_secret_value" # Replace with a secure, random session ID mechanism
+CHANGE_PASSWORD_COOKIE_NAME = "ChangePasswordVerificationNotNeeded" # For the change password flow
 # --- End Session Configuration ---
 
 
@@ -111,6 +118,49 @@ VALID_SESSION_VALUE = "user_is_logged_in_secret_value" # Replace with a secure, 
 data_store = collections.defaultdict(lambda: collections.defaultdict(lambda: collections.defaultdict(int)))
 data_lock = threading.RLock()
 
+def create_cookies(name, value, path='/', expires=None, max_age=None, httponly=True, samesite='Lax'):
+    """
+    Creates a list of ('Set-Cookie', header_value) tuples for a single cookie.
+
+    Args:
+        name (str): The name of the cookie.
+        value (str): The value of the cookie.
+        path (str, optional): The path for the cookie. Defaults to '/'.
+        expires (str, optional): GMT expiration string (e.g., 'Thu, 01 Jan 1970 00:00:00 GMT'). Defaults to None.
+        max_age (int, optional): Max age in seconds. Defaults to None.
+        httponly (bool, optional): Set the HttpOnly flag. Defaults to True.
+        samesite (str, optional): Set the SameSite attribute ('Lax', 'Strict', 'None'). Defaults to 'Lax'.
+
+    Returns:
+        list: A list containing one tuple: ('Set-Cookie', formatted_header_string).
+              Returns an empty list if name or value is empty/None.
+    """
+    if not name or value is None: # Basic validation
+        print(f"Warning: Attempted to create cookie with empty name ('{name}') or None value.")
+        return []
+
+    cookie = SimpleCookie()
+    cookie[name] = value
+    cookie[name]['path'] = path
+
+    # Add security and lifetime attributes if specified
+    if httponly:
+        cookie[name]['httponly'] = True
+    if samesite:
+        cookie[name]['samesite'] = samesite
+    if expires:
+        cookie[name]['expires'] = expires
+    if max_age is not None: # Check for None explicitly as 0 is valid
+        cookie[name]['max-age'] = max_age
+
+    headers = []
+    # There will only be one morsel since we created one cookie
+    for morsel in cookie.values():
+        # morsel.output(header='') gives the value part like 'key=val; path=/; httponly...'
+        header_value = morsel.output(header='').strip()
+        headers.append(('Set-Cookie', header_value)) # Append the tuple
+
+    return headers
 
 # --- SQL File Handling Functions ---
 
@@ -767,18 +817,18 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 username = credentials.get('username')
                 submitted_password = credentials.get('password')
 
+                # Initialize login result and extra headers
                 login_successful = False
-                # --- MODIFIED: Look up user in the loaded store ---
-                stored_info = user_password_store.get(username)
-                # --- END MODIFICATION ---
+                extra_cookie_headers = [] # <-- Initialize empty list
 
-                # Check if user exists and password was provided
+                stored_info = user_password_store.get(username)
+
                 if stored_info and submitted_password:
-                    # Verify the password using the stored salt and hash info
-                    if verify_password(stored_info, submitted_password, username):
-                        login_successful = True
-                    else:
-                        print(f"Password verification failed for user: {username}") # Added detail
+                    # --- UNPACK the tuple returned by verify_password ---
+                    login_successful, extra_cookie_headers = verify_password(stored_info, submitted_password, username)
+                    # --- END CHANGE ---
+                    if not login_successful:
+                        print(f"Password verification failed for user: {username}")
                 elif not stored_info:
                     print(f"Login attempt failed: Username '{username}' not found.")
                 elif not submitted_password:
@@ -786,46 +836,37 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
 
                 if login_successful:
-                    # Prepare the cookies
-                    cookie = SimpleCookie()
-                    cookie[USERNAME_COOKIE_NAME] = f"{username}"
-                    cookie[USERNAME_COOKIE_NAME]['path'] = '/' # Make cookie valid for all paths
-                    cookie[SESSION_COOKIE_NAME] = f"{VALID_SESSION_VALUE}"
-                    cookie[SESSION_COOKIE_NAME]['path'] = '/' # Make cookie valid for all paths
-                    # Optional security attributes (recommended):
-                    # cookie[SESSION_COOKIE_NAME]['httponly'] = True # Prevents JS access
-                    # cookie[SESSION_COOKIE_NAME]['samesite'] = 'Lax' # CSRF protection
+                    # --- Prepare the standard cookies ---
+                    user_cookie_headers = create_cookies(USERNAME_COOKIE_NAME, f"{username}", path='/')
+                    session_cookie_headers = create_cookies(SESSION_COOKIE_NAME, f"{VALID_SESSION_VALUE}", path='/')
+
+                    # --- COMBINE standard cookies with any extra ones returned ---
+                    all_cookie_headers = user_cookie_headers + session_cookie_headers + extra_cookie_headers
+                    # --- END CHANGE ---
 
                     # --- Send response headers MANUALLY ---
-                    # We cannot use _send_response easily for multiple Set-Cookie headers
                     self.send_response(200)
                     self.send_header('Content-type', 'application/json')
-                    # --- CORS Headers (copy from _send_response) ---
-                    self.send_header('Access-Control-Allow-Origin', '*') # Consider restricting in production
+                    # CORS Headers...
+                    self.send_header('Access-Control-Allow-Origin', '*')
                     self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-                    self.send_header('Access-Control-Allow-Headers', 'Content-Type, Cookie') # Allow Cookie header
-                    self.send_header('Access-Control-Allow-Credentials', 'true') # Needed if frontend sends credentials
-                    # --- End CORS ---
+                    self.send_header('Access-Control-Allow-Headers', 'Content-Type, Cookie')
+                    self.send_header('Access-Control-Allow-Credentials', 'true')
 
-                    # --- Send EACH Set-Cookie header individually ---
-                    print(f"DEBUG: Preparing to send cookies...")
-                    for morsel in cookie.values():
-                        # morsel.output(header='') gives the value part like 'key=val; path=/'
-                        header_value = morsel.output(header='').strip()
-                        self.send_header('Set-Cookie', header_value)
-                        print(f"DEBUG: Sent Set-Cookie header: {header_value}") # Add debug print
+                    # Send EACH Set-Cookie header individually
+                    print(f"DEBUG: Preparing to send {len(all_cookie_headers)} cookie(s)...")
+                    for header_name, header_value in all_cookie_headers:
+                        self.send_header(header_name, header_value)
+                        print(f"DEBUG: Sent {header_name} header: {header_value}")
 
-                    self.end_headers() # Crucial: End headers AFTER all headers are sent
+                    self.end_headers()
 
-                    # Send the response body
                     response_body = json.dumps({"success": True, "message": "Login successful"}).encode('utf-8')
                     self.wfile.write(response_body)
 
-                    print(f"Login successful for user: {username}, session cookies sent.")
-                    # --- End Manual Header Sending ---
+                    print(f"Login successful for user: {username}, {len(all_cookie_headers)} session/other cookie(s) sent.")
 
-                else:
-                    # Generic error message to client, specific logs server-side
+                else: # login_successful == False
                     self._send_response(401, {"error": "Invalid username or password"}) # Unauthorized
 
             except json.JSONDecodeError:
