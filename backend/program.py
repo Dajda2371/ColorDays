@@ -99,6 +99,7 @@ user_password_store = {}
 # --- End User Credentials Store ---
 
 # --- Session Configuration ---
+USERNAME_COOKIE_NAME = "ColorDaysUser"
 SESSION_COOKIE_NAME = "ColorDaysSession"
 VALID_SESSION_VALUE = "user_is_logged_in_secret_value" # Replace with a secure, random session ID mechanism
 # --- End Session Configuration ---
@@ -783,18 +784,44 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
 
                 if login_successful:
-                    # Prepare the session cookie
+                    # Prepare the cookies
                     cookie = SimpleCookie()
-                    cookie[SESSION_COOKIE_NAME] = VALID_SESSION_VALUE
+                    cookie[USERNAME_COOKIE_NAME] = f"{username}"
+                    cookie[USERNAME_COOKIE_NAME]['path'] = '/' # Make cookie valid for all paths
+                    cookie[SESSION_COOKIE_NAME] = f"{VALID_SESSION_VALUE}"
                     cookie[SESSION_COOKIE_NAME]['path'] = '/' # Make cookie valid for all paths
                     # Optional security attributes (recommended):
                     # cookie[SESSION_COOKIE_NAME]['httponly'] = True # Prevents JS access
                     # cookie[SESSION_COOKIE_NAME]['samesite'] = 'Lax' # CSRF protection
-                    cookie_header_val = cookie.output(header='').strip()
-                    custom_headers = {'Set-Cookie': cookie_header_val}
 
-                    print(f"Login successful for user: {username}, session cookie set.")
-                    self._send_response(200, {"success": True, "message": "Login successful"}, headers=custom_headers)
+                    # --- Send response headers MANUALLY ---
+                    # We cannot use _send_response easily for multiple Set-Cookie headers
+                    self.send_response(200)
+                    self.send_header('Content-type', 'application/json')
+                    # --- CORS Headers (copy from _send_response) ---
+                    self.send_header('Access-Control-Allow-Origin', '*') # Consider restricting in production
+                    self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+                    self.send_header('Access-Control-Allow-Headers', 'Content-Type, Cookie') # Allow Cookie header
+                    self.send_header('Access-Control-Allow-Credentials', 'true') # Needed if frontend sends credentials
+                    # --- End CORS ---
+
+                    # --- Send EACH Set-Cookie header individually ---
+                    print(f"DEBUG: Preparing to send cookies...")
+                    for morsel in cookie.values():
+                        # morsel.output(header='') gives the value part like 'key=val; path=/'
+                        header_value = morsel.output(header='').strip()
+                        self.send_header('Set-Cookie', header_value)
+                        print(f"DEBUG: Sent Set-Cookie header: {header_value}") # Add debug print
+
+                    self.end_headers() # Crucial: End headers AFTER all headers are sent
+
+                    # Send the response body
+                    response_body = json.dumps({"success": True, "message": "Login successful"}).encode('utf-8')
+                    self.wfile.write(response_body)
+
+                    print(f"Login successful for user: {username}, session cookies sent.")
+                    # --- End Manual Header Sending ---
+
                 else:
                     # Generic error message to client, specific logs server-side
                     self._send_response(401, {"error": "Invalid username or password"}) # Unauthorized
@@ -810,22 +837,53 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
         # --- LOGOUT Endpoint ---
         elif path == '/logout':
-             # Prepare an expired cookie to clear the browser's cookie
-             cookie = SimpleCookie()
-             cookie[SESSION_COOKIE_NAME] = "" # Clear value
-             cookie[SESSION_COOKIE_NAME]['path'] = '/'
-             cookie[SESSION_COOKIE_NAME]['expires'] = 'Thu, 01 Jan 1970 00:00:00 GMT' # Expire immediately
-             cookie[SESSION_COOKIE_NAME]['max-age'] = 0 # Another way to expire
-             custom_headers = {'Set-Cookie': cookie.output(header='').strip()}
-             print("Logout request received, clearing session cookie.")
-             self._send_response(200, {"success": True, "message": "Logged out successfully"}, headers=custom_headers)
-             return # Stop processing after handling /logout
+            # Prepare an expired cookie to clear the browser's cookie
+            print("Logout request received. Preparing to clear cookies.")
+            # Prepare expired cookies to clear the browser's cookies
+            cookie = SimpleCookie()
 
-        # --- Authentication Check for ALL Protected POST Endpoints below ---
-        if not self.is_logged_in():
-            print(f"Denied POST request to {path} - User not logged in.")
-            self._send_response(401, {"error": "Authentication required"}) # Unauthorized
-            return # Stop processing if not logged in
+            # --- Expire SESSION cookie ---
+            cookie[SESSION_COOKIE_NAME] = "" # Clear value
+            cookie[SESSION_COOKIE_NAME]['path'] = '/' # MUST match the path set during login
+            cookie[SESSION_COOKIE_NAME]['expires'] = 'Thu, 01 Jan 1970 00:00:00 GMT' # Expire immediately
+            cookie[SESSION_COOKIE_NAME]['max-age'] = 0 # Another way to expire
+            # If you set httponly or samesite on login, include them here too for robustness
+            # cookie[SESSION_COOKIE_NAME]['httponly'] = True
+            # cookie[SESSION_COOKIE_NAME]['samesite'] = 'Lax'
+
+            # --- Expire USERNAME cookie ---
+            cookie[USERNAME_COOKIE_NAME] = "" # Clear value
+            cookie[USERNAME_COOKIE_NAME]['path'] = '/' # MUST match the path set during login
+            cookie[USERNAME_COOKIE_NAME]['expires'] = 'Thu, 01 Jan 1970 00:00:00 GMT' # Expire immediately
+            cookie[USERNAME_COOKIE_NAME]['max-age'] = 0 # Another way to expire
+
+            # --- Send response headers MANUALLY ---
+            # Use the same technique as login to ensure both headers are sent
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            # --- CORS Headers (copy from _send_response/login) ---
+            self.send_header('Access-Control-Allow-Origin', '*') # Consider restricting in production
+            self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+            self.send_header('Access-Control-Allow-Headers', 'Content-Type, Cookie')
+            self.send_header('Access-Control-Allow-Credentials', 'true')
+            # --- End CORS ---
+
+            # --- Send EACH Set-Cookie expiration header individually ---
+            print(f"DEBUG: Preparing to send expiration cookies...")
+            for morsel in cookie.values():
+                # morsel.output(header='') gives the value part like 'key=val; path=/; expires=...'
+                header_value = morsel.output(header='').strip()
+                self.send_header('Set-Cookie', header_value)
+                print(f"DEBUG: Sent Set-Cookie expiration header: {header_value}")
+
+            self.end_headers() # Crucial: End headers AFTER all headers are sent
+
+            # Send the response body
+            response_body = json.dumps({"success": True, "message": "Logged out successfully"}).encode('utf-8')
+            self.wfile.write(response_body)
+
+            print("Logout successful, cookie expiration headers sent.")
+            return # Stop processing after handling /logout
         # --- End Authentication Check ---
 
         # --- Protected Endpoints below require login ---
