@@ -65,6 +65,8 @@ def verify_password(stored_password_info, provided_password, username):
             if _stored_password_info_ == provided_password:
                 print(f"User '{username}' logged in with pregenerated password '{provided_password}'.")
                 return True # Special case
+            else:
+                return False
         else:
             print("Error: Invalid or missing stored password info.")
             return False
@@ -962,7 +964,18 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
         # --- Handle /change_password ---
         elif path == '/api/auth/change':
-            username = data.get('username')
+            # --- CORRECTED USERNAME RETRIEVAL ---
+            username_cookie = self.get_cookies().get(USERNAME_COOKIE_NAME)
+            if username_cookie:
+                username = username_cookie.value # Extract the string value from the Morsel
+            else:
+                # This case should ideally not happen if the request is authenticated,
+                # but handle it defensively.
+                print("Error: Username cookie missing in authenticated /api/auth/change request.")
+                self._send_response(401, {"error": "Authentication error: User identity not found."})
+                return
+            # --- END CORRECTION ---
+
             old_password = data.get('oldPassword')
             new_password = data.get('newPassword')
             verification_needed = data.get('verificationNeeded')
@@ -970,9 +983,6 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             if not username or not new_password:
                 self._send_response(400, {"error": "Missing username or new password"})
                 return
-            
-            if not verification_needed:
-                self._send_response(400, {"error": "Verification Error"})
 
             success = False
             message = "Failed to change password."
@@ -980,15 +990,17 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             save_needed = False
 
             with data_lock: # Or use a dedicated user_data_lock
-                if username not in user_password_store:
+                stored_password_info = user_password_store.get(username)
+
+                if not stored_password_info:
                     message = f"User '{username}' not found."
                     status_code = 404 # Not Found
                 else:
                     if verification_needed == True:
-                        verify_password(username, old_password)
-                        if not verify_password(username, old_password):
+                        if verify_password(stored_password_info, old_password, username) == False:
                             message = "Old password verification failed."
                             status_code = 401
+                            self._send_response(status_code, {"error": message})
                             return
 
                     try:
@@ -1012,9 +1024,9 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                         status_code = 500
 
             if success:
-                 self._send_response(status_code, {"success": True, "message": message})
+                self._send_response(status_code, {"success": True, "message": message})
             else:
-                 self._send_response(status_code, {"error": message})
+                self._send_response(status_code, {"error": message})
             return # Handled
 
         # --- Handle /remove_user ---

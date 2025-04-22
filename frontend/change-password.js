@@ -1,5 +1,5 @@
 const loginForm = document.getElementById('loginForm');
-const usernameInput = document.getElementById('username');
+// const usernameInput = document.getElementById('username');
 const oldPasswordInput = document.getElementById('old_password');
 const newPasswordInput = document.getElementById('new_password');
 const errorMessageDiv = document.getElementById('error-message');
@@ -7,9 +7,9 @@ const errorMessageDiv = document.getElementById('error-message');
 changePasswordForm.addEventListener('submit', async function(event) {
     event.preventDefault(); // Prevent default form submission
 
-    const username = usernameInput.value;
+    // const username = usernameInput.value;
     const oldPassword = oldPasswordInput.value;
-    const newPassword = passwordInput.value;
+    const newPassword = newPasswordInput.value;
     const verificationNeeded = true; // Set to true if verification is needed
 
     // Clear previous error messages
@@ -20,9 +20,9 @@ changePasswordForm.addEventListener('submit', async function(event) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                body: JSON.stringify({ username, oldPassword: oldPassword, newPassword: newPassword, verificationNeeded: verificationNeeded })
+                body: JSON.stringify({oldPassword: oldPassword, newPassword: newPassword, verificationNeeded: verificationNeeded })
             },
-            body: JSON.stringify({ username: username, oldPassword: oldPassword, newPassword: newPassword, verificationNeeded: verificationNeeded }), // Send data as JSON
+            body: JSON.stringify({ oldPassword: oldPassword, newPassword: newPassword, verificationNeeded: verificationNeeded }), // Send data as JSON
         });
 
         const result = await response.json(); // Parse the JSON response from the server
