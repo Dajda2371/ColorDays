@@ -59,31 +59,38 @@ def hash_password(password):
 
 def verify_password(stored_password_info, provided_password, username):
     """Verifies a provided password against the stored salt and hash."""
+    extra_cookie_headers = [] # Initialize default empty list
+
     if not stored_password_info or ':' not in stored_password_info:
-        if stored_password_info[0] == '_' and stored_password_info[-1] == '_':
+        # Check for pre-generated password format _password_
+        if stored_password_info and stored_password_info.startswith('_') and stored_password_info.endswith('_'):
             _stored_password_info_ = stored_password_info[1:-1]
             if _stored_password_info_ == provided_password:
-                print(f"User '{username}' logged in with pregenerated password '{provided_password}'.")
+                print(f"User '{username}' logged in with pregenerated password '{provided_password}'. Setting change password cookie.")
+                # Create the specific cookie needed for this case
                 change_pw_cookie_headers = create_cookies(
-                CHANGE_PASSWORD_COOKIE_NAME,
-                "required", # Use a simple value like "required" or "true"
-                path='/change-password', # Path where frontend checks this
-                max_age=3600 # Optional: Give it a lifetime (e.g., 1 hour)
-            )
-                return True, change_pw_cookie_headers # Special case
+                    CHANGE_PASSWORD_COOKIE_NAME,
+                    "required", # Use a simple value like "required" or "true"
+                    path='/', # Apply cookie to root path for broader check? Or specific change-pw path?
+                    max_age=3600 # Optional: Give it a lifetime (e.g., 1 hour)
+                )
+                return True, change_pw_cookie_headers # Return True and the specific cookie headers
             else:
-                return False
+                # Pregenerated password provided, but it didn't match
+                print(f"Pregenerated password verification failed for user: {username}")
+                return False, [] # <-- MODIFIED: Return tuple
         else:
-            print("Error: Invalid or missing stored password info.")
-            return False
+            # Stored info is invalid (not pregenerated format and no ':')
+            print(f"Error: Invalid or missing stored password info for user '{username}'.")
+            return False, [] # <-- MODIFIED: Return tuple
     try:
         salt_hex, key_hex = stored_password_info.split(':')
         salt = binascii.unhexlify(salt_hex)
         stored_key = binascii.unhexlify(key_hex)
     except (ValueError, binascii.Error):
         # Invalid format or hex decoding failed
-        print(f"Error: Invalid stored password format for hash starting with '{salt_hex[:8]}...'")
-        return False
+        print(f"Error: Invalid stored password format for hash starting with '{salt_hex[:8]}...' for user '{username}'")
+        return False, [] # <-- MODIFIED: Return tuple
 
     # Password must be bytes
     provided_pwd_bytes = provided_password.encode('utf-8')
@@ -99,7 +106,8 @@ def verify_password(stored_password_info, provided_password, username):
 
     # Compare the derived key with the stored key
     # hmac.compare_digest helps prevent timing attacks
-    return hmac.compare_digest(stored_key, new_key)
+    is_match = hmac.compare_digest(stored_key, new_key)
+    return is_match, [] # <-- MODIFIED: Return tuple (True/False, empty list)
 
 # --- User Credentials Store (Loaded from logins.sql) --- <--- MODIFIED
 # This dictionary will be populated by load_user_data_from_sql()
