@@ -72,7 +72,8 @@ def verify_password(stored_password_info, provided_password, username):
                     CHANGE_PASSWORD_COOKIE_NAME,
                     "not-required", # Use a simple value like "required" or "true"
                     path='/', # Apply cookie to root path so it's sent for all requests
-                    max_age=3600 # Optional: Give it a lifetime (e.g., 1 hour)
+                    max_age=3600, # Optional: Give it a lifetime (e.g., 1 hour)
+                    httponly=False # Allow JavaScript to read this specific cookie
                 )
                 return True, change_pw_cookie_headers # Return True and the specific cookie headers
             else:
@@ -734,9 +735,9 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
         # Define paths allowed even if password change is required
         # Note: GET requests usually serve pages or read data. API GETs are less common but possible.
-        allowed_get_paths_during_change = ['/login.html', '/change-password.html', '/logout']
+        allowed_get_paths_during_change = ['/login.html', '/change-password.html', '/logout', '/change-password.js']
         # Add essential CSS/JS if needed for change-password.html
-        # allowed_get_paths_during_change.append('/style.css')
+        allowed_get_paths_during_change.append('/style.css') # Also allow style.css if used by change-password.html
 
         # Block API GET requests if change is required (adjust allowed paths if needed)
         if is_logged_in_flag and password_change_required and path.startswith('/api/') and path not in allowed_get_paths_during_change:
