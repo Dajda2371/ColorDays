@@ -1098,7 +1098,30 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                         status_code = 500
 
             if success:
-                self._send_response(status_code, {"success": True, "message": message})
+                # --- Clear the change password cookie if it exists ---
+                extra_headers_on_success = []
+                cookies = self.get_cookies() # Check cookies again just before sending response
+                if cookies.get(CHANGE_PASSWORD_COOKIE_NAME):
+                    print(f"DEBUG: Password change successful, clearing '{CHANGE_PASSWORD_COOKIE_NAME}' cookie.")
+                    clear_headers = create_cookie_clear_headers(CHANGE_PASSWORD_COOKIE_NAME, path='/')
+                    extra_headers_on_success.extend(clear_headers)
+                # --- End cookie clearing ---
+
+                # --- Send response headers MANUALLY to include potential cookie clearing ---
+                self.send_response(status_code) # Should be 200
+                self.send_header('Content-type', 'application/json')
+                # CORS Headers (copy from _send_response or login)
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+                self.send_header('Access-Control-Allow-Headers', 'Content-Type, Cookie')
+                self.send_header('Access-Control-Allow-Credentials', 'true')
+                # Send extra headers (e.g., Set-Cookie for clearing)
+                for header_name, header_value in extra_headers_on_success:
+                    self.send_header(header_name, header_value)
+                    print(f"DEBUG: Sent extra header: {header_name}: {header_value}")
+                self.end_headers()
+                response_body = json.dumps({"success": True, "message": message}).encode('utf-8')
+                self.wfile.write(response_body)
             else:
                 self._send_response(status_code, {"error": message})
             return # Handled
