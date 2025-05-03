@@ -1026,9 +1026,15 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             # --- END CORRECTION ---
 
             old_password = data.get('oldPassword')
-            new_password = data.get('newPassword')
-            verification_needed = data.get('verificationNeeded')
+            new_password = data.get('newPassword') # Get new password from request
 
+            # --- Check for the cookie and force verification if present ---
+            cookies = self.get_cookies()
+            if cookies.get(CHANGE_PASSWORD_COOKIE_NAME):
+                print(f"DEBUG: Cookie '{CHANGE_PASSWORD_COOKIE_NAME}' found. Forcing verification_needed to False.")
+                verification_needed = False # Override whatever the client sent
+            # --- End cookie check ---
+            
             if not username or not new_password:
                 self._send_response(400, {"error": "Missing username or new password"})
                 return
@@ -1046,7 +1052,10 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                     status_code = 404 # Not Found
                 else:
                     if verification_needed == True:
-                        if verify_password(stored_password_info, old_password, username) == False:
+                        # verify_password returns a tuple (bool, headers)
+                        is_old_valid, _ = verify_password(stored_password_info, old_password, username)
+                        if not is_old_valid:
+                        # if verify_password(stored_password_info, old_password, username) == False:
                             message = "Old password verification failed."
                             status_code = 401
                             self._send_response(status_code, {"error": message})

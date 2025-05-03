@@ -1,16 +1,19 @@
 // Assuming the form ID in change-password.html is 'changePasswordForm'
 const changePasswordForm = document.getElementById('changePasswordForm');
-// Assuming the new password input ID is 'newPassword'
-const newPasswordInput = document.getElementById('newPassword');
+// Get references to the input fields
+const oldPasswordInput = document.getElementById('old_password'); // Added reference for old password
+const newPasswordInput = document.getElementById('new_password'); // Corrected ID based on HTML
 // Assuming the error message div ID is 'errorMessage'
-const errorMessageDiv = document.getElementById('errorMessage');
+const errorMessageDiv = document.getElementById('error-message'); // Corrected ID based on HTML
 
 changePasswordForm.addEventListener('submit', async function(event) {
     event.preventDefault(); // Prevent default form submission
 
-    // We only need the new password in the forced change flow
+    // Read values from the input fields
+    const oldPassword = oldPasswordInput.value; // Read the old password
     const newPassword = newPasswordInput.value;
-    // const verificationNeeded = false; // Set to false for the forced change flow
+    // Since we are sending the old password, we need verification
+    const verificationNeeded = true;
 
     // Clear previous error messages
     errorMessageDiv.textContent = '';
@@ -22,8 +25,8 @@ changePasswordForm.addEventListener('submit', async function(event) {
                 'Content-Type': 'application/json',
                 // Body should be outside the headers object
             },
-            // Send only the new password and verificationNeeded flag
-            body: JSON.stringify({ newPassword: newPassword, verificationNeeded: verificationNeeded }),
+            // Send old password, new password, and verification flag
+            body: JSON.stringify({ oldPassword: oldPassword, newPassword: newPassword, verificationNeeded: verificationNeeded }),
         });
 
         const result = await response.json(); // Parse the JSON response from the server
@@ -37,7 +40,7 @@ changePasswordForm.addEventListener('submit', async function(event) {
             // Login failed - display error message from server
             console.error('Password change failed:', result.message);
             errorMessageDiv.textContent = result.message || 'Invalid password.';
-        } // Make sure the IDs match your HTML ('newPassword', 'errorMessage', 'changePasswordForm')
+        }
 
     } catch (error) {
         // Handle network errors or issues reaching the server
