@@ -725,6 +725,27 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             return
         # --- END NEW ENDPOINT ---
 
+        # --- Password Change Check (for API endpoints in GET) ---
+        # Apply this check before specific API handlers if they shouldn't run during forced change
+        # Must happen *after* login check but *before* executing the endpoint logic
+        is_logged_in_flag = self.is_logged_in() # Check login status once
+        cookies = self.get_cookies() # Get cookies once
+        password_change_required = cookies.get(CHANGE_PASSWORD_COOKIE_NAME)
+
+        # Define paths allowed even if password change is required
+        # Note: GET requests usually serve pages or read data. API GETs are less common but possible.
+        allowed_get_paths_during_change = ['/login.html', '/change-password.html', '/logout']
+        # Add essential CSS/JS if needed for change-password.html
+        # allowed_get_paths_during_change.append('/style.css')
+
+        # Block API GET requests if change is required (adjust allowed paths if needed)
+        if is_logged_in_flag and password_change_required and path.startswith('/api/') and path not in allowed_get_paths_during_change:
+            print(f"Denied GET request to API {path} - Password change required.")
+            # For API endpoints, sending an error is usually better than redirecting
+            self._send_response(403, {"error": "Password change required before accessing this API resource."})
+            return
+        # --- End Password Change Check for API GET ---
+
         elif path == '/api/users':
             # Note: handle_get_users currently doesn't check authentication
             # Add authentication check here if needed:
@@ -773,21 +794,34 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             return # Make sure to return after handling
 
         # File Serving Logic
+        # --- Password Change Check (for Pages) ---
+        # Check *after* login check but *before* serving protected files
+        # Use flags checked earlier (is_logged_in_flag, password_change_required)
+
+        if is_logged_in_flag and password_change_required and path not in allowed_get_paths_during_change and not path.startswith('/api/'): # Don't redirect API calls here
+            print(f"Redirecting GET request for {path} to /change-password.html - Password change required.")
+            self.send_response(302) # Found (redirect)
+            self.send_header('Location', '/change-password.html')
+            self.end_headers()
+            return
+        # --- End Password Change Check for Pages ---
         try:
             # Default to menu.html if root path is requested
             # Check for login.html request specifically
             if path == '/login.html':
-                 file_path = FRONTEND_DIR / 'login.html'
+                file_path = FRONTEND_DIR / 'login.html'
             elif path == '/':
-                 # Redirect root to login page if not logged in, else menu
-                 if self.is_logged_in():
-                     file_path = FRONTEND_DIR / 'menu.html'
-                 else:
-                     # Send redirect header
-                     self.send_response(302) # Found (redirect)
-                     self.send_header('Location', '/login.html')
-                     self.end_headers()
-                     return # Stop processing further
+                # Redirect root to login page if not logged in, else menu
+                if is_logged_in_flag: # Use the flag checked earlier
+                    file_path = FRONTEND_DIR / 'menu.html'
+                else:
+                    # Send redirect header
+                    self.send_response(302) # Found (redirect)
+                    self.send_header('Location', '/login.html')
+                    self.end_headers()
+                    return # Stop processing further
+            elif path == '/change-password.html': # Serve the new page
+                file_path = FRONTEND_DIR / 'change-password.html'
             else:
                 # Construct safe path within FRONTEND_DIR
                 safe_subpath = path.lstrip('/')
@@ -952,6 +986,20 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             print("Logout successful, cookie expiration headers sent.")
             return # Stop processing after handling /logout
         # --- End Authentication Check ---
+
+        # --- Password Change Check for POST ---
+        # Must happen *after* login check but *before* executing protected endpoint logic
+        cookies = self.get_cookies() # Get fresh cookies for POST check
+        password_change_required = cookies.get(CHANGE_PASSWORD_COOKIE_NAME)
+
+        # Define allowed POST paths during forced change
+        allowed_post_paths_during_change = ['/login', '/logout', '/api/auth/change']
+
+        if password_change_required and path not in allowed_post_paths_during_change:
+            print(f"Denied POST request to {path} - Password change required.")
+            self._send_response(403, {"error": "Password change required before performing this action."})
+            return
+        # --- End Password Change Check ---
 
         # --- Protected Endpoints below require login ---
         print(f"Processing authenticated POST request to {path}...") # Log access
