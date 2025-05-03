@@ -1,16 +1,16 @@
-const loginForm = document.getElementById('loginForm');
-// const usernameInput = document.getElementById('username');
-const oldPasswordInput = document.getElementById('old_password');
-const newPasswordInput = document.getElementById('new_password');
-const errorMessageDiv = document.getElementById('error-message');
+// Assuming the form ID in change-password.html is 'changePasswordForm'
+const changePasswordForm = document.getElementById('changePasswordForm');
+// Assuming the new password input ID is 'newPassword'
+const newPasswordInput = document.getElementById('newPassword');
+// Assuming the error message div ID is 'errorMessage'
+const errorMessageDiv = document.getElementById('errorMessage');
 
 changePasswordForm.addEventListener('submit', async function(event) {
     event.preventDefault(); // Prevent default form submission
 
-    // const username = usernameInput.value;
-    const oldPassword = oldPasswordInput.value;
+    // We only need the new password in the forced change flow
     const newPassword = newPasswordInput.value;
-    const verificationNeeded = true; // Set to true if verification is needed
+    // const verificationNeeded = false; // Set to false for the forced change flow
 
     // Clear previous error messages
     errorMessageDiv.textContent = '';
@@ -20,15 +20,16 @@ changePasswordForm.addEventListener('submit', async function(event) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                body: JSON.stringify({oldPassword: oldPassword, newPassword: newPassword, verificationNeeded: verificationNeeded })
+                // Body should be outside the headers object
             },
-            body: JSON.stringify({ oldPassword: oldPassword, newPassword: newPassword, verificationNeeded: verificationNeeded }), // Send data as JSON
+            // Send only the new password and verificationNeeded flag
+            body: JSON.stringify({ newPassword: newPassword, verificationNeeded: verificationNeeded }),
         });
 
         const result = await response.json(); // Parse the JSON response from the server
 
         if (response.ok && result.success) {
-            // Login successful
+            // Password change successful
             console.log('Password change successful!');
             // Redirect to the main application page
             window.location.href = 'menu.html'; // Redirect to menu.html in the same directory
@@ -36,7 +37,7 @@ changePasswordForm.addEventListener('submit', async function(event) {
             // Login failed - display error message from server
             console.error('Password change failed:', result.message);
             errorMessageDiv.textContent = result.message || 'Invalid password.';
-        }
+        } // Make sure the IDs match your HTML ('newPassword', 'errorMessage', 'changePasswordForm')
 
     } catch (error) {
         // Handle network errors or issues reaching the server

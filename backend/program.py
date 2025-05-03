@@ -70,8 +70,8 @@ def verify_password(stored_password_info, provided_password, username):
                 # Create the specific cookie needed for this case
                 change_pw_cookie_headers = create_cookies(
                     CHANGE_PASSWORD_COOKIE_NAME,
-                    "required", # Use a simple value like "required" or "true"
-                    path='/', # Apply cookie to root path for broader check? Or specific change-pw path?
+                    "not-required", # Use a simple value like "required" or "true"
+                    path='/', # Apply cookie to root path so it's sent for all requests
                     max_age=3600 # Optional: Give it a lifetime (e.g., 1 hour)
                 )
                 return True, change_pw_cookie_headers # Return True and the specific cookie headers
@@ -1191,4 +1191,3 @@ if __name__ == "__main__":
         httpd.shutdown()
         httpd.server_close()
         print("--- Server stopped ---")
-
