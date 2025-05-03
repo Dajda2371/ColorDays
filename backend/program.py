@@ -72,7 +72,7 @@ def verify_password(stored_password_info, provided_password, username):
                     CHANGE_PASSWORD_COOKIE_NAME,
                     "not-required", # Use a simple value like "required" or "true"
                     path='/', # Apply cookie to root path so it's sent for all requests
-                    max_age=3600, # Optional: Give it a lifetime (e.g., 1 hour)
+                    # max_age=3600, # Optional: Give it a lifetime (e.g., 1 hour)
                     httponly=False # Allow JavaScript to read this specific cookie
                 )
                 return True, change_pw_cookie_headers # Return True and the specific cookie headers
