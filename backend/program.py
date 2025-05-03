@@ -821,6 +821,14 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                     self.send_header('Location', '/login.html')
                     self.end_headers()
                     return # Stop processing further
+            # --- Add Login Check for Change Password Page ---
+            elif path == '/change-password.html' and not is_logged_in_flag:
+                print(f"Denied GET request for {path} - User not logged in. Redirecting to login.")
+                self.send_response(302) # Found (redirect)
+                self.send_header('Location', '/login.html')
+                self.end_headers()
+                return # Stop processing
+            # --- End Login Check ---
             elif path == '/change-password.html': # Serve the new page
                 file_path = FRONTEND_DIR / 'change-password.html'
             else:
