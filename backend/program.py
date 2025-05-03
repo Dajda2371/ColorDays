@@ -170,6 +170,33 @@ def create_cookies(name, value, path='/', expires=None, max_age=None, httponly=T
 
     return headers
 
+def create_cookie_clear_headers(name, path='/'):
+    """
+    Creates a list of ('Set-Cookie', header_value) tuples to clear a cookie.
+
+    Args:
+        name (str): The name of the cookie to clear.
+        path (str, optional): The path of the cookie (must match original). Defaults to '/'.
+
+    Returns:
+        list: A list containing one tuple: ('Set-Cookie', formatted_header_string).
+              Returns an empty list if name is empty/None.
+    """
+    if not name:
+        print("Warning: Attempted to clear cookie with empty name.")
+        return []
+
+    cookie = SimpleCookie()
+    cookie[name] = "" # Clear value
+    cookie[name]['path'] = path
+    cookie[name]['expires'] = 'Thu, 01 Jan 1970 00:00:00 GMT' # Expire immediately
+    cookie[name]['max-age'] = 0 # Another way to expire
+
+    # Generate the header string
+    header_value = cookie[name].output(header='').strip()
+    return [('Set-Cookie', header_value)] # Return as a list of tuples
+
+
 # --- SQL File Handling Functions ---
 
 # --- Parsing for tables.sql ---
@@ -889,24 +916,15 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         # --- LOGOUT Endpoint ---
         elif path == '/logout':
             # Prepare an expired cookie to clear the browser's cookie
-            print("Logout request received. Preparing to clear cookies.")
+            print("Logout request received. Preparing cookie clearing headers.")
             # Prepare expired cookies to clear the browser's cookies
-            cookie = SimpleCookie()
 
-            # --- Expire SESSION cookie ---
-            cookie[SESSION_COOKIE_NAME] = "" # Clear value
-            cookie[SESSION_COOKIE_NAME]['path'] = '/' # MUST match the path set during login
-            cookie[SESSION_COOKIE_NAME]['expires'] = 'Thu, 01 Jan 1970 00:00:00 GMT' # Expire immediately
-            cookie[SESSION_COOKIE_NAME]['max-age'] = 0 # Another way to expire
-            # If you set httponly or samesite on login, include them here too for robustness
-            # cookie[SESSION_COOKIE_NAME]['httponly'] = True
-            # cookie[SESSION_COOKIE_NAME]['samesite'] = 'Lax'
-
-            # --- Expire USERNAME cookie ---
-            cookie[USERNAME_COOKIE_NAME] = "" # Clear value
-            cookie[USERNAME_COOKIE_NAME]['path'] = '/' # MUST match the path set during login
-            cookie[USERNAME_COOKIE_NAME]['expires'] = 'Thu, 01 Jan 1970 00:00:00 GMT' # Expire immediately
-            cookie[USERNAME_COOKIE_NAME]['max-age'] = 0 # Another way to expire
+            # --- Use the new function to get clearing headers ---
+            session_clear_headers = create_cookie_clear_headers(SESSION_COOKIE_NAME, path='/')
+            user_clear_headers = create_cookie_clear_headers(USERNAME_COOKIE_NAME, path='/')
+            change_pw_clear_headers = create_cookie_clear_headers(CHANGE_PASSWORD_COOKIE_NAME, path='/') # Clear this too
+            all_clear_headers = session_clear_headers + user_clear_headers + change_pw_clear_headers
+            # --- End using new function ---
 
             # --- Send response headers MANUALLY ---
             # Use the same technique as login to ensure both headers are sent
@@ -920,11 +938,9 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             # --- End CORS ---
 
             # --- Send EACH Set-Cookie expiration header individually ---
-            print(f"DEBUG: Preparing to send expiration cookies...")
-            for morsel in cookie.values():
-                # morsel.output(header='') gives the value part like 'key=val; path=/; expires=...'
-                header_value = morsel.output(header='').strip()
-                self.send_header('Set-Cookie', header_value)
+            print(f"DEBUG: Preparing to send {len(all_clear_headers)} cookie clearing header(s)...")
+            for header_name, header_value in all_clear_headers:
+                self.send_header(header_name, header_value)
                 print(f"DEBUG: Sent Set-Cookie expiration header: {header_value}")
 
             self.end_headers() # Crucial: End headers AFTER all headers are sent
