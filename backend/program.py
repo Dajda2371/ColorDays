@@ -57,19 +57,41 @@ def hash_password(password):
     # Return in 'salt:key' format
     return f"{salt_hex}:{key_hex}"
 
-def verify_password(stored_password_info, provided_password):
+def verify_password(stored_password_info, provided_password, username):
     """Verifies a provided password against the stored salt and hash."""
+    extra_cookie_headers = [] # Initialize default empty list
+
     if not stored_password_info or ':' not in stored_password_info:
-        print("Error: Invalid or missing stored password info.")
-        return False
+        # Check for pre-generated password format _password_
+        if stored_password_info and stored_password_info.startswith('_') and stored_password_info.endswith('_'):
+            _stored_password_info_ = stored_password_info[1:-1]
+            if _stored_password_info_ == provided_password:
+                print(f"User '{username}' logged in with pregenerated password '{provided_password}'. Setting change password cookie.")
+                # Create the specific cookie needed for this case
+                change_pw_cookie_headers = create_cookies(
+                    CHANGE_PASSWORD_COOKIE_NAME,
+                    "not-required", # Use a simple value like "required" or "true"
+                    path='/', # Apply cookie to root path so it's sent for all requests
+                    # max_age=3600, # Optional: Give it a lifetime (e.g., 1 hour)
+                    httponly=False # Allow JavaScript to read this specific cookie
+                )
+                return True, change_pw_cookie_headers # Return True and the specific cookie headers
+            else:
+                # Pregenerated password provided, but it didn't match
+                print(f"Pregenerated password verification failed for user: {username}")
+                return False, [] # <-- MODIFIED: Return tuple
+        else:
+            # Stored info is invalid (not pregenerated format and no ':')
+            print(f"Error: Invalid or missing stored password info for user '{username}'.")
+            return False, [] # <-- MODIFIED: Return tuple
     try:
         salt_hex, key_hex = stored_password_info.split(':')
         salt = binascii.unhexlify(salt_hex)
         stored_key = binascii.unhexlify(key_hex)
     except (ValueError, binascii.Error):
         # Invalid format or hex decoding failed
-        print(f"Error: Invalid stored password format for hash starting with '{salt_hex[:8]}...'")
-        return False
+        print(f"Error: Invalid stored password format for hash starting with '{salt_hex[:8]}...' for user '{username}'")
+        return False, [] # <-- MODIFIED: Return tuple
 
     # Password must be bytes
     provided_pwd_bytes = provided_password.encode('utf-8')
@@ -85,7 +107,8 @@ def verify_password(stored_password_info, provided_password):
 
     # Compare the derived key with the stored key
     # hmac.compare_digest helps prevent timing attacks
-    return hmac.compare_digest(stored_key, new_key)
+    is_match = hmac.compare_digest(stored_key, new_key)
+    return is_match, [] # <-- MODIFIED: Return tuple (True/False, empty list)
 
 # --- User Credentials Store (Loaded from logins.sql) --- <--- MODIFIED
 # This dictionary will be populated by load_user_data_from_sql()
@@ -93,14 +116,86 @@ user_password_store = {}
 # --- End User Credentials Store ---
 
 # --- Session Configuration ---
+USERNAME_COOKIE_NAME = "ColorDaysUser"
 SESSION_COOKIE_NAME = "ColorDaysSession"
 VALID_SESSION_VALUE = "user_is_logged_in_secret_value" # Replace with a secure, random session ID mechanism
+CHANGE_PASSWORD_COOKIE_NAME = "ChangePasswordVerificationNotNeeded" # For the change password flow
 # --- End Session Configuration ---
 
 
 # --- In-Memory Data Store and Lock ---
 data_store = collections.defaultdict(lambda: collections.defaultdict(lambda: collections.defaultdict(int)))
 data_lock = threading.RLock()
+
+def create_cookies(name, value, path='/', expires=None, max_age=None, httponly=True, samesite='Lax'):
+    """
+    Creates a list of ('Set-Cookie', header_value) tuples for a single cookie.
+
+    Args:
+        name (str): The name of the cookie.
+        value (str): The value of the cookie.
+        path (str, optional): The path for the cookie. Defaults to '/'.
+        expires (str, optional): GMT expiration string (e.g., 'Thu, 01 Jan 1970 00:00:00 GMT'). Defaults to None.
+        max_age (int, optional): Max age in seconds. Defaults to None.
+        httponly (bool, optional): Set the HttpOnly flag. Defaults to True.
+        samesite (str, optional): Set the SameSite attribute ('Lax', 'Strict', 'None'). Defaults to 'Lax'.
+
+    Returns:
+        list: A list containing one tuple: ('Set-Cookie', formatted_header_string).
+              Returns an empty list if name or value is empty/None.
+    """
+    if not name or value is None: # Basic validation
+        print(f"Warning: Attempted to create cookie with empty name ('{name}') or None value.")
+        return []
+
+    cookie = SimpleCookie()
+    cookie[name] = value
+    cookie[name]['path'] = path
+
+    # Add security and lifetime attributes if specified
+    if httponly:
+        cookie[name]['httponly'] = True
+    if samesite:
+        cookie[name]['samesite'] = samesite
+    if expires:
+        cookie[name]['expires'] = expires
+    if max_age is not None: # Check for None explicitly as 0 is valid
+        cookie[name]['max-age'] = max_age
+
+    headers = []
+    # There will only be one morsel since we created one cookie
+    for morsel in cookie.values():
+        # morsel.output(header='') gives the value part like 'key=val; path=/; httponly...'
+        header_value = morsel.output(header='').strip()
+        headers.append(('Set-Cookie', header_value)) # Append the tuple
+
+    return headers
+
+def create_cookie_clear_headers(name, path='/'):
+    """
+    Creates a list of ('Set-Cookie', header_value) tuples to clear a cookie.
+
+    Args:
+        name (str): The name of the cookie to clear.
+        path (str, optional): The path of the cookie (must match original). Defaults to '/'.
+
+    Returns:
+        list: A list containing one tuple: ('Set-Cookie', formatted_header_string).
+              Returns an empty list if name is empty/None.
+    """
+    if not name:
+        print("Warning: Attempted to clear cookie with empty name.")
+        return []
+
+    cookie = SimpleCookie()
+    cookie[name] = "" # Clear value
+    cookie[name]['path'] = path
+    cookie[name]['expires'] = 'Thu, 01 Jan 1970 00:00:00 GMT' # Expire immediately
+    cookie[name]['max-age'] = 0 # Another way to expire
+
+    # Generate the header string
+    header_value = cookie[name].output(header='').strip()
+    return [('Set-Cookie', header_value)] # Return as a list of tuples
 
 
 # --- SQL File Handling Functions ---
@@ -358,6 +453,114 @@ def save_user_data_to_sql():
             return False
 
 # --- End of new function ---
+
+# --- Module-level Handler Functions for Increment/Decrement ---
+
+def handle_increment_module(handler_instance, data, request_path):
+    class_name = data.get('className')
+    type_val = data.get('type')
+    points_val = data.get('points')
+
+    # Basic validation
+    if not all([class_name, type_val, points_val is not None]):
+        handler_instance._send_response(400, {"error": "Missing data: className, type, or points"})
+        return
+    if type_val not in ['student', 'teacher']:
+        handler_instance._send_response(400, {"error": "Invalid type"})
+        return
+    if not isinstance(points_val, int) or not (0 <= points_val <= 6):
+        handler_instance._send_response(400, {"error": "Invalid points value"})
+        return
+
+    success = False
+    message = "Increment failed"
+    status_code = 500
+    save_needed = False
+
+    with data_lock:
+        try:
+            current_count = data_store.get(class_name, {}).get(type_val, {}).get(points_val, 0)
+            data_store[class_name][type_val][points_val] = current_count + 1
+            save_needed = True
+
+            if save_needed:
+                print(f"DEBUG: Change detected (increment), attempting save...")
+                if save_data_to_sql():
+                    success = True
+                    message = "Count incremented"
+                    status_code = 200
+                else:
+                    success = False
+                    message = "Count incremented in memory, but CRITICAL error saving to file."
+                    status_code = 500
+        except Exception as e:
+            print(f"!!! UNEXPECTED ERROR during POST {request_path} operation (within lock):") # Use request_path
+            print(traceback.format_exc())
+            success = False
+            message = "An internal error occurred during the increment operation."
+            status_code = 500
+
+    if status_code == 200:
+        handler_instance._send_response(status_code, {"success": success, "message": message})
+    else:
+        handler_instance._send_response(status_code, {"error": message})
+    return # Handled
+
+def handle_decrement_module(handler_instance, data, request_path):
+    class_name = data.get('className')
+    type_val = data.get('type')
+    points_val = data.get('points')
+
+    # Basic validation
+    if not all([class_name, type_val, points_val is not None]):
+        handler_instance._send_response(400, {"error": "Missing data: className, type, or points"})
+        return
+    if type_val not in ['student', 'teacher']:
+        handler_instance._send_response(400, {"error": "Invalid type"})
+        return
+    if not isinstance(points_val, int) or not (0 <= points_val <= 6):
+        handler_instance._send_response(400, {"error": "Invalid points value"})
+        return
+
+    success = False
+    message = "Decrement failed"
+    status_code = 500
+    save_needed = False
+
+    with data_lock:
+        try:
+            current_count = data_store.get(class_name, {}).get(type_val, {}).get(points_val, 0)
+            if current_count > 0:
+                data_store[class_name][type_val][points_val] = current_count - 1
+                save_needed = True
+            else:
+                success = False
+                message = "Count already zero"
+                status_code = 400
+                save_needed = False
+
+            if save_needed:
+                print(f"DEBUG: Change detected (decrement), attempting save...")
+                if save_data_to_sql():
+                    success = True
+                    message = "Count decremented"
+                    status_code = 200
+                else:
+                    success = False
+                    message = "Count decremented in memory, but CRITICAL error saving to file."
+                    status_code = 500
+        except Exception as e:
+            print(f"!!! UNEXPECTED ERROR during POST {request_path} operation (within lock):") # Use request_path
+            print(traceback.format_exc())
+            success = False
+            message = "An internal error occurred during the decrement operation."
+            status_code = 500
+
+    if status_code == 200:
+        handler_instance._send_response(status_code, {"success": success, "message": message})
+    else:
+        handler_instance._send_response(status_code, {"error": message})
+    return # Handled
 
 # --- HTTP Request Handler ---
 class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
@@ -631,6 +834,27 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             return
         # --- END NEW ENDPOINT ---
 
+        # --- Password Change Check (for API endpoints in GET) ---
+        # Apply this check before specific API handlers if they shouldn't run during forced change
+        # Must happen *after* login check but *before* executing the endpoint logic
+        is_logged_in_flag = self.is_logged_in() # Check login status once
+        cookies = self.get_cookies() # Get cookies once
+        password_change_required = cookies.get(CHANGE_PASSWORD_COOKIE_NAME)
+
+        # Define paths allowed even if password change is required
+        # Note: GET requests usually serve pages or read data. API GETs are less common but possible.
+        allowed_get_paths_during_change = ['/login.html', '/change-password.html', '/logout', '/change-password.js']
+        # Add essential CSS/JS if needed for change-password.html
+        allowed_get_paths_during_change.append('/style.css') # Also allow style.css if used by change-password.html
+
+        # Block API GET requests if change is required (adjust allowed paths if needed)
+        if is_logged_in_flag and password_change_required and path.startswith('/api/') and path not in allowed_get_paths_during_change:
+            print(f"Denied GET request to API {path} - Password change required.")
+            # For API endpoints, sending an error is usually better than redirecting
+            self._send_response(403, {"error": "Password change required before accessing this API resource."})
+            return
+        # --- End Password Change Check for API GET ---
+
         elif path == '/api/users':
             # Note: handle_get_users currently doesn't check authentication
             # Add authentication check here if needed:
@@ -679,21 +903,42 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             return # Make sure to return after handling
 
         # File Serving Logic
+        # --- Password Change Check (for Pages) ---
+        # Check *after* login check but *before* serving protected files
+        # Use flags checked earlier (is_logged_in_flag, password_change_required)
+
+        if is_logged_in_flag and password_change_required and path not in allowed_get_paths_during_change and not path.startswith('/api/'): # Don't redirect API calls here
+            print(f"Redirecting GET request for {path} to /change-password.html - Password change required.")
+            self.send_response(302) # Found (redirect)
+            self.send_header('Location', '/change-password.html')
+            self.end_headers()
+            return
+        # --- End Password Change Check for Pages ---
         try:
             # Default to menu.html if root path is requested
             # Check for login.html request specifically
             if path == '/login.html':
-                 file_path = FRONTEND_DIR / 'login.html'
+                file_path = FRONTEND_DIR / 'login.html'
             elif path == '/':
-                 # Redirect root to login page if not logged in, else menu
-                 if self.is_logged_in():
-                     file_path = FRONTEND_DIR / 'menu.html'
-                 else:
-                     # Send redirect header
-                     self.send_response(302) # Found (redirect)
-                     self.send_header('Location', '/login.html')
-                     self.end_headers()
-                     return # Stop processing further
+                # Redirect root to login page if not logged in, else menu
+                if is_logged_in_flag: # Use the flag checked earlier
+                    file_path = FRONTEND_DIR / 'menu.html'
+                else:
+                    # Send redirect header
+                    self.send_response(302) # Found (redirect)
+                    self.send_header('Location', '/login.html')
+                    self.end_headers()
+                    return # Stop processing further
+            # --- Add Login Check for Change Password Page ---
+            elif path == '/change-password.html' and not is_logged_in_flag:
+                print(f"Denied GET request for {path} - User not logged in. Redirecting to login.")
+                self.send_response(302) # Found (redirect)
+                self.send_header('Location', '/login.html')
+                self.end_headers()
+                return # Stop processing
+            # --- End Login Check ---
+            elif path == '/change-password.html': # Serve the new page
+                file_path = FRONTEND_DIR / 'change-password.html'
             else:
                 # Construct safe path within FRONTEND_DIR
                 safe_subpath = path.lstrip('/')
@@ -758,39 +1003,56 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 username = credentials.get('username')
                 submitted_password = credentials.get('password')
 
+                # Initialize login result and extra headers
                 login_successful = False
-                # --- MODIFIED: Look up user in the loaded store ---
-                stored_info = user_password_store.get(username)
-                # --- END MODIFICATION ---
+                extra_cookie_headers = [] # <-- Initialize empty list
 
-                # Check if user exists and password was provided
+                stored_info = user_password_store.get(username)
+
                 if stored_info and submitted_password:
-                    # Verify the password using the stored salt and hash info
-                    if verify_password(stored_info, submitted_password):
-                        login_successful = True
-                    else:
-                        print(f"Password verification failed for user: {username}") # Added detail
+                    # --- UNPACK the tuple returned by verify_password ---
+                    login_successful, extra_cookie_headers = verify_password(stored_info, submitted_password, username)
+                    # --- END CHANGE ---
+                    if not login_successful:
+                        print(f"Password verification failed for user: {username}")
                 elif not stored_info:
-                     print(f"Login attempt failed: Username '{username}' not found.")
+                    print(f"Login attempt failed: Username '{username}' not found.")
                 elif not submitted_password:
-                     print(f"Login attempt failed: No password provided for user '{username}'.")
+                    print(f"Login attempt failed: No password provided for user '{username}'.")
 
 
                 if login_successful:
-                    # Prepare the session cookie
-                    cookie = SimpleCookie()
-                    cookie[SESSION_COOKIE_NAME] = VALID_SESSION_VALUE
-                    cookie[SESSION_COOKIE_NAME]['path'] = '/' # Make cookie valid for all paths
-                    # Optional security attributes (recommended):
-                    # cookie[SESSION_COOKIE_NAME]['httponly'] = True # Prevents JS access
-                    # cookie[SESSION_COOKIE_NAME]['samesite'] = 'Lax' # CSRF protection
-                    cookie_header_val = cookie.output(header='').strip()
-                    custom_headers = {'Set-Cookie': cookie_header_val}
+                    # --- Prepare the standard cookies ---
+                    user_cookie_headers = create_cookies(USERNAME_COOKIE_NAME, f"{username}", path='/')
+                    session_cookie_headers = create_cookies(SESSION_COOKIE_NAME, f"{VALID_SESSION_VALUE}", path='/')
 
-                    print(f"Login successful for user: {username}, session cookie set.")
-                    self._send_response(200, {"success": True, "message": "Login successful"}, headers=custom_headers)
-                else:
-                    # Generic error message to client, specific logs server-side
+                    # --- COMBINE standard cookies with any extra ones returned ---
+                    all_cookie_headers = user_cookie_headers + session_cookie_headers + extra_cookie_headers
+                    # --- END CHANGE ---
+
+                    # --- Send response headers MANUALLY ---
+                    self.send_response(200)
+                    self.send_header('Content-type', 'application/json')
+                    # CORS Headers...
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+                    self.send_header('Access-Control-Allow-Headers', 'Content-Type, Cookie')
+                    self.send_header('Access-Control-Allow-Credentials', 'true')
+
+                    # Send EACH Set-Cookie header individually
+                    print(f"DEBUG: Preparing to send {len(all_cookie_headers)} cookie(s)...")
+                    for header_name, header_value in all_cookie_headers:
+                        self.send_header(header_name, header_value)
+                        print(f"DEBUG: Sent {header_name} header: {header_value}")
+
+                    self.end_headers()
+
+                    response_body = json.dumps({"success": True, "message": "Login successful"}).encode('utf-8')
+                    self.wfile.write(response_body)
+
+                    print(f"Login successful for user: {username}, {len(all_cookie_headers)} session/other cookie(s) sent.")
+
+                else: # login_successful == False
                     self._send_response(401, {"error": "Invalid username or password"}) # Unauthorized
 
             except json.JSONDecodeError:
@@ -804,23 +1066,57 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
         # --- LOGOUT Endpoint ---
         elif path == '/logout':
-             # Prepare an expired cookie to clear the browser's cookie
-             cookie = SimpleCookie()
-             cookie[SESSION_COOKIE_NAME] = "" # Clear value
-             cookie[SESSION_COOKIE_NAME]['path'] = '/'
-             cookie[SESSION_COOKIE_NAME]['expires'] = 'Thu, 01 Jan 1970 00:00:00 GMT' # Expire immediately
-             cookie[SESSION_COOKIE_NAME]['max-age'] = 0 # Another way to expire
-             custom_headers = {'Set-Cookie': cookie.output(header='').strip()}
-             print("Logout request received, clearing session cookie.")
-             self._send_response(200, {"success": True, "message": "Logged out successfully"}, headers=custom_headers)
-             return # Stop processing after handling /logout
+            # Prepare an expired cookie to clear the browser's cookie
+            print("Logout request received. Preparing cookie clearing headers.")
+            # Prepare expired cookies to clear the browser's cookies
 
-        # --- Authentication Check for ALL Protected POST Endpoints below ---
-        if not self.is_logged_in():
-            print(f"Denied POST request to {path} - User not logged in.")
-            self._send_response(401, {"error": "Authentication required"}) # Unauthorized
-            return # Stop processing if not logged in
+            # --- Use the new function to get clearing headers ---
+            session_clear_headers = create_cookie_clear_headers(SESSION_COOKIE_NAME, path='/')
+            user_clear_headers = create_cookie_clear_headers(USERNAME_COOKIE_NAME, path='/')
+            change_pw_clear_headers = create_cookie_clear_headers(CHANGE_PASSWORD_COOKIE_NAME, path='/') # Clear this too
+            all_clear_headers = session_clear_headers + user_clear_headers + change_pw_clear_headers
+            # --- End using new function ---
+
+            # --- Send response headers MANUALLY ---
+            # Use the same technique as login to ensure both headers are sent
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            # --- CORS Headers (copy from _send_response/login) ---
+            self.send_header('Access-Control-Allow-Origin', '*') # Consider restricting in production
+            self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+            self.send_header('Access-Control-Allow-Headers', 'Content-Type, Cookie')
+            self.send_header('Access-Control-Allow-Credentials', 'true')
+            # --- End CORS ---
+
+            # --- Send EACH Set-Cookie expiration header individually ---
+            print(f"DEBUG: Preparing to send {len(all_clear_headers)} cookie clearing header(s)...")
+            for header_name, header_value in all_clear_headers:
+                self.send_header(header_name, header_value)
+                print(f"DEBUG: Sent Set-Cookie expiration header: {header_value}")
+
+            self.end_headers() # Crucial: End headers AFTER all headers are sent
+
+            # Send the response body
+            response_body = json.dumps({"success": True, "message": "Logged out successfully"}).encode('utf-8')
+            self.wfile.write(response_body)
+
+            print("Logout successful, cookie expiration headers sent.")
+            return # Stop processing after handling /logout
         # --- End Authentication Check ---
+
+        # --- Password Change Check for POST ---
+        # Must happen *after* login check but *before* executing protected endpoint logic
+        cookies = self.get_cookies() # Get fresh cookies for POST check
+        password_change_required = cookies.get(CHANGE_PASSWORD_COOKIE_NAME)
+
+        # Define allowed POST paths during forced change
+        allowed_post_paths_during_change = ['/login', '/logout', '/api/auth/change']
+
+        if password_change_required and path not in allowed_post_paths_during_change:
+            print(f"Denied POST request to {path} - Password change required.")
+            self._send_response(403, {"error": "Password change required before performing this action."})
+            return
+        # --- End Password Change Check ---
 
         # --- Protected Endpoints below require login ---
         print(f"Processing authenticated POST request to {path}...") # Log access
@@ -897,10 +1193,29 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             return # Handled
 
         # --- Handle /change_password ---
-        elif path == '/change_password':
-            username = data.get('username')
-            new_password = data.get('password') # Frontend sends new password in 'password' field
+        elif path == '/api/auth/change':
+            # --- CORRECTED USERNAME RETRIEVAL ---
+            username_cookie = self.get_cookies().get(USERNAME_COOKIE_NAME)
+            if username_cookie:
+                username = username_cookie.value # Extract the string value from the Morsel
+            else:
+                # This case should ideally not happen if the request is authenticated,
+                # but handle it defensively.
+                print("Error: Username cookie missing in authenticated /api/auth/change request.")
+                self._send_response(401, {"error": "Authentication error: User identity not found."})
+                return
+            # --- END CORRECTION ---
 
+            old_password = data.get('oldPassword')
+            new_password = data.get('newPassword') # Get new password from request
+
+            # --- Check for the cookie and force verification if present ---
+            cookies = self.get_cookies()
+            if cookies.get(CHANGE_PASSWORD_COOKIE_NAME):
+                print(f"DEBUG: Cookie '{CHANGE_PASSWORD_COOKIE_NAME}' found. Forcing verification_needed to False.")
+                verification_needed = False # Override whatever the client sent
+            # --- End cookie check ---
+            
             if not username or not new_password:
                 self._send_response(400, {"error": "Missing username or new password"})
                 return
@@ -911,19 +1226,31 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             save_needed = False
 
             with data_lock: # Or use a dedicated user_data_lock
-                if username not in user_password_store:
+                stored_password_info = user_password_store.get(username)
+
+                if not stored_password_info:
                     message = f"User '{username}' not found."
                     status_code = 404 # Not Found
                 else:
+                    if verification_needed == True:
+                        # verify_password returns a tuple (bool, headers)
+                        is_old_valid, _ = verify_password(stored_password_info, old_password, username)
+                        if not is_old_valid:
+                        # if verify_password(stored_password_info, old_password, username) == False:
+                            message = "Old password verification failed."
+                            status_code = 401
+                            self._send_response(status_code, {"error": message})
+                            return
+
                     try:
                         hashed_pw = hash_password(new_password)
                         user_password_store[username] = hashed_pw
                         save_needed = True
                         print(f"Password changed in memory for user '{username}'.")
                     except Exception as e:
-                         print(f"!!! Error hashing new password for {username}: {e}")
-                         message = "Server error during password hashing."
-                         status_code = 500
+                        print(f"!!! Error hashing new password for {username}: {e}")
+                        message = "Server error during password hashing."
+                        status_code = 500
 
                 if save_needed:
                     if save_user_data_to_sql():
@@ -936,9 +1263,32 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                         status_code = 500
 
             if success:
-                 self._send_response(status_code, {"success": True, "message": message})
+                # --- Clear the change password cookie if it exists ---
+                extra_headers_on_success = []
+                cookies = self.get_cookies() # Check cookies again just before sending response
+                if cookies.get(CHANGE_PASSWORD_COOKIE_NAME):
+                    print(f"DEBUG: Password change successful, clearing '{CHANGE_PASSWORD_COOKIE_NAME}' cookie.")
+                    clear_headers = create_cookie_clear_headers(CHANGE_PASSWORD_COOKIE_NAME, path='/')
+                    extra_headers_on_success.extend(clear_headers)
+                # --- End cookie clearing ---
+
+                # --- Send response headers MANUALLY to include potential cookie clearing ---
+                self.send_response(status_code) # Should be 200
+                self.send_header('Content-type', 'application/json')
+                # CORS Headers (copy from _send_response or login)
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+                self.send_header('Access-Control-Allow-Headers', 'Content-Type, Cookie')
+                self.send_header('Access-Control-Allow-Credentials', 'true')
+                # Send extra headers (e.g., Set-Cookie for clearing)
+                for header_name, header_value in extra_headers_on_success:
+                    self.send_header(header_name, header_value)
+                    print(f"DEBUG: Sent extra header: {header_name}: {header_value}")
+                self.end_headers()
+                response_body = json.dumps({"success": True, "message": message}).encode('utf-8')
+                self.wfile.write(response_body)
             else:
-                 self._send_response(status_code, {"error": message})
+                self._send_response(status_code, {"error": message})
             return # Handled
 
         # --- Handle /remove_user ---
@@ -1000,11 +1350,11 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
         # --- Handle /api/increment & /api/decrement ---
         elif path == '/api/increment':
-            # ... (existing increment code remains the same) ...
-            return # Handled
+            handle_increment_module(self, data, self.path)
+
+        # --- Handle /api/decrement ---
         elif path == '/api/decrement':
-            # ... (existing decrement code remains the same) ...
-            return # Handled
+            handle_decrement_module(self, data, self.path)
 
         # --- Handle unknown authenticated POST paths ---
         else:
@@ -1054,4 +1404,3 @@ if __name__ == "__main__":
         httpd.shutdown()
         httpd.server_close()
         print("--- Server stopped ---")
-
