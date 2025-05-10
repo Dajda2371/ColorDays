@@ -1,7 +1,14 @@
+import os
+
+try:
+    os.system('pip --version')
+except:
+    os.system('python ./get-pip.py')
+    os.system('pip install --upgrade pip')
+
 import http.server
 import socketserver
 import json
-import os
 import urllib.parse
 from pathlib import Path
 import re # Regular expressions for parsing SQL
@@ -12,7 +19,6 @@ import traceback # For detailed error printing
 from http.cookies import SimpleCookie # <-- Added for login cookies
 import hashlib # <-- Use built-in hashlib
 import hmac # <-- Use built-in hmac for secure comparison
-import os      # <-- Use built-in os for random salt
 import binascii # <-- For converting bytes to hex and back
 
 # --- Configuration ---
