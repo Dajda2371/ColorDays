@@ -62,17 +62,31 @@
         }
 
         #loggedInUser {
-            position: fixed;
-            top: 15px;
-            left: 15px;
-            font-weight: bold;
-            color: #333; /* Or your preferred color */
+          display: flex; /* Arrange circle and username side-by-side */
+          align-items: center; /* Vertically align items in the middle */
+          position: fixed;
+          top: 20px; /* Fine-tuned for axis alignment with buttons */
+          left: 20px;
+          font-weight: bold;
+          color: #333; /* Or your preferred color */
+        }
+
+        #profileCircle {
+          width: 30px; /* Adjust size as needed */
+          height: 30px; /* Adjust size as needed */
+          background-color: #ccc; /* Gray color */
+          border-radius: 50%; /* Makes it a circle */
+          margin-right: 15px; /* Space between circle and username */
         }
     </style>
 </head>
 <body>
   <!-- Element to display the logged-in username -->
-  <div id="loggedInUser"></div>
+  <div id="loggedInUser">
+    <div id="profileCircle"></div>
+    <span id="usernameText"></span>
+  </div>
+
   <!-- Container for Header Buttons -->
   <div id="headerButtons">
     <!-- Config Button (Links to config.html) -->
@@ -152,16 +166,16 @@
 
         // --- Function to display logged-in username ---
         function displayLoggedInUser() {
-            const cookies = document.cookie.split('; ');
-            const usernameCookie = cookies.find(row => row.startsWith('ColorDaysUser='));
-            const loggedInUserDiv = document.getElementById('loggedInUser');
+          const cookies = document.cookie.split('; ');
+          const usernameCookie = cookies.find(row => row.startsWith('ColorDaysUser='));
+          const usernameTextSpan = document.getElementById('usernameText');
 
-            if (usernameCookie) {
-                const username = usernameCookie.split('=')[1];
-                loggedInUserDiv.textContent = `User: ${decodeURIComponent(username)}`;
-            } else {
-                loggedInUserDiv.textContent = 'User: Not Logged In'; // Fallback
-            }
+          if (usernameCookie) {
+            const username = usernameCookie.split('=')[1];
+            usernameTextSpan.textContent = decodeURIComponent(username);
+          } else {
+          usernameTextSpan.textContent = 'Not Logged In'; // Fallback, circle will still show
+          }
         }
 
         // Load classes when the page loads
