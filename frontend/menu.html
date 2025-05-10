@@ -77,15 +77,12 @@
   <h1>Color Days Counter</h1>
   <h2>Select Your Class:</h2>
 
-    <ul class="classList">
-      <!-- Add list items for each class you want -->
-      <li><a href="index.html?class=C1">Class 1</a></li>
-      <li><a href="index.html?class=C2">Class 2</a></li>
-      <li><a href="index.html?class=C3">Class 3</a></li>
-      <!-- Add more classes as needed -->
+    <ul class="classList" id="dynamicClassList">
+      <!-- Classes will be populated here by JavaScript -->
     </ul>
 
     <script>
+        const dynamicClassList = document.getElementById('dynamicClassList');
         const logoutButton = document.getElementById('logoutButton'); // Get the logout button
         // No need to get configButton unless you add specific JS logic for it
 
@@ -116,6 +113,36 @@
 
         logoutButton.addEventListener('click', handleLogout);
         // --- END Logout Functionality ---
+
+        // --- Function to fetch and display classes ---
+        async function loadAndDisplayClasses() {
+            try {
+                const response = await fetch('/api/classes', {
+                    credentials: 'include' // Important if your API endpoint is protected
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ error: "Failed to fetch classes" }));
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+
+                const classes = await response.json();
+                dynamicClassList.innerHTML = ''; // Clear any existing static items
+
+                classes.forEach(cls => {
+                    const listItem = document.createElement('li');
+                    listItem.innerHTML = `<a href="index.html?class=${encodeURIComponent(cls.class)}">${cls.class}</a>`;
+                    dynamicClassList.appendChild(listItem);
+                });
+
+            } catch (error) {
+                console.error('Error loading classes:', error);
+                dynamicClassList.innerHTML = `<li>Error loading classes: ${error.message}. Please try again later or contact support.</li>`;
+            }
+        }
+
+        // Load classes when the page loads
+        document.addEventListener('DOMContentLoaded', loadAndDisplayClasses);
     </script>
 
 </body>

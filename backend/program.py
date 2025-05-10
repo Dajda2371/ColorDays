@@ -24,7 +24,7 @@ CLASSES_SQL_FILE_PATH = DATA_DIR / 'classes.sql' # Path to the classes data file
 LOGINS_SQL_FILE_PATH = DATA_DIR / 'logins.sql' # Path to the SQL logins file <--- NEW
 HOST = 'localhost' # Or '0.0.0.0' to be accessible on your network
 PORT = 8000 # Choose a port
-SUPPORTED_CLASSES = ['C1', 'C2', 'C3'] # Must match menu.html and initial tables.sql
+SUPPORTED_CLASSES = [] # Must match menu.html and initial tables.sql
 
 # --- Secure Login Configuration (Using hashlib.pbkdf2_hmac) ---
 
