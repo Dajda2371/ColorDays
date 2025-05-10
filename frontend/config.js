@@ -1,4 +1,5 @@
 let users = {};
+let currentClasses = []; // For storing class data
 
 async function fetchUsers() {
   const res = await fetch('/list_users');
@@ -169,5 +170,106 @@ async function changePassword() {
   alert(data.message);
 }
 
+// --- Class Management Functions ---
+
+function renderClasses() {
+  const tbody = document.getElementById("classTableBody");
+  tbody.innerHTML = ""; // Clear existing rows
+
+  currentClasses.forEach(cls => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${cls.class}</td>
+      <td>${cls.teacher}</td>
+      <td>
+        <input type="checkbox" ${cls.counts1 === 'T' ? 'checked' : ''} disabled />
+        <input type="checkbox" ${cls.couts2 === 'T' ? 'checked' : ''} disabled /> 
+        <input type="checkbox" ${cls.couts3 === 'T' ? 'checked' : ''} disabled />
+      </td>
+      <td>
+        <button onclick="promptRemoveClass('${cls.class}')">Remove</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+async function loadClasses() {
+  try {
+    const res = await fetch("/api/classes");
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({ error: "Failed to fetch classes" }));
+      throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
+    }
+    currentClasses = await res.json();
+    renderClasses();
+  } catch (error) {
+    console.error("Error loading classes:", error);
+    alert(`Error loading classes: ${error.message}`);
+    // Optionally clear the table or show an error message in the table
+    document.getElementById("classTableBody").innerHTML = '<tr><td colspan="4">Error loading classes.</td></tr>';
+  }
+}
+
+async function addClass() {
+  const className = prompt("Enter new class name (e.g., 2.A):");
+  if (!className) return; // User cancelled or entered empty
+
+  const teacher = prompt("Enter teacher's name for class " + className + ":");
+  if (!teacher) return; // User cancelled or entered empty
+
+  // For simplicity, new classes default to all counts 'F'
+  const newClassData = {
+    class: className.trim(),
+    teacher: teacher.trim(),
+    counts1: 'F',
+    couts2: 'F', // Ensure key matches backend/SQL ('couts2')
+    couts3: 'F'  // Ensure key matches backend/SQL ('couts3')
+  };
+
+  try {
+    const res = await fetch("/api/classes/add", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newClassData)
+    });
+
+    const result = await res.json();
+    if (res.ok) {
+      alert(result.message || "Class added successfully!");
+      loadClasses(); // Refresh the class list
+    } else {
+      alert(`Failed to add class: ${result.error || `Server error (Status: ${res.status})`}`);
+    }
+  } catch (error) {
+    console.error("Error adding class:", error);
+    alert("An error occurred while trying to add the class. Check the console.");
+  }
+}
+
+async function promptRemoveClass(className) {
+  if (!confirm(`Are you sure you want to remove class "${className}"?`)) return;
+
+  try {
+    const res = await fetch("/api/classes/remove", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ class: className })
+    });
+
+    const result = await res.json();
+    if (res.ok) {
+      alert(result.message || "Class removed successfully!");
+      loadClasses(); // Refresh the class list
+    } else {
+      alert(`Failed to remove class: ${result.error || `Server error (Status: ${res.status})`}`);
+    }
+  } catch (error) {
+    console.error("Error removing class:", error);
+    alert("An error occurred while trying to remove the class. Check the console.");
+  }
+}
+
 // Load user list on page load
 loadUsers();
+loadClasses(); // Load class list on page load
