@@ -1122,7 +1122,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
                 if login_successful:
                     # --- Prepare the standard cookies ---
-                    user_cookie_headers = create_cookies(USERNAME_COOKIE_NAME, f"{username}", path='/')
+                    user_cookie_headers = create_cookies(USERNAME_COOKIE_NAME, f"{username}", path='/', httponly=False) # Allow JS to read username
                     session_cookie_headers = create_cookies(SESSION_COOKIE_NAME, f"{VALID_SESSION_VALUE}", path='/')
 
                     # --- COMBINE standard cookies with any extra ones returned ---
