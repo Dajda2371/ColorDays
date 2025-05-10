@@ -1242,10 +1242,110 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
         # --- Handle /api/increment & /api/decrement ---
         elif path == '/api/increment':
-            # ... (existing increment code remains the same) ...
+            class_name = data.get('className')
+            type_val = data.get('type')
+            points_val = data.get('points')
+
+            # Basic validation
+            if not all([class_name, type_val, points_val is not None]):
+                self._send_response(400, {"error": "Missing data: className, type, or points"})
+                return
+            if type_val not in ['student', 'teacher']:
+                self._send_response(400, {"error": "Invalid type"})
+                return
+            if not isinstance(points_val, int) or not (0 <= points_val <= 6):
+                 self._send_response(400, {"error": "Invalid points value"})
+                 return
+
+            success = False
+            message = "Increment failed"
+            status_code = 500
+            save_needed = False
+
+            with data_lock:
+                try:
+                    current_count = data_store.get(class_name, {}).get(type_val, {}).get(points_val, 0)
+                    data_store[class_name][type_val][points_val] = current_count + 1
+                    save_needed = True
+
+                    if save_needed:
+                        print(f"DEBUG: Change detected (increment), attempting save...")
+                        if save_data_to_sql():
+                            success = True
+                            message = "Count incremented"
+                            status_code = 200
+                        else:
+                            success = False
+                            message = "Count incremented in memory, but CRITICAL error saving to file."
+                            status_code = 500
+                except Exception as e:
+                    print(f"!!! UNEXPECTED ERROR during POST {path} operation (within lock):")
+                    print(traceback.format_exc())
+                    success = False
+                    message = "An internal error occurred during the increment operation."
+                    status_code = 500
+
+            if status_code == 200:
+                 self._send_response(status_code, {"success": success, "message": message})
+            else:
+                 self._send_response(status_code, {"error": message})
             return # Handled
+
+        # --- Handle /api/decrement ---
         elif path == '/api/decrement':
-            # ... (existing decrement code remains the same) ...
+            class_name = data.get('className')
+            type_val = data.get('type')
+            points_val = data.get('points')
+
+            # Basic validation (repeated for clarity, could be refactored)
+            if not all([class_name, type_val, points_val is not None]):
+                self._send_response(400, {"error": "Missing data: className, type, or points"})
+                return
+            if type_val not in ['student', 'teacher']:
+                self._send_response(400, {"error": "Invalid type"})
+                return
+            if not isinstance(points_val, int) or not (0 <= points_val <= 6):
+                 self._send_response(400, {"error": "Invalid points value"})
+                 return
+
+            success = False
+            message = "Decrement failed"
+            status_code = 500
+            save_needed = False
+
+            with data_lock:
+                try:
+                    current_count = data_store.get(class_name, {}).get(type_val, {}).get(points_val, 0)
+                    if current_count > 0:
+                        data_store[class_name][type_val][points_val] = current_count - 1
+                        save_needed = True
+                    else:
+                        success = False # Operation didn't change state
+                        message = "Count already zero"
+                        status_code = 400 # Bad Request
+                        save_needed = False # No change, no save needed
+
+                    if save_needed:
+                        print(f"DEBUG: Change detected (decrement), attempting save...")
+                        if save_data_to_sql():
+                            success = True
+                            message = "Count decremented"
+                            status_code = 200
+                        else:
+                            success = False
+                            message = "Count decremented in memory, but CRITICAL error saving to file."
+                            status_code = 500
+                except Exception as e:
+                    print(f"!!! UNEXPECTED ERROR during POST {path} operation (within lock):")
+                    print(traceback.format_exc())
+                    success = False
+                    message = "An internal error occurred during the decrement operation."
+                    status_code = 500
+
+            if status_code == 200:
+                 self._send_response(status_code, {"success": success, "message": message})
+            else:
+                 self._send_response(status_code, {"error": message})
             return # Handled
 
         # --- Handle unknown authenticated POST paths ---
