@@ -2,10 +2,19 @@ import os
 
 try:
     os.system('pip --version')
-except:
+except Exception:
     os.system('python ./get-pip.py')
     os.system('pip install --upgrade pip')
 
+try:
+    import google_auth_oauthlib.flow
+    import googleapiclient.discovery
+    print("Google OAuth libraries found.")
+except ImportError:
+    print("Google OAuth libraries not found, installing...")
+    os.system('pip install google-auth-oauthlib google-api-python-client requests')
+
+from google_auth_oauthlib.flow import InstalledAppFlow
 import http.server
 import socketserver
 import json
@@ -31,6 +40,11 @@ LOGINS_SQL_FILE_PATH = DATA_DIR / 'logins.sql' # Path to the SQL logins file <--
 HOST = 'localhost' # Or '0.0.0.0' to be accessible on your network
 PORT = 8000 # Choose a port
 SUPPORTED_CLASSES = [] # Must match menu.html and initial tables.sql
+
+# --- Google OAuth Configuration ---
+CLIENT_SECRETS_FILE = DATA_DIR / 'client_secret.json' # Path to your client_secret.json
+GOOGLE_SCOPES = ['openid', 'https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile']
+GOOGLE_REDIRECT_URI = f'http://{HOST}:{PORT}/oauth2callback' # Must match one in client_secret.json and Google Console
 
 # --- Secure Login Configuration (Using hashlib.pbkdf2_hmac) ---
 
@@ -1214,6 +1228,72 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         cookies = self.get_cookies() # Get fresh cookies for POST check
         password_change_required = cookies.get(CHANGE_PASSWORD_COOKIE_NAME)
 
+        # --- Google OAuth Endpoints (Handled in do_GET for redirect and callback) ---
+        if path == '/login/google':
+            try:
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    CLIENT_SECRETS_FILE, scopes=GOOGLE_SCOPES, redirect_uri=GOOGLE_REDIRECT_URI
+                )
+                # Note: For web apps, managing 'state' for CSRF is crucial.
+                # InstalledAppFlow might not handle this as robustly for web server use cases
+                # as a Flow object would. For simplicity, we're relying on the library's default.
+                auth_url, _ = flow.authorization_url(prompt='consent') # Add prompt for consent
+
+                print(f"Redirecting to Google OAuth URL: {auth_url}")
+                self.send_response(302)
+                self.send_header('Location', auth_url)
+                self.end_headers()
+            except FileNotFoundError:
+                print(f"!!! ERROR: {CLIENT_SECRETS_FILE} not found. Google OAuth will not work.")
+                self._send_response(500, {"error": "Google OAuth configuration error (server-side)."})
+            except Exception as e:
+                print(f"!!! Error during Google OAuth initiation: {e}")
+                print(traceback.format_exc())
+                self._send_response(500, {"error": "Could not initiate Google login."})
+            return
+
+        elif path == '/oauth2callback':
+            try:
+                code = query.get('code', [None])[0]
+                if not code:
+                    self._send_response(400, {"error": "Missing authorization code from Google."})
+                    return
+
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    CLIENT_SECRETS_FILE, scopes=GOOGLE_SCOPES, redirect_uri=GOOGLE_REDIRECT_URI
+                )
+                flow.fetch_token(code=code)
+                credentials = flow.credentials
+
+                # Get user info
+                userinfo_service = googleapiclient.discovery.build('oauth2', 'v2', credentials=credentials)
+                user_info = userinfo_service.userinfo().get().execute()
+                user_email = user_info.get('email')
+                user_name_from_google = user_info.get('name', user_email) # Fallback to email if name not present
+
+                if not user_email:
+                    self._send_response(400, {"error": "Could not retrieve email from Google."})
+                    return
+
+                with data_lock: # Protect access to user_password_store and saving
+                    if user_email not in user_password_store:
+                        print(f"New Google user: {user_email}. Creating placeholder entry.")
+                        user_password_store[user_email] = "GOOGLE_AUTH_USER" # Special marker
+                        save_user_data_to_sql() # Save the new user
+
+                # Create session cookies
+                user_cookie_headers = create_cookies(USERNAME_COOKIE_NAME, user_name_from_google, path='/', httponly=False)
+                session_cookie_headers = create_cookies(SESSION_COOKIE_NAME, VALID_SESSION_VALUE, path='/')
+                change_pw_clear_headers = create_cookie_clear_headers(CHANGE_PASSWORD_COOKIE_NAME, path='/') # Clear this
+                all_cookies = user_cookie_headers + session_cookie_headers + change_pw_clear_headers
+
+                self._send_response(302, headers={'Location': '/menu.html', **dict(all_cookies)}) # Redirect with cookies
+            except Exception as e:
+                print(f"!!! Error during Google OAuth callback: {e}")
+                print(traceback.format_exc())
+                self._send_response(500, {"error": "Google OAuth callback failed."})
+            return
+
         # Define allowed POST paths during forced change
         allowed_post_paths_during_change = ['/login', '/logout', '/api/auth/change']
 
@@ -1632,6 +1712,7 @@ if __name__ == "__main__":
     print(f"Using counts data file: {SQL_FILE_PATH}")
     print(f"Using logins data file: {LOGINS_SQL_FILE_PATH}") # <--- NEW
     print(f"Using classes data file: {CLASSES_SQL_FILE_PATH}")
+    print(f"Using Google client secrets file: {CLIENT_SECRETS_FILE}")
     print(f"Using hashlib.pbkdf2_hmac with {ITERATIONS} iterations.")
     print(f"\nAccess the application via: http://{HOST}:{PORT}/")
     print(f"(Will redirect to /login.html if not logged in)")
