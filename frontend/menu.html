@@ -58,12 +58,21 @@
         /* Add some padding to the body so content doesn't start under the fixed buttons */
         body {
             padding-top: 60px; /* Adjust this value based on button height + desired space */
+            padding-left: 15px; /* Add some padding on the left for the username */
         }
 
+        #loggedInUser {
+            position: fixed;
+            top: 15px;
+            left: 15px;
+            font-weight: bold;
+            color: #333; /* Or your preferred color */
+        }
     </style>
 </head>
 <body>
-
+  <!-- Element to display the logged-in username -->
+  <div id="loggedInUser"></div>
   <!-- Container for Header Buttons -->
   <div id="headerButtons">
     <!-- Config Button (Links to config.html) -->
@@ -141,8 +150,25 @@
             }
         }
 
+        // --- Function to display logged-in username ---
+        function displayLoggedInUser() {
+            const cookies = document.cookie.split('; ');
+            const usernameCookie = cookies.find(row => row.startsWith('ColorDaysUser='));
+            const loggedInUserDiv = document.getElementById('loggedInUser');
+
+            if (usernameCookie) {
+                const username = usernameCookie.split('=')[1];
+                loggedInUserDiv.textContent = `User: ${decodeURIComponent(username)}`;
+            } else {
+                loggedInUserDiv.textContent = 'User: Not Logged In'; // Fallback
+            }
+        }
+
         // Load classes when the page loads
-        document.addEventListener('DOMContentLoaded', loadAndDisplayClasses);
+        document.addEventListener('DOMContentLoaded', () => {
+            loadAndDisplayClasses();
+            displayLoggedInUser(); // Also display the username
+        });
     </script>
 
 </body>
