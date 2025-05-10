@@ -1324,6 +1324,8 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                         "counts1": counts1, "couts2": counts2, "couts3": counts3
                     }
                     class_data_store.append(new_class)
+                    # Sort the class_data_store alphabetically by class name
+                    class_data_store.sort(key=lambda x: x['class'])
                     if save_class_data_to_sql():
                         success = True
                         message = f"Class '{class_name}' added successfully."
