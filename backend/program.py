@@ -20,10 +20,11 @@ BACKEND_DIR = Path(__file__).parent.resolve()
 FRONTEND_DIR = (BACKEND_DIR.parent / 'frontend').resolve()
 DATA_DIR = (BACKEND_DIR / 'data').resolve()
 SQL_FILE_PATH = DATA_DIR / 'tables.sql' # Path to the SQL data file
+CLASSES_SQL_FILE_PATH = DATA_DIR / 'classes.sql' # Path to the classes data file
 LOGINS_SQL_FILE_PATH = DATA_DIR / 'logins.sql' # Path to the SQL logins file <--- NEW
 HOST = 'localhost' # Or '0.0.0.0' to be accessible on your network
 PORT = 8000 # Choose a port
-SUPPORTED_CLASSES = ['C1', 'C2', 'C3'] # Must match menu.html and initial tables.sql
+SUPPORTED_CLASSES = [] # Must match menu.html and initial tables.sql
 
 # --- Secure Login Configuration (Using hashlib.pbkdf2_hmac) ---
 
@@ -126,6 +127,7 @@ CHANGE_PASSWORD_COOKIE_NAME = "ChangePasswordVerificationNotNeeded" # For the ch
 # --- In-Memory Data Store and Lock ---
 data_store = collections.defaultdict(lambda: collections.defaultdict(lambda: collections.defaultdict(int)))
 data_lock = threading.RLock()
+class_data_store = [] # To store data from classes.sql as a list of dicts
 
 def create_cookies(name, value, path='/', expires=None, max_age=None, httponly=True, samesite='Lax'):
     """
@@ -223,6 +225,25 @@ def parse_sql_line(line):
              print(f"Warning: Could not parse counts line format: {line.strip()}")
         return None
 
+# --- Parsing for classes.sql ---
+def parse_classes_sql_line(line):
+    """Parses a single INSERT statement line for the classes table."""
+    # Regex for: INSERT INTO classes (class, teacher, counts1, couts2, couts3) VALUES ('1.A', 'name', 'F', 'F', 'F');
+    # Note the typo 'couts2' and 'couts3' in the SQL file.
+    match = re.match(
+        r"INSERT INTO classes\s*\(\s*class\s*,\s*teacher\s*,\s*counts1\s*,\s*couts2\s*,\s*couts3\s*\)\s*VALUES\s*\(\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([TF])'\s*,\s*'([TF])'\s*,\s*'([TF])'\s*\);",
+        line.strip(),
+        re.IGNORECASE
+    )
+    if match:
+        class_name, teacher, counts1, couts2, couts3 = match.groups()
+        return {"class": class_name, "teacher": teacher, "counts1": counts1, "couts2": couts2, "couts3": couts3}
+    else:
+        # Ignore comments and empty lines silently
+        if line.strip() and not line.strip().startswith('--') and not line.strip().upper().startswith('CREATE TABLE'):
+             print(f"Warning: Could not parse classes line format: {line.strip()}")
+        return None
+
 # --- Parsing for logins.sql --- <--- NEW
 def parse_logins_sql_line(line):
     """Parses a single valid INSERT line for the users table."""
@@ -315,6 +336,38 @@ def load_data_from_sql():
 
     print("Counts data loading/initialization complete.")
 
+# --- Loading for classes.sql ---
+def load_class_data_from_sql():
+    """Loads data from classes.sql into the in-memory class_data_store."""
+    global class_data_store
+    print(f"Attempting to load class data from: {CLASSES_SQL_FILE_PATH}")
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    temp_class_store = []
+    file_exists = CLASSES_SQL_FILE_PATH.exists()
+    classes_loaded_count = 0
+
+    if file_exists:
+        try:
+            with open(CLASSES_SQL_FILE_PATH, 'r', encoding='utf-8') as f:
+                for line_num, line in enumerate(f, 1):
+                    parsed = parse_classes_sql_line(line)
+                    if parsed:
+                        temp_class_store.append(parsed)
+                        classes_loaded_count += 1
+            print(f"Loaded {classes_loaded_count} class(es) from {CLASSES_SQL_FILE_PATH}.")
+        except Exception as e:
+            print(f"!!! ERROR reading or parsing {CLASSES_SQL_FILE_PATH}: {e}. Class data store might be empty or incomplete.")
+            temp_class_store.clear()
+    else:
+        print(f"Warning: {CLASSES_SQL_FILE_PATH} not found. No classes loaded. Class management will start with an empty list.")
+
+    # Update the global data store under lock
+    with data_lock: # Reusing data_lock for simplicity
+        class_data_store = temp_class_store
+
+    print("Class data loading complete.")
+
 # --- Loading for logins.sql --- <--- NEW
 def load_user_data_from_sql():
     """Loads user data from logins.sql into the in-memory user_password_store."""
@@ -404,6 +457,40 @@ def save_data_to_sql():
             print(traceback.format_exc()) # Print full traceback
             return False
         
+# --- Saving for classes.sql ---
+def save_class_data_to_sql():
+    """Saves the current in-memory class_data_store back to classes.sql. Returns True on success, False on failure."""
+    global class_data_store
+    print(f"Attempting to save class data to: {CLASSES_SQL_FILE_PATH}")
+    with data_lock: # Reusing data_lock
+        try:
+            sql_lines = []
+            sql_lines.append(f"-- Class data saved on {datetime.datetime.now().isoformat()} --")
+            sql_lines.append("")
+
+            # Sort by class name for consistent file output, if desired, or keep original order
+            # sorted_class_data = sorted(class_data_store, key=lambda x: x['class'])
+            # For now, saving in current order (append order for new items)
+            for class_item in class_data_store:
+                # Basic escaping for class name and teacher (should be sufficient if they don't contain quotes)
+                safe_class_name = class_item['class'].replace("'", "''")
+                safe_teacher = class_item['teacher'].replace("'", "''")
+                insert_statement = (
+                    f"INSERT INTO classes (class, teacher, counts1, couts2, couts3) VALUES "
+                    f"('{safe_class_name}', '{safe_teacher}', '{class_item['counts1']}', '{class_item['couts2']}', '{class_item['couts3']}');"
+                )
+                sql_lines.append(insert_statement)
+
+            with open(CLASSES_SQL_FILE_PATH, 'w', encoding='utf-8') as f:
+                f.write("\n".join(sql_lines))
+                f.write("\n")
+            print(f"Class data successfully saved to {CLASSES_SQL_FILE_PATH}")
+            return True
+        except Exception as e:
+            print(f"!!! UNEXPECTED ERROR during save_class_data_to_sql:")
+            print(traceback.format_exc())
+            return False
+
 # --- Add this function near save_data_to_sql ---
 
 # --- Lock for user data modifications ---
@@ -866,6 +953,18 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             self.handle_get_users() # Call the handler function
             return # Make sure to return after handling
 
+        elif path == '/api/classes':
+            if not self.is_logged_in():
+                print(f"Denied GET request to {path} - User not logged in.")
+                self._send_response(401, {"error": "Authentication required"})
+                return
+            
+            with data_lock: # Ensure thread-safe read
+                # Send a copy to avoid issues if it's modified elsewhere during serialization
+                response_data = list(class_data_store) 
+            self._send_response(200, response_data)
+            return
+
         # API Endpoint: /api/counts?class=ClassName
         elif path == '/api/counts':
             # ... (existing code for /api/counts remains the same)
@@ -1192,6 +1291,145 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                  self._send_response(status_code, {"error": message}) # Send error message for frontend alert
             return # Handled
 
+        # --- Handle /api/classes/add ---
+        elif path == '/api/classes/add':
+            if not self.is_logged_in():
+                self._send_response(401, {"error": "Authentication required"})
+                return
+
+            class_name = data.get('class')
+            teacher = data.get('teacher')
+            counts1 = data.get('counts1', 'F') # Default to 'F' if not provided
+            counts2 = data.get('couts2', 'F')  # Use 'couts2' to match SQL and JS
+            counts3 = data.get('couts3', 'F')  # Use 'couts3' to match SQL and JS
+
+            if not class_name or not teacher:
+                self._send_response(400, {"error": "Missing class name or teacher"})
+                return
+            if counts1 not in ['T', 'F'] or counts2 not in ['T', 'F'] or counts3 not in ['T', 'F']:
+                self._send_response(400, {"error": "Invalid counts values (must be T or F)"})
+                return
+
+            success = False
+            message = "Failed to add class."
+            status_code = 500
+
+            with data_lock:
+                if any(c['class'] == class_name for c in class_data_store):
+                    message = f"Class '{class_name}' already exists."
+                    status_code = 409 # Conflict
+                else:
+                    new_class = {
+                        "class": class_name, "teacher": teacher,
+                        "counts1": counts1, "couts2": counts2, "couts3": counts3
+                    }
+                    class_data_store.append(new_class)
+                    # Sort the class_data_store alphabetically by class name
+                    class_data_store.sort(key=lambda x: x['class'])
+                    if save_class_data_to_sql():
+                        success = True
+                        message = f"Class '{class_name}' added successfully."
+                        status_code = 201 # Created
+                    else:
+                        # Revert add if save fails
+                        class_data_store.pop() 
+                        message = f"Failed to save class '{class_name}' to file."
+                        status_code = 500
+            
+            if success:
+                self._send_response(status_code, {"success": True, "message": message})
+            else:
+                self._send_response(status_code, {"error": message})
+            return
+
+        # --- Handle /api/classes/remove ---
+        elif path == '/api/classes/remove':
+            if not self.is_logged_in():
+                self._send_response(401, {"error": "Authentication required"})
+                return
+
+            class_name_to_remove = data.get('class')
+            if not class_name_to_remove:
+                self._send_response(400, {"error": "Missing class name to remove"})
+                return
+
+            success = False
+            message = "Failed to remove class."
+            status_code = 500
+
+            with data_lock:
+                original_len = len(class_data_store)
+                class_data_store[:] = [c for c in class_data_store if c['class'] != class_name_to_remove]
+                if len(class_data_store) < original_len: # If something was removed
+                    if save_class_data_to_sql():
+                        success = True
+                        message = f"Class '{class_name_to_remove}' removed successfully."
+                        status_code = 200
+                    else:
+                        # This is tricky, if save fails, we should ideally reload or revert.
+                        # For now, log error, data in memory is changed but not file.
+                        message = f"Class '{class_name_to_remove}' removed from memory, but FAILED to save to file."
+                        status_code = 500 # Internal Server Error
+                else:
+                    message = f"Class '{class_name_to_remove}' not found."
+                    status_code = 404 # Not Found
+
+            if success:
+                self._send_response(status_code, {"success": True, "message": message})
+            else:
+                self._send_response(status_code, {"error": message})
+            return
+
+        # --- Handle /api/classes/update_counts ---
+        elif path == '/api/classes/update_counts':
+            if not self.is_logged_in():
+                self._send_response(401, {"error": "Authentication required"})
+                return
+
+            class_name = data.get('class')
+            count_field = data.get('countField') # e.g., "counts1", "couts2", "couts3"
+            new_value = data.get('value')       # 'T' or 'F'
+
+            if not all([class_name, count_field, new_value is not None]): # new_value can be 'F'
+                self._send_response(400, {"error": "Missing class, countField, or value"})
+                return
+            
+            # Ensure count_field matches the keys used in your data (including the typo)
+            valid_count_fields = ["counts1", "couts2", "couts3"]
+            if count_field not in valid_count_fields:
+                self._send_response(400, {"error": f"Invalid countField. Must be one of {valid_count_fields}"})
+                return
+            
+            if new_value not in ['T', 'F']:
+                self._send_response(400, {"error": "Invalid value. Must be 'T' or 'F'"})
+                return
+
+            success = False
+            message = "Failed to update class count."
+            status_code = 500
+
+            with data_lock:
+                class_to_update = next((cls_item for cls_item in class_data_store if cls_item['class'] == class_name), None)
+                
+                if not class_to_update:
+                    message = f"Class '{class_name}' not found."
+                    status_code = 404
+                else:
+                    class_to_update[count_field] = new_value
+                    if save_class_data_to_sql():
+                        success = True
+                        message = f"Count '{count_field}' for class '{class_name}' updated to '{new_value}'."
+                        status_code = 200
+                    else:
+                        message = f"Count for class '{class_name}' updated in memory, but FAILED to save to file. Consider restarting server or checking file permissions."
+                        status_code = 500 # Keep as 500, as the persistent save failed
+            
+            if success:
+                self._send_response(status_code, {"success": True, "message": message})
+            else:
+                self._send_response(status_code, {"error": message})
+            return
+
         # --- Handle /change_password ---
         elif path == '/api/auth/change':
             # --- CORRECTED USERNAME RETRIEVAL ---
@@ -1373,6 +1611,7 @@ if __name__ == "__main__":
     load_data_from_sql()
     # Load user login data <--- NEW
     load_user_data_from_sql()
+    load_class_data_from_sql() # Load class data
     # --- End Load Data ---
 
     # Server setup using ThreadingMixIn for basic concurrency
@@ -1386,6 +1625,7 @@ if __name__ == "__main__":
     print(f"Frontend root: {FRONTEND_DIR}")
     print(f"Using counts data file: {SQL_FILE_PATH}")
     print(f"Using logins data file: {LOGINS_SQL_FILE_PATH}") # <--- NEW
+    print(f"Using classes data file: {CLASSES_SQL_FILE_PATH}")
     print(f"Using hashlib.pbkdf2_hmac with {ITERATIONS} iterations.")
     print(f"\nAccess the application via: http://{HOST}:{PORT}/")
     print(f"(Will redirect to /login.html if not logged in)")
