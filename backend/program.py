@@ -1378,6 +1378,56 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 self._send_response(status_code, {"error": message})
             return
 
+        # --- Handle /api/classes/update_counts ---
+        elif path == '/api/classes/update_counts':
+            if not self.is_logged_in():
+                self._send_response(401, {"error": "Authentication required"})
+                return
+
+            class_name = data.get('class')
+            count_field = data.get('countField') # e.g., "counts1", "couts2", "couts3"
+            new_value = data.get('value')       # 'T' or 'F'
+
+            if not all([class_name, count_field, new_value is not None]): # new_value can be 'F'
+                self._send_response(400, {"error": "Missing class, countField, or value"})
+                return
+            
+            # Ensure count_field matches the keys used in your data (including the typo)
+            valid_count_fields = ["counts1", "couts2", "couts3"]
+            if count_field not in valid_count_fields:
+                self._send_response(400, {"error": f"Invalid countField. Must be one of {valid_count_fields}"})
+                return
+            
+            if new_value not in ['T', 'F']:
+                self._send_response(400, {"error": "Invalid value. Must be 'T' or 'F'"})
+                return
+
+            success = False
+            message = "Failed to update class count."
+            status_code = 500
+
+            with data_lock:
+                class_to_update = next((cls_item for cls_item in class_data_store if cls_item['class'] == class_name), None)
+                
+                if not class_to_update:
+                    message = f"Class '{class_name}' not found."
+                    status_code = 404
+                else:
+                    class_to_update[count_field] = new_value
+                    if save_class_data_to_sql():
+                        success = True
+                        message = f"Count '{count_field}' for class '{class_name}' updated to '{new_value}'."
+                        status_code = 200
+                    else:
+                        message = f"Count for class '{class_name}' updated in memory, but FAILED to save to file. Consider restarting server or checking file permissions."
+                        status_code = 500 # Keep as 500, as the persistent save failed
+            
+            if success:
+                self._send_response(status_code, {"success": True, "message": message})
+            else:
+                self._send_response(status_code, {"error": message})
+            return
+
         # --- Handle /change_password ---
         elif path == '/api/auth/change':
             # --- CORRECTED USERNAME RETRIEVAL ---

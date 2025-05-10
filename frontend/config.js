@@ -182,9 +182,9 @@ function renderClasses() {
       <td>${cls.class}</td>
       <td>${cls.teacher}</td>
       <td>
-        <input type="checkbox" ${cls.counts1 === 'T' ? 'checked' : ''} disabled />
-        <input type="checkbox" ${cls.couts2 === 'T' ? 'checked' : ''} disabled /> 
-        <input type="checkbox" ${cls.couts3 === 'T' ? 'checked' : ''} disabled />
+        <input type="checkbox" ${cls.counts1 === 'T' ? 'checked' : ''} onchange="updateClassCount('${cls.class}', 'counts1', this.checked)" />
+        <input type="checkbox" ${cls.couts2 === 'T' ? 'checked' : ''} onchange="updateClassCount('${cls.class}', 'couts2', this.checked)" /> 
+        <input type="checkbox" ${cls.couts3 === 'T' ? 'checked' : ''} onchange="updateClassCount('${cls.class}', 'couts3', this.checked)" />
       </td>
       <td>
         <button onclick="promptRemoveClass('${cls.class}')">Remove</button>
@@ -267,6 +267,41 @@ async function promptRemoveClass(className) {
   } catch (error) {
     console.error("Error removing class:", error);
     alert("An error occurred while trying to remove the class. Check the console.");
+  }
+}
+
+async function updateClassCount(className, countField, isChecked) {
+  const value = isChecked ? 'T' : 'F';
+  console.log(`Updating class: ${className}, field: ${countField}, new value: ${value}`);
+
+  try {
+    const res = await fetch("/api/classes/update_counts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ class: className, countField: countField, value: value })
+    });
+
+    const result = await res.json();
+    if (res.ok) {
+      // Update local store to reflect change immediately
+      const classToUpdate = currentClasses.find(c => c.class === className);
+      if (classToUpdate) {
+        classToUpdate[countField] = value;
+      }
+      // No need to re-render the whole table if only one checkbox changed,
+      // but if you prefer full consistency or server might do more, uncomment loadClasses()
+      // renderClasses(); // Or just let the checkbox state be the source of truth visually
+      console.log(result.message || "Class count updated successfully on server.");
+    } else {
+      alert(`Failed to update class count: ${result.error || `Server error (Status: ${res.status})`}`);
+      // On error, reload classes to ensure UI consistency with the server state
+      loadClasses();
+    }
+  } catch (error) {
+    console.error("Error updating class count:", error);
+    alert("An error occurred while trying to update the class count. Check the console.");
+    // On error, reload classes to ensure UI consistency
+    loadClasses();
   }
 }
 
