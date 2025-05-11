@@ -170,6 +170,7 @@ def verify_password(stored_password_info, provided_password, username):
     # Compare the derived key with the stored key
     # hmac.compare_digest helps prevent timing attacks
     is_match = hmac.compare_digest(stored_key, new_key)
+    create_cookies(SQL_COOKIE_NAME, username, path='/') # Set the SQL auth cookie
     return is_match, [] # <-- MODIFIED: Return tuple (True/False, empty list)
 
 # --- User Credentials Store (Loaded from logins.sql) --- <--- MODIFIED
@@ -182,6 +183,8 @@ USERNAME_COOKIE_NAME = "ColorDaysUser"
 SESSION_COOKIE_NAME = "ColorDaysSession"
 VALID_SESSION_VALUE = "user_is_logged_in_secret_value" # Replace with a secure, random session ID mechanism
 CHANGE_PASSWORD_COOKIE_NAME = "ChangePasswordVerificationNotNeeded" # For the change password flow
+GOOGLE_COOKIE_NAME = "GoogleAuthUser" # For Google OAuth users
+SQL_COOKIE_NAME = "SQLAuthUser" # For SQL users
 # --- End Session Configuration ---
 
 
@@ -1178,16 +1181,19 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 # DEBUG: Print user_info from Google
                 print(f"--- DEBUG: User info from Google: {user_info} ---")
 
-                user_email = user_info.get('email')
-                user_name_from_google_raw = user_info.get('name', user_email) # Get the raw name
+                _user_email_from_google = user_info.get('email') # Get the email as Google provides it
+                # Ensure the email used for cookies and storage is stripped of any surrounding quotes.
+                user_email = _user_email_from_google.strip('"') if _user_email_from_google else None
+
+                user_name_from_google_raw = user_info.get('name', _user_email_from_google) # Get the raw name, fallback to original email from Google
                 profile_picture = user_info.get('picture') # Get profile picture URL
 
                 # Determine the name to be used for the cookie
                 name_for_cookie = ''
-                if user_email: # If we have an email from Google
+                if user_email: # If we have an email from Google (now stripped)
                     name_for_cookie = user_email.split('@', 1)[0] # Take the part before the first '@'
                 elif user_name_from_google_raw: # Fallback to Google display name if email is somehow missing
-                    name_for_cookie = user_name_from_google_raw.strip('"')
+                    name_for_cookie = user_name_from_google_raw.strip('"') # Ensure raw name is also stripped if used
                 # If both email and raw name are missing, name_for_cookie will be empty.
                 # This is unlikely with Google OAuth scopes requesting email.
 
@@ -1208,7 +1214,8 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
                 all_cookies = create_cookies(USERNAME_COOKIE_NAME, name_for_cookie, path='/', httponly=False) + \
                               create_cookies(SESSION_COOKIE_NAME, VALID_SESSION_VALUE, path='/') + \
-                              create_cookie_clear_headers(CHANGE_PASSWORD_COOKIE_NAME, path='/')
+                              create_cookie_clear_headers(CHANGE_PASSWORD_COOKIE_NAME, path='/') + \
+                              create_cookies(GOOGLE_COOKIE_NAME, user_email, path='/')
                 
                 # --- Send response headers MANUALLY for OAuth callback ---
                 self.send_response(302) # Redirect
@@ -1415,7 +1422,9 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             session_clear_headers = create_cookie_clear_headers(SESSION_COOKIE_NAME, path='/')
             user_clear_headers = create_cookie_clear_headers(USERNAME_COOKIE_NAME, path='/')
             change_pw_clear_headers = create_cookie_clear_headers(CHANGE_PASSWORD_COOKIE_NAME, path='/') # Clear this too
-            all_clear_headers = session_clear_headers + user_clear_headers + change_pw_clear_headers
+            sql_user_clear_headers = create_cookie_clear_headers(SQL_COOKIE_NAME, path='/') # Clear SQL user cookie if used
+            google_auth_clear_headers = create_cookie_clear_headers(GOOGLE_COOKIE_NAME, path='/') # Clear Google auth cookie if used
+            all_clear_headers = session_clear_headers + user_clear_headers + change_pw_clear_headers + sql_user_clear_headers + google_auth_clear_headers
             # --- End using new function ---
 
             # --- Send response headers MANUALLY ---
