@@ -28,6 +28,8 @@ function renderUsers() {
       status = "not set";
     } else if (info.password === "set") {
       status = "set";
+    } else if (info.password === "google_auth_user") {
+        status = "Google Auth";
     } else {
       status = info.password;
     }
@@ -37,9 +39,11 @@ function renderUsers() {
       <td>${status}</td>
       <td>
         ${
-          status === "not set" // || /^[a-zA-Z0-9]{10}$/.test(info.password)
+          status === "not set" && status !== "Google Auth" // || /^[a-zA-Z0-9]{10}$/.test(info.password)
             ? `<button onclick="setPassword('${username}')">Set Password</button>`
-            : `<button onclick="resetPassword('${username}')">Reset Password</button>`
+            : status === "Google Auth"
+              ? ``
+              : `<button onclick="resetPassword('${username}')">Reset Password</button>`
         }
         ${
           username !== "admin"

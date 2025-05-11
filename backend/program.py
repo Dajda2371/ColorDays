@@ -1,7 +1,60 @@
+import os
+
+if "pip: command not found" in os.popen('pip --version').read(): # Check if pip is installed
+    print("pip not found, attempting to install...")
+    os.system('python ./get-pip.py')
+    os.system('pip install --upgrade pip')
+
+# Initialize required names to None. They will be populated if imports succeed.
+InstalledAppFlow = None
+google_discovery_service = None # This will hold the 'discovery' module
+
+try:
+    from google_auth_oauthlib.flow import InstalledAppFlow as IAF
+    from googleapiclient import discovery as discovery_module
+    
+    # Assign to our module-level variables
+    InstalledAppFlow = IAF
+    google_discovery_service = discovery_module
+    print("Google OAuth libraries found and imported.")
+except ImportError:
+    print("One or more Google OAuth libraries not found, attempting to install...")
+    install_cmd = 'pip install --upgrade google-auth-oauthlib google-api-python-client requests'
+    print(f"Running: {install_cmd}")
+    return_code = os.system(install_cmd)
+    if return_code == 0:
+        print("Installation attempt successful. Re-attempting import...")
+        try:
+            # Re-import and assign to the module-level variables using globals()
+            # to ensure they are updated in the module's scope.
+            from google_auth_oauthlib.flow import InstalledAppFlow as IAF_retry
+            from googleapiclient import discovery as discovery_module_retry
+            
+            globals()['InstalledAppFlow'] = IAF_retry
+            globals()['google_discovery_service'] = discovery_module_retry
+            print("Libraries imported successfully after installation.")
+        except ImportError:
+            print("!!! CRITICAL: Failed to import libraries even after installation. OAuth will not work. Please restart the server.")
+            # Ensure they remain None if the retry fails
+            globals()['InstalledAppFlow'] = None
+            globals()['google_discovery_service'] = None
+    else:
+        print(f"!!! CRITICAL: Installation failed with code {return_code}. Please install 'google-auth-oauthlib' and 'google-api-python-client' manually and restart the server.")
+        globals()['InstalledAppFlow'] = None
+        globals()['google_discovery_service'] = None
+
+# Check if imports were successful
+if InstalledAppFlow is None or google_discovery_service is None:
+    print("!!! WARNING: Google OAuth libraries could not be loaded. Google login will be disabled.")
+    # Ensure they are defined as None if not already, to prevent NameErrors later if checked.
+    if 'InstalledAppFlow' not in globals() or globals()['InstalledAppFlow'] is None:
+        InstalledAppFlow = None
+    if 'google_discovery_service' not in globals() or globals()['google_discovery_service'] is None:
+        google_discovery_service = None
+
 import http.server
 import socketserver
 import json
-import os
 import urllib.parse
 from pathlib import Path
 import re # Regular expressions for parsing SQL
@@ -12,7 +65,6 @@ import traceback # For detailed error printing
 from http.cookies import SimpleCookie # <-- Added for login cookies
 import hashlib # <-- Use built-in hashlib
 import hmac # <-- Use built-in hmac for secure comparison
-import os      # <-- Use built-in os for random salt
 import binascii # <-- For converting bytes to hex and back
 
 # --- Configuration ---
@@ -25,6 +77,11 @@ LOGINS_SQL_FILE_PATH = DATA_DIR / 'logins.sql' # Path to the SQL logins file <--
 HOST = 'localhost' # Or '0.0.0.0' to be accessible on your network
 PORT = 8000 # Choose a port
 SUPPORTED_CLASSES = [] # Must match menu.html and initial tables.sql
+
+# --- Google OAuth Configuration ---
+CLIENT_SECRETS_FILE = DATA_DIR / 'client_secret.json' # Path to your client_secret.json
+GOOGLE_SCOPES = ['openid', 'https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile']
+GOOGLE_REDIRECT_URI = f'http://{HOST}:{PORT}/oauth2callback' # Must match one in client_secret.json and Google Console
 
 # --- Secure Login Configuration (Using hashlib.pbkdf2_hmac) ---
 
@@ -60,12 +117,16 @@ def hash_password(password):
 
 def verify_password(stored_password_info, provided_password, username):
     """Verifies a provided password against the stored salt and hash."""
+    if not isinstance(stored_password_info, dict) or 'password_hash' not in stored_password_info:
+        print(f"Error: Invalid stored_password_info structure for user '{username}'. Expected a dict with 'password_hash'.")
+        return False, []
+    
+    password_hash = stored_password_info['password_hash']
     extra_cookie_headers = [] # Initialize default empty list
 
-    if not stored_password_info or ':' not in stored_password_info:
-        # Check for pre-generated password format _password_
-        if stored_password_info and stored_password_info.startswith('_') and stored_password_info.endswith('_'):
-            _stored_password_info_ = stored_password_info[1:-1]
+    if not password_hash or (':' not in password_hash and not (password_hash.startswith('_') and password_hash.endswith('_'))):
+        if password_hash and password_hash.startswith('_') and password_hash.endswith('_'): # Check for pre-generated password format _password_
+            _stored_password_info_ = password_hash[1:-1]
             if _stored_password_info_ == provided_password:
                 print(f"User '{username}' logged in with pregenerated password '{provided_password}'. Setting change password cookie.")
                 # Create the specific cookie needed for this case
@@ -86,7 +147,7 @@ def verify_password(stored_password_info, provided_password, username):
             print(f"Error: Invalid or missing stored password info for user '{username}'.")
             return False, [] # <-- MODIFIED: Return tuple
     try:
-        salt_hex, key_hex = stored_password_info.split(':')
+        salt_hex, key_hex = password_hash.split(':')
         salt = binascii.unhexlify(salt_hex)
         stored_key = binascii.unhexlify(key_hex)
     except (ValueError, binascii.Error):
@@ -128,6 +189,13 @@ CHANGE_PASSWORD_COOKIE_NAME = "ChangePasswordVerificationNotNeeded" # For the ch
 data_store = collections.defaultdict(lambda: collections.defaultdict(lambda: collections.defaultdict(int)))
 data_lock = threading.RLock()
 class_data_store = [] # To store data from classes.sql as a list of dicts
+
+def is_user_using_oauth(username, self):
+    if username in user_password_store:
+        if user_password_store[username]['password_hash'] == '_GOOGLE_AUTH_USER_':
+            print(f"User '{username}' is using Google OAuth. Password change not allowed.")
+            self._send_response(403, {"error": "Password change not allowed for Google OAuth users."})
+            return
 
 def create_cookies(name, value, path='/', expires=None, max_age=None, httponly=True, samesite='Lax'):
     """
@@ -246,7 +314,11 @@ def parse_classes_sql_line(line):
 
 # --- Parsing for logins.sql --- <--- NEW
 def parse_logins_sql_line(line):
-    """Parses a single valid INSERT line for the users table."""
+    """
+    Parses a single valid INSERT line for the users table.
+    Handles formats with and without profile_picture_url.
+    Returns (username, password_hash, profile_picture_url) or None.
+    """
     line = line.strip()
 
     # Skip empty lines or comments
@@ -257,22 +329,51 @@ def parse_logins_sql_line(line):
     if not line.upper().startswith("INSERT INTO USERS"):
         return None
 
-    # Regex to extract username and password_hash
-    match = re.match(
-        r"INSERT INTO users\s*\(\s*username\s*,\s*password_hash\s*\)\s*VALUES\s*\(\s*'([^']+)'\s*,\s*'([^']+)'\s*\);",
-        line,
-        re.IGNORECASE
-    )
+    # Generic parser for INSERT INTO users (...) VALUES (...)
+    match = re.match(r"INSERT INTO users\s*\((.*?)\)\s*VALUES\s*\((.*?)\);", line, re.IGNORECASE)
 
     if match:
-        username, password_hash = match.groups()
-        if ':' in password_hash or password_hash.upper() == '_NULL_' or (password_hash[0] == '_' and password_hash[-1] == '_'):
-            return username, password_hash
-        else:
-            print(f"Warning: Skipped user due to bad hash format: {line}")
+        columns_str, values_str = match.groups()
+        columns = [col.strip().lower() for col in columns_str.split(',')]
+        
+        # Naive value splitting assuming values are simple strings in single quotes and no escaped quotes/commas within values
+        value_parts = []
+        temp_val = ""
+        in_string_literal = False
+        for char_idx, char_val in enumerate(values_str):
+            if char_val == "'":
+                if in_string_literal and char_idx + 1 < len(values_str) and values_str[char_idx+1] == "'": # Escaped quote ''
+                    temp_val += "'"
+                    # Skip next char as it's part of escaped quote, but regex for this is hard
+                    # This simple parser doesn't handle escaped quotes robustly.
+                    # For this app, assume simple non-escaped values.
+                else:
+                    in_string_literal = not in_string_literal
+                    if not in_string_literal: # End of a string literal
+                        value_parts.append(temp_val)
+                        temp_val = ""
+            elif in_string_literal:
+                temp_val += char_val
+        
+        if len(columns) != len(value_parts):
+            print(f"Warning: Column count ({len(columns)}) doesn't match value count ({len(value_parts)}) in logins line: {line.strip()}")
             return None
+    
+        parsed_data = dict(zip(columns, value_parts))
+        username = parsed_data.get('username')
+        password_hash = parsed_data.get('password_hash')
+        profile_picture_url = parsed_data.get('profile_picture_url', '_NULL_')
+
+        if not username or not password_hash:
+            print(f"Warning: Missing username or password_hash in parsed data from logins line: {line.strip()}")
+            return None
+        # Basic validation for password_hash format (can be expanded)
+        if not (':' in password_hash or password_hash.upper() == '_NULL_' or password_hash.upper() == 'GOOGLE_AUTH_USER' or (password_hash.startswith('_') and password_hash.endswith('_'))):
+            print(f"Warning: Skipped user '{username}' due to unrecognized password_hash format: '{password_hash}' in line: {line.strip()}")
+            return None
+        return username, password_hash, profile_picture_url
     else:
-        print(f"Warning: Could not parse logins line format: {line}")
+        print(f"Warning: Could not parse logins line format (regex mismatch): {line.strip()}")
         return None
 
 # --- Loading for tables.sql ---
@@ -385,8 +486,11 @@ def load_user_data_from_sql():
                 for line_num, line in enumerate(f, 1):
                     parsed = parse_logins_sql_line(line)
                     if parsed:
-                        username, password_hash = parsed
-                        temp_user_store[username] = password_hash
+                        username, password_hash, profile_picture_url = parsed
+                        temp_user_store[username] = {
+                            'password_hash': password_hash,
+                            'profile_picture_url': profile_picture_url if profile_picture_url else '_NULL_'
+                        }
                         users_loaded_count += 1
 
             print(f"Loaded {users_loaded_count} user(s) from {LOGINS_SQL_FILE_PATH}.")
@@ -514,11 +618,13 @@ def save_user_data_to_sql():
 
             # Iterate through the in-memory store and generate INSERT statements
             # Sort by username for consistent file output
-            for username, password_hash in sorted(user_password_store.items()):
+            for username, user_data in sorted(user_password_store.items()):
                  # Basic escaping for username (should be sufficient if usernames don't contain quotes)
                  safe_username = username.replace("'", "''")
-                 # Password hash is already hex, should be safe
-                 insert_statement = f"INSERT INTO users (username, password_hash) VALUES ('{safe_username}', '{password_hash}');"
+                 password_hash = user_data['password_hash'] # Already hex or special string
+                 profile_pic_url = user_data.get('profile_picture_url', '_NULL_')
+                 safe_profile_pic_url = profile_pic_url.replace("'", "''") if profile_pic_url else '_NULL_'
+                 insert_statement = f"INSERT INTO users (username, password_hash, profile_picture_url) VALUES ('{safe_username}', '{password_hash}', '{safe_profile_pic_url}');"
                  sql_lines.append(insert_statement)
 
             # Write the file (overwrite existing)
@@ -707,12 +813,15 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
     def handle_get_users(self):
         users = load_user_data_from_sql() # <--- Corrected line (no argument)
         user_list = []
-        for username, password_hash in users.items():
+        for username, user_data in users.items():
+            password_hash = user_data['password_hash']
             # Determine status based on the hash format from the file
             if password_hash is None or password_hash.upper() == '_NULL_': # Check for NULL explicitly if handle_add_user writes it
-                status = "not_set"
+                status = "not_set" # Match frontend expectation
             # You might need a more robust check than just length if handle_add_user writes NULL
             # Let's assume parse_logins_sql_line filters out bad hashes, so what's loaded is valid or None/NULL
+            elif password_hash == '_GOOGLE_AUTH_USER_':
+                status = "google_auth_user" # Match frontend expectation
             elif password_hash[0] == '_' and password_hash[-1] == '_':
                 status = password_hash[1:-1] # Extract the password between underscores
             else:
@@ -748,7 +857,10 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 return
 
             # Add the user with NOT_SET as the password
-            user_password_store[username] = "NOT_SET"
+            user_password_store[username] = {
+                'password_hash': 'NOT_SET', # Or use "_NOT_SET_" if you prefer the underscore convention
+                'profile_picture_url': '_NULL_'
+            }
 
             # Call your save function here!
             success = save_user_data_to_sql()
@@ -816,7 +928,12 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
         with data_lock: # Use the lock
             if username not in user_password_store:
-                message = f"User '{username}' not found."
+                # Check if it's a case issue by iterating keys
+                found_user_case_insensitive = next((k for k in user_password_store if k.lower() == username.lower()), None)
+                if found_user_case_insensitive:
+                    message = f"User '{username}' not found (case mismatch? Found: '{found_user_case_insensitive}')."
+                else:
+                    message = f"User '{username}' not found."
                 status_code = 404 # Not Found
             else:
                 del user_password_store[username] # Remove from memory
@@ -842,6 +959,10 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
     def handle_reset_password(self, data): # Accept parsed data
         username = data.get("username")
+
+        if is_user_using_oauth(username, self):
+            return
+
         new_password = data.get("new_password")
 
         # --- Add checks for missing data ---
@@ -869,7 +990,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             else:
                 try:
                     # Update the in-memory store
-                    user_password_store[username] = hashed
+                    user_password_store[username]['password_hash'] = hashed # Only update hash
                     save_needed = True
                     print(f"Password set/reset in memory for user '{username}'.")
                 except Exception as e:
@@ -902,6 +1023,9 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         parsed_path = urllib.parse.urlparse(self.path)
         path = parsed_path.path
         query = urllib.parse.parse_qs(parsed_path.query)
+
+        # DEBUG: Print the requested path at the beginning of do_GET
+        print(f"--- DEBUG: do_GET received request for path: '{path}', full self.path: '{self.path}' ---")
 
         if path == '/list_users':
             # --- Authentication Check ---
@@ -1001,6 +1125,116 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             self._send_response(200, response_data)
             return # Make sure to return after handling
 
+        # --- Google OAuth Endpoints (Moved to do_GET) ---
+        elif path == '/login/google':
+            print(f"--- DEBUG: Matched '/login/google' endpoint ---")
+            try:
+                if InstalledAppFlow is None:
+                    print("!!! ERROR: InstalledAppFlow not available for Google OAuth.")
+                    self._send_response(500, {"error": "Google OAuth component (InstalledAppFlow) missing on server."})
+                    return
+
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    CLIENT_SECRETS_FILE, scopes=GOOGLE_SCOPES, redirect_uri=GOOGLE_REDIRECT_URI
+                )
+                auth_url, _ = flow.authorization_url(prompt='consent', access_type='offline') # Added access_type for refresh token
+
+                print(f"--- DEBUG: Redirecting to Google OAuth URL: {auth_url} ---")
+                self.send_response(302)
+                self.send_header('Location', auth_url)
+                self.end_headers()
+            except FileNotFoundError:
+                print(f"!!! ERROR: {CLIENT_SECRETS_FILE} not found. Google OAuth will not work.")
+                self._send_response(500, {"error": "Google OAuth configuration error (server-side)."})
+            except Exception as e:
+                print(f"!!! Error during Google OAuth initiation: {e}")
+                print(traceback.format_exc())
+                self._send_response(500, {"error": "Could not initiate Google login."})
+            return
+
+        elif path == '/oauth2callback':
+            print(f"--- DEBUG: Matched '/oauth2callback' endpoint ---")
+            try:
+                code = query.get('code', [None])[0] # 'query' is available from start of do_GET
+                if not code:
+                    self._send_response(400, {"error": "Missing authorization code from Google."})
+                    return
+
+                if InstalledAppFlow is None or google_discovery_service is None:
+                    print("!!! ERROR: OAuth components (InstalledAppFlow or discovery service) not available.")
+                    self._send_response(500, {"error": "Google OAuth components missing on server."})
+                    return
+
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    CLIENT_SECRETS_FILE, scopes=GOOGLE_SCOPES, redirect_uri=GOOGLE_REDIRECT_URI
+                )
+                flow.fetch_token(code=code)
+                credentials = flow.credentials
+
+                # Use the imported google_discovery_service module
+                userinfo_service = google_discovery_service.build('oauth2', 'v2', credentials=credentials)
+                user_info = userinfo_service.userinfo().get().execute()
+                
+                # DEBUG: Print user_info from Google
+                print(f"--- DEBUG: User info from Google: {user_info} ---")
+
+                user_email = user_info.get('email')
+                user_name_from_google_raw = user_info.get('name', user_email) # Get the raw name
+                profile_picture = user_info.get('picture') # Get profile picture URL
+
+                # Determine the name to be used for the cookie
+                name_for_cookie = ''
+                if user_email: # If we have an email from Google
+                    name_for_cookie = user_email.split('@', 1)[0] # Take the part before the first '@'
+                elif user_name_from_google_raw: # Fallback to Google display name if email is somehow missing
+                    name_for_cookie = user_name_from_google_raw.strip('"')
+                # If both email and raw name are missing, name_for_cookie will be empty.
+                # This is unlikely with Google OAuth scopes requesting email.
+
+                print(f"--- DEBUG: OAuth - Email: '{user_email}', Raw Google Name: '{user_name_from_google_raw}', Picture: '{profile_picture}', Generated Name for Cookie: '{name_for_cookie}' ---")
+
+                if not user_email:
+                    self._send_response(400, {"error": "Could not retrieve email from Google."})
+                    return
+
+                with data_lock:
+                    if user_email not in user_password_store:
+                        print(f"--- DEBUG: New Google user '{user_email}' (name: '{name_for_cookie}'). Adding to store. ---")
+                        user_password_store[user_email] = {
+                            'password_hash': '_GOOGLE_AUTH_USER_',
+                            'profile_picture_url': profile_picture if profile_picture else '_NULL_'
+                        }
+                        save_user_data_to_sql()
+
+                all_cookies = create_cookies(USERNAME_COOKIE_NAME, name_for_cookie, path='/', httponly=False) + \
+                              create_cookies(SESSION_COOKIE_NAME, VALID_SESSION_VALUE, path='/') + \
+                              create_cookie_clear_headers(CHANGE_PASSWORD_COOKIE_NAME, path='/')
+                
+                # --- Send response headers MANUALLY for OAuth callback ---
+                self.send_response(302) # Redirect
+                self.send_header('Location', '/menu.html') # Redirect location
+                # CORS Headers (important if the redirect target needs them, though usually not for 302)
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+                self.send_header('Access-Control-Allow-Headers', 'Content-Type, Cookie')
+                self.send_header('Access-Control-Allow-Credentials', 'true')
+
+                # Send EACH Set-Cookie header individually
+                print(f"--- DEBUG: OAuth - Preparing to send {len(all_cookies)} cookie(s)... ---")
+                for header_name, header_value in all_cookies:
+                    self.send_header(header_name, header_value)
+                    print(f"--- DEBUG: OAuth - Sent {header_name} header: {header_value} ---")
+                
+                self.end_headers()
+                # No body needed for a 302 redirect
+                print(f"--- DEBUG: OAuth successful for user '{name_for_cookie}', redirecting to /menu.html with cookies. ---")
+                # self._send_response(302, headers={'Location': '/menu.html', **dict(all_cookies)}) # Old problematic line
+            except Exception as e:
+                print(f"!!! Error during Google OAuth callback: {e}")
+                print(traceback.format_exc())
+                self._send_response(500, {"error": "Google OAuth callback failed."})
+            return
+
         # File Serving Logic
         # --- Password Change Check (for Pages) ---
         # Check *after* login check but *before* serving protected files
@@ -1063,13 +1297,17 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                     content = f.read()
                 self._send_response(200, data=content, content_type=content_type)
             else:
-                 # If it's not a file, maybe it's a directory index request? Deny for now.
-                 print(f"File not found or is directory: {file_path}")
-                 self._send_response(404, {"error": "Resource not found"}, content_type='application/json')
+                # If it's not a recognized API endpoint or an existing file, return 404
+                print(f"--- DEBUG: Path '{path}' did not match specific API or OAuth endpoints, and file not found at '{file_path}', sending 404. ---")
+                self._send_response(404, {"error": "Resource not found", "requested_path": path}, content_type='application/json')
 
         except FileNotFoundError as e:
             print(f"File serving error (404): {e}")
-            self._send_response(404, {"error": "File not found"}, content_type='application/json')
+            # Ensure the error message includes the path for better debugging
+            # The 'path' variable here is the one parsed at the start of do_GET
+            print(f"--- DEBUG: FileNotFoundError for path '{path}', sending 404. ---")
+            self._send_response(404, {"error": "File not found", "requested_path": path}, content_type='application/json')
+
         except Exception as e:
             print(f"!!! Error serving file {path}: {e}")
             print(traceback.format_exc())
@@ -1110,7 +1348,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
                 if stored_info and submitted_password:
                     # --- UNPACK the tuple returned by verify_password ---
-                    login_successful, extra_cookie_headers = verify_password(stored_info, submitted_password, username)
+                    login_successful, extra_cookie_headers = verify_password(stored_user_data, submitted_password, username)
                     # --- END CHANGE ---
                     if not login_successful:
                         print(f"Password verification failed for user: {username}")
@@ -1122,8 +1360,12 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
                 if login_successful:
                     # --- Prepare the standard cookies ---
-                    user_cookie_headers = create_cookies(USERNAME_COOKIE_NAME, f"{username}", path='/', httponly=False) # Allow JS to read username
-                    session_cookie_headers = create_cookies(SESSION_COOKIE_NAME, f"{VALID_SESSION_VALUE}", path='/')
+                    # Ensure username doesn't have accidental surrounding quotes before setting cookie
+                    cleaned_username = username.strip('"') if username else ""
+                    
+                    # Use cleaned_username for the cookie
+                    user_cookie_headers = create_cookies(USERNAME_COOKIE_NAME, cleaned_username, path='/', httponly=False)
+                    session_cookie_headers = create_cookies(SESSION_COOKIE_NAME, VALID_SESSION_VALUE, path='/')
 
                     # --- COMBINE standard cookies with any extra ones returned ---
                     all_cookie_headers = user_cookie_headers + session_cookie_headers + extra_cookie_headers
@@ -1258,16 +1500,25 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                     if pass_null == False:
                         try:
                             hashed_pw = hash_password(password)
-                            user_password_store[username] = hashed_pw
+                            user_password_store[username] = {
+                                'password_hash': hashed_pw,
+                                'profile_picture_url': '_NULL_'
+                            }
                             save_needed = True
                             print(f"User '{username}' added to memory.")
                         except Exception as e:
                             print(f"!!! Error hashing password for {username}: {e}")
                             message = "Server error during password hashing."
                             status_code = 500
+                    elif pass_null == True and username in user_password_store: # User exists, setting password to NULL
+                        user_password_store[username]['password_hash'] = "_NULL_"
+                        save_needed = True # This branch is unlikely to be hit due to outer check, but if it were, it's fine.
                     else:
                         hashed_pw = "_NULL_" # Explicitly set to null
-                        user_password_store[username] = hashed_pw
+                        user_password_store[username] = { # Ensure a dictionary is stored
+                            'password_hash': hashed_pw,
+                            'profile_picture_url': '_NULL_' # Default profile picture URL
+                        }
                         print(f"User '{username}' added to memory with NULL password.")
                         save_needed = True
 
@@ -1444,6 +1695,9 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 return
             # --- END CORRECTION ---
 
+            if is_user_using_oauth(username, self):
+                return
+
             old_password = data.get('oldPassword')
             new_password = data.get('newPassword') # Get new password from request
 
@@ -1464,15 +1718,15 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             save_needed = False
 
             with data_lock: # Or use a dedicated user_data_lock
-                stored_password_info = user_password_store.get(username)
+                stored_user_data = user_password_store.get(username)
 
-                if not stored_password_info:
+                if not stored_user_data:
                     message = f"User '{username}' not found."
                     status_code = 404 # Not Found
                 else:
                     if verification_needed == True:
                         # verify_password returns a tuple (bool, headers)
-                        is_old_valid, _ = verify_password(stored_password_info, old_password, username)
+                        is_old_valid, _ = verify_password(stored_user_data, old_password, username)
                         if not is_old_valid:
                         # if verify_password(stored_password_info, old_password, username) == False:
                             message = "Old password verification failed."
@@ -1482,7 +1736,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
                     try:
                         hashed_pw = hash_password(new_password)
-                        user_password_store[username] = hashed_pw
+                        user_password_store[username]['password_hash'] = hashed_pw # Update only hash
                         save_needed = True
                         print(f"Password changed in memory for user '{username}'.")
                     except Exception as e:
@@ -1626,6 +1880,7 @@ if __name__ == "__main__":
     print(f"Using counts data file: {SQL_FILE_PATH}")
     print(f"Using logins data file: {LOGINS_SQL_FILE_PATH}") # <--- NEW
     print(f"Using classes data file: {CLASSES_SQL_FILE_PATH}")
+    print(f"Using Google client secrets file: {CLIENT_SECRETS_FILE}")
     print(f"Using hashlib.pbkdf2_hmac with {ITERATIONS} iterations.")
     print(f"\nAccess the application via: http://{HOST}:{PORT}/")
     print(f"(Will redirect to /login.html if not logged in)")
