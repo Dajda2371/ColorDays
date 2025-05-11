@@ -813,6 +813,8 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 status = "not_set" # Match frontend expectation
             # You might need a more robust check than just length if handle_add_user writes NULL
             # Let's assume parse_logins_sql_line filters out bad hashes, so what's loaded is valid or None/NULL
+            elif password_hash == '_GOOGLE_AUTH_USER_':
+                status = "google_auth_user" # Match frontend expectation
             elif password_hash[0] == '_' and password_hash[-1] == '_':
                 status = password_hash[1:-1] # Extract the password between underscores
             else:
