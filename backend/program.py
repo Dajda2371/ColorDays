@@ -170,7 +170,7 @@ def verify_password(stored_password_info, provided_password, username):
     # Compare the derived key with the stored key
     # hmac.compare_digest helps prevent timing attacks
     is_match = hmac.compare_digest(stored_key, new_key)
-    create_cookies(SQL_COOKIE_NAME, username, path='/') # Set the SQL auth cookie
+    create_cookies(SQL_COOKIE_NAME, username, path='/', httponly=False) # Set the SQL auth cookie
     return is_match, [] # <-- MODIFIED: Return tuple (True/False, empty list)
 
 # --- User Credentials Store (Loaded from logins.sql) --- <--- MODIFIED
@@ -1215,7 +1215,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 all_cookies = create_cookies(USERNAME_COOKIE_NAME, name_for_cookie, path='/', httponly=False) + \
                               create_cookies(SESSION_COOKIE_NAME, VALID_SESSION_VALUE, path='/') + \
                               create_cookie_clear_headers(CHANGE_PASSWORD_COOKIE_NAME, path='/') + \
-                              create_cookies(GOOGLE_COOKIE_NAME, user_email, path='/')
+                              create_cookies(GOOGLE_COOKIE_NAME, user_email, path='/', httponly=False)
                 
                 # --- Send response headers MANUALLY for OAuth callback ---
                 self.send_response(302) # Redirect
@@ -1422,7 +1422,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             session_clear_headers = create_cookie_clear_headers(SESSION_COOKIE_NAME, path='/')
             user_clear_headers = create_cookie_clear_headers(USERNAME_COOKIE_NAME, path='/')
             change_pw_clear_headers = create_cookie_clear_headers(CHANGE_PASSWORD_COOKIE_NAME, path='/') # Clear this too
-            sql_user_clear_headers = create_cookie_clear_headers(SQL_USER_COOKIE_NAME, path='/') # Clear SQL user cookie if used
+            sql_user_clear_headers = create_cookie_clear_headers(SQL_COOKIE_NAME, path='/') # Clear SQL user cookie if used
             google_auth_clear_headers = create_cookie_clear_headers(GOOGLE_COOKIE_NAME, path='/') # Clear Google auth cookie if used
             all_clear_headers = session_clear_headers + user_clear_headers + change_pw_clear_headers + sql_user_clear_headers + google_auth_clear_headers
             # --- End using new function ---
