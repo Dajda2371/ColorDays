@@ -170,7 +170,6 @@ def verify_password(stored_password_info, provided_password, username):
     # Compare the derived key with the stored key
     # hmac.compare_digest helps prevent timing attacks
     is_match = hmac.compare_digest(stored_key, new_key)
-    create_cookies(SQL_COOKIE_NAME, username, path='/', httponly=False) # Set the SQL auth cookie
     return is_match, [] # <-- MODIFIED: Return tuple (True/False, empty list)
 
 # --- User Credentials Store (Loaded from logins.sql) --- <--- MODIFIED
@@ -1373,9 +1372,10 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                     # Use cleaned_username for the cookie
                     user_cookie_headers = create_cookies(USERNAME_COOKIE_NAME, cleaned_username, path='/', httponly=False)
                     session_cookie_headers = create_cookies(SESSION_COOKIE_NAME, VALID_SESSION_VALUE, path='/')
+                    sql_user_cookie_headers = create_cookies(SQL_COOKIE_NAME, username, path='/', httponly=False) # Set the SQL auth cookie
 
                     # --- COMBINE standard cookies with any extra ones returned ---
-                    all_cookie_headers = user_cookie_headers + session_cookie_headers + extra_cookie_headers
+                    all_cookie_headers = user_cookie_headers + session_cookie_headers + extra_cookie_headers + sql_user_cookie_headers
                     # --- END CHANGE ---
 
                     # --- Send response headers MANUALLY ---
