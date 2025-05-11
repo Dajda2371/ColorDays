@@ -1422,7 +1422,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             session_clear_headers = create_cookie_clear_headers(SESSION_COOKIE_NAME, path='/')
             user_clear_headers = create_cookie_clear_headers(USERNAME_COOKIE_NAME, path='/')
             change_pw_clear_headers = create_cookie_clear_headers(CHANGE_PASSWORD_COOKIE_NAME, path='/') # Clear this too
-            sql_user_clear_headers = create_cookie_clear_headers(SQL_COOKIE_NAME, path='/') # Clear SQL user cookie if used
+            sql_user_clear_headers = create_cookie_clear_headers(SQL_USER_COOKIE_NAME, path='/') # Clear SQL user cookie if used
             google_auth_clear_headers = create_cookie_clear_headers(GOOGLE_COOKIE_NAME, path='/') # Clear Google auth cookie if used
             all_clear_headers = session_clear_headers + user_clear_headers + change_pw_clear_headers + sql_user_clear_headers + google_auth_clear_headers
             # --- End using new function ---
