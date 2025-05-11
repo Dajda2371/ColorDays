@@ -1,20 +1,57 @@
 import os
 
-try:
-    os.system('pip --version')
-except Exception:
+if "pip: command not found" in os.popen('pip --version').read(): # Check if pip is installed
+    print("pip not found, attempting to install...")
     os.system('python ./get-pip.py')
     os.system('pip install --upgrade pip')
 
-try:
-    import google_auth_oauthlib.flow
-    import googleapiclient.discovery
-    print("Google OAuth libraries found.")
-except ImportError:
-    print("Google OAuth libraries not found, installing...")
-    os.system('pip install google-auth-oauthlib google-api-python-client requests')
+# Initialize required names to None. They will be populated if imports succeed.
+InstalledAppFlow = None
+google_discovery_service = None # This will hold the 'discovery' module
 
-from google_auth_oauthlib.flow import InstalledAppFlow
+try:
+    from google_auth_oauthlib.flow import InstalledAppFlow as IAF
+    from googleapiclient import discovery as discovery_module
+    
+    # Assign to our module-level variables
+    InstalledAppFlow = IAF
+    google_discovery_service = discovery_module
+    print("Google OAuth libraries found and imported.")
+except ImportError:
+    print("One or more Google OAuth libraries not found, attempting to install...")
+    install_cmd = 'pip install --upgrade google-auth-oauthlib google-api-python-client requests'
+    print(f"Running: {install_cmd}")
+    return_code = os.system(install_cmd)
+    if return_code == 0:
+        print("Installation attempt successful. Re-attempting import...")
+        try:
+            # Re-import and assign to the module-level variables using globals()
+            # to ensure they are updated in the module's scope.
+            from google_auth_oauthlib.flow import InstalledAppFlow as IAF_retry
+            from googleapiclient import discovery as discovery_module_retry
+            
+            globals()['InstalledAppFlow'] = IAF_retry
+            globals()['google_discovery_service'] = discovery_module_retry
+            print("Libraries imported successfully after installation.")
+        except ImportError:
+            print("!!! CRITICAL: Failed to import libraries even after installation. OAuth will not work. Please restart the server.")
+            # Ensure they remain None if the retry fails
+            globals()['InstalledAppFlow'] = None
+            globals()['google_discovery_service'] = None
+    else:
+        print(f"!!! CRITICAL: Installation failed with code {return_code}. Please install 'google-auth-oauthlib' and 'google-api-python-client' manually and restart the server.")
+        globals()['InstalledAppFlow'] = None
+        globals()['google_discovery_service'] = None
+
+# Check if imports were successful
+if InstalledAppFlow is None or google_discovery_service is None:
+    print("!!! WARNING: Google OAuth libraries could not be loaded. Google login will be disabled.")
+    # Ensure they are defined as None if not already, to prevent NameErrors later if checked.
+    if 'InstalledAppFlow' not in globals() or globals()['InstalledAppFlow'] is None:
+        InstalledAppFlow = None
+    if 'google_discovery_service' not in globals() or globals()['google_discovery_service'] is None:
+        google_discovery_service = None
+
 import http.server
 import socketserver
 import json
@@ -923,6 +960,9 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         path = parsed_path.path
         query = urllib.parse.parse_qs(parsed_path.query)
 
+        # DEBUG: Print the requested path at the beginning of do_GET
+        print(f"--- DEBUG: do_GET received request for path: '{path}', full self.path: '{self.path}' ---")
+
         if path == '/list_users':
             # --- Authentication Check ---
             if not self.is_logged_in():
@@ -1021,6 +1061,82 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             self._send_response(200, response_data)
             return # Make sure to return after handling
 
+        # --- Google OAuth Endpoints (Moved to do_GET) ---
+        elif path == '/login/google':
+            print(f"--- DEBUG: Matched '/login/google' endpoint ---")
+            try:
+                if InstalledAppFlow is None:
+                    print("!!! ERROR: InstalledAppFlow not available for Google OAuth.")
+                    self._send_response(500, {"error": "Google OAuth component (InstalledAppFlow) missing on server."})
+                    return
+
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    CLIENT_SECRETS_FILE, scopes=GOOGLE_SCOPES, redirect_uri=GOOGLE_REDIRECT_URI
+                )
+                auth_url, _ = flow.authorization_url(prompt='consent', access_type='offline') # Added access_type for refresh token
+
+                print(f"--- DEBUG: Redirecting to Google OAuth URL: {auth_url} ---")
+                self.send_response(302)
+                self.send_header('Location', auth_url)
+                self.end_headers()
+            except FileNotFoundError:
+                print(f"!!! ERROR: {CLIENT_SECRETS_FILE} not found. Google OAuth will not work.")
+                self._send_response(500, {"error": "Google OAuth configuration error (server-side)."})
+            except Exception as e:
+                print(f"!!! Error during Google OAuth initiation: {e}")
+                print(traceback.format_exc())
+                self._send_response(500, {"error": "Could not initiate Google login."})
+            return
+
+        elif path == '/oauth2callback':
+            print(f"--- DEBUG: Matched '/oauth2callback' endpoint ---")
+            try:
+                code = query.get('code', [None])[0] # 'query' is available from start of do_GET
+                if not code:
+                    self._send_response(400, {"error": "Missing authorization code from Google."})
+                    return
+
+                if InstalledAppFlow is None or google_discovery_service is None:
+                    print("!!! ERROR: OAuth components (InstalledAppFlow or discovery service) not available.")
+                    self._send_response(500, {"error": "Google OAuth components missing on server."})
+                    return
+
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    CLIENT_SECRETS_FILE, scopes=GOOGLE_SCOPES, redirect_uri=GOOGLE_REDIRECT_URI
+                )
+                flow.fetch_token(code=code)
+                credentials = flow.credentials
+
+                # Use the imported google_discovery_service module
+                userinfo_service = google_discovery_service.build('oauth2', 'v2', credentials=credentials)
+                user_info = userinfo_service.userinfo().get().execute()
+                
+                # DEBUG: Print user_info from Google
+                print(f"--- DEBUG: User info from Google: {user_info} ---")
+
+                user_email = user_info.get('email')
+                user_name_from_google = user_info.get('name', user_email)
+
+                if not user_email:
+                    self._send_response(400, {"error": "Could not retrieve email from Google."})
+                    return
+
+                with data_lock:
+                    if user_email not in user_password_store:
+                        print(f"--- DEBUG: New Google user '{user_email}'. Adding to store. ---")
+                        user_password_store[user_email] = "GOOGLE_AUTH_USER"
+                        save_user_data_to_sql()
+
+                all_cookies = create_cookies(USERNAME_COOKIE_NAME, user_name_from_google, path='/', httponly=False) + \
+                              create_cookies(SESSION_COOKIE_NAME, VALID_SESSION_VALUE, path='/') + \
+                              create_cookie_clear_headers(CHANGE_PASSWORD_COOKIE_NAME, path='/')
+                self._send_response(302, headers={'Location': '/menu.html', **dict(all_cookies)})
+            except Exception as e:
+                print(f"!!! Error during Google OAuth callback: {e}")
+                print(traceback.format_exc())
+                self._send_response(500, {"error": "Google OAuth callback failed."})
+            return
+
         # File Serving Logic
         # --- Password Change Check (for Pages) ---
         # Check *after* login check but *before* serving protected files
@@ -1083,13 +1199,17 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                     content = f.read()
                 self._send_response(200, data=content, content_type=content_type)
             else:
-                 # If it's not a file, maybe it's a directory index request? Deny for now.
-                 print(f"File not found or is directory: {file_path}")
-                 self._send_response(404, {"error": "Resource not found"}, content_type='application/json')
+                # If it's not a recognized API endpoint or an existing file, return 404
+                print(f"--- DEBUG: Path '{path}' did not match specific API or OAuth endpoints, and file not found at '{file_path}', sending 404. ---")
+                self._send_response(404, {"error": "Resource not found", "requested_path": path}, content_type='application/json')
 
         except FileNotFoundError as e:
             print(f"File serving error (404): {e}")
-            self._send_response(404, {"error": "File not found"}, content_type='application/json')
+            # Ensure the error message includes the path for better debugging
+            # The 'path' variable here is the one parsed at the start of do_GET
+            print(f"--- DEBUG: FileNotFoundError for path '{path}', sending 404. ---")
+            self._send_response(404, {"error": "File not found", "requested_path": path}, content_type='application/json')
+
         except Exception as e:
             print(f"!!! Error serving file {path}: {e}")
             print(traceback.format_exc())
@@ -1227,72 +1347,6 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         # Must happen *after* login check but *before* executing protected endpoint logic
         cookies = self.get_cookies() # Get fresh cookies for POST check
         password_change_required = cookies.get(CHANGE_PASSWORD_COOKIE_NAME)
-
-        # --- Google OAuth Endpoints (Handled in do_GET for redirect and callback) ---
-        if path == '/login/google':
-            try:
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    CLIENT_SECRETS_FILE, scopes=GOOGLE_SCOPES, redirect_uri=GOOGLE_REDIRECT_URI
-                )
-                # Note: For web apps, managing 'state' for CSRF is crucial.
-                # InstalledAppFlow might not handle this as robustly for web server use cases
-                # as a Flow object would. For simplicity, we're relying on the library's default.
-                auth_url, _ = flow.authorization_url(prompt='consent') # Add prompt for consent
-
-                print(f"Redirecting to Google OAuth URL: {auth_url}")
-                self.send_response(302)
-                self.send_header('Location', auth_url)
-                self.end_headers()
-            except FileNotFoundError:
-                print(f"!!! ERROR: {CLIENT_SECRETS_FILE} not found. Google OAuth will not work.")
-                self._send_response(500, {"error": "Google OAuth configuration error (server-side)."})
-            except Exception as e:
-                print(f"!!! Error during Google OAuth initiation: {e}")
-                print(traceback.format_exc())
-                self._send_response(500, {"error": "Could not initiate Google login."})
-            return
-
-        elif path == '/oauth2callback':
-            try:
-                code = query.get('code', [None])[0]
-                if not code:
-                    self._send_response(400, {"error": "Missing authorization code from Google."})
-                    return
-
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    CLIENT_SECRETS_FILE, scopes=GOOGLE_SCOPES, redirect_uri=GOOGLE_REDIRECT_URI
-                )
-                flow.fetch_token(code=code)
-                credentials = flow.credentials
-
-                # Get user info
-                userinfo_service = googleapiclient.discovery.build('oauth2', 'v2', credentials=credentials)
-                user_info = userinfo_service.userinfo().get().execute()
-                user_email = user_info.get('email')
-                user_name_from_google = user_info.get('name', user_email) # Fallback to email if name not present
-
-                if not user_email:
-                    self._send_response(400, {"error": "Could not retrieve email from Google."})
-                    return
-
-                with data_lock: # Protect access to user_password_store and saving
-                    if user_email not in user_password_store:
-                        print(f"New Google user: {user_email}. Creating placeholder entry.")
-                        user_password_store[user_email] = "GOOGLE_AUTH_USER" # Special marker
-                        save_user_data_to_sql() # Save the new user
-
-                # Create session cookies
-                user_cookie_headers = create_cookies(USERNAME_COOKIE_NAME, user_name_from_google, path='/', httponly=False)
-                session_cookie_headers = create_cookies(SESSION_COOKIE_NAME, VALID_SESSION_VALUE, path='/')
-                change_pw_clear_headers = create_cookie_clear_headers(CHANGE_PASSWORD_COOKIE_NAME, path='/') # Clear this
-                all_cookies = user_cookie_headers + session_cookie_headers + change_pw_clear_headers
-
-                self._send_response(302, headers={'Location': '/menu.html', **dict(all_cookies)}) # Redirect with cookies
-            except Exception as e:
-                print(f"!!! Error during Google OAuth callback: {e}")
-                print(traceback.format_exc())
-                self._send_response(500, {"error": "Google OAuth callback failed."})
-            return
 
         # Define allowed POST paths during forced change
         allowed_post_paths_during_change = ['/login', '/logout', '/api/auth/change']
