@@ -190,6 +190,13 @@ data_store = collections.defaultdict(lambda: collections.defaultdict(lambda: col
 data_lock = threading.RLock()
 class_data_store = [] # To store data from classes.sql as a list of dicts
 
+def is_user_using_oauth(username, self):
+    if username in user_password_store:
+        if user_password_store[username]['password_hash'] == '_GOOGLE_AUTH_USER_':
+            print(f"User '{username}' is using Google OAuth. Password change not allowed.")
+            self._send_response(403, {"error": "Password change not allowed for Google OAuth users."})
+            return
+
 def create_cookies(name, value, path='/', expires=None, max_age=None, httponly=True, samesite='Lax'):
     """
     Creates a list of ('Set-Cookie', header_value) tuples for a single cookie.
@@ -952,6 +959,10 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
     def handle_reset_password(self, data): # Accept parsed data
         username = data.get("username")
+
+        if is_user_using_oauth(username, self):
+            return
+
         new_password = data.get("new_password")
 
         # --- Add checks for missing data ---
@@ -1683,6 +1694,9 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 self._send_response(401, {"error": "Authentication error: User identity not found."})
                 return
             # --- END CORRECTION ---
+
+            if is_user_using_oauth(username, self):
+                return
 
             old_password = data.get('oldPassword')
             new_password = data.get('newPassword') # Get new password from request
