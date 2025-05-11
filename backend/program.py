@@ -1115,7 +1115,18 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 print(f"--- DEBUG: User info from Google: {user_info} ---")
 
                 user_email = user_info.get('email')
-                user_name_from_google = user_info.get('name', user_email)
+                user_name_from_google_raw = user_info.get('name', user_email) # Get the raw name
+
+                # Determine the name to be used for the cookie
+                name_for_cookie = ''
+                if user_email: # If we have an email from Google
+                    name_for_cookie = user_email.split('@', 1)[0] # Take the part before the first '@'
+                elif user_name_from_google_raw: # Fallback to Google display name if email is somehow missing
+                    name_for_cookie = user_name_from_google_raw.strip('"')
+                # If both email and raw name are missing, name_for_cookie will be empty.
+                # This is unlikely with Google OAuth scopes requesting email.
+
+                print(f"--- DEBUG: OAuth - Email: '{user_email}', Raw Google Name: '{user_name_from_google_raw}', Generated Name for Cookie: '{name_for_cookie}' ---")
 
                 if not user_email:
                     self._send_response(400, {"error": "Could not retrieve email from Google."})
@@ -1123,11 +1134,11 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
                 with data_lock:
                     if user_email not in user_password_store:
-                        print(f"--- DEBUG: New Google user '{user_email}'. Adding to store. ---")
+                        print(f"--- DEBUG: New Google user '{user_email}' (name: '{name_for_cookie}'). Adding to store. ---")
                         user_password_store[user_email] = "GOOGLE_AUTH_USER"
                         save_user_data_to_sql()
 
-                all_cookies = create_cookies(USERNAME_COOKIE_NAME, user_name_from_google, path='/', httponly=False) + \
+                all_cookies = create_cookies(USERNAME_COOKIE_NAME, name_for_cookie, path='/', httponly=False) + \
                               create_cookies(SESSION_COOKIE_NAME, VALID_SESSION_VALUE, path='/') + \
                               create_cookie_clear_headers(CHANGE_PASSWORD_COOKIE_NAME, path='/')
                 
@@ -1148,7 +1159,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 
                 self.end_headers()
                 # No body needed for a 302 redirect
-                print(f"--- DEBUG: OAuth successful for user '{user_name_from_google}', redirecting to /menu.html with cookies. ---")
+                print(f"--- DEBUG: OAuth successful for user '{name_for_cookie}', redirecting to /menu.html with cookies. ---")
                 # self._send_response(302, headers={'Location': '/menu.html', **dict(all_cookies)}) # Old problematic line
             except Exception as e:
                 print(f"!!! Error during Google OAuth callback: {e}")
