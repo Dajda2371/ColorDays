@@ -117,12 +117,16 @@ def hash_password(password):
 
 def verify_password(stored_password_info, provided_password, username):
     """Verifies a provided password against the stored salt and hash."""
+    if not isinstance(stored_password_info, dict) or 'password_hash' not in stored_password_info:
+        print(f"Error: Invalid stored_password_info structure for user '{username}'. Expected a dict with 'password_hash'.")
+        return False, []
+    
+    password_hash = stored_password_info['password_hash']
     extra_cookie_headers = [] # Initialize default empty list
 
-    if not stored_password_info or ':' not in stored_password_info:
-        # Check for pre-generated password format _password_
-        if stored_password_info and stored_password_info.startswith('_') and stored_password_info.endswith('_'):
-            _stored_password_info_ = stored_password_info[1:-1]
+    if not password_hash or (':' not in password_hash and not (password_hash.startswith('_') and password_hash.endswith('_'))):
+        if password_hash and password_hash.startswith('_') and password_hash.endswith('_'): # Check for pre-generated password format _password_
+            _stored_password_info_ = password_hash[1:-1]
             if _stored_password_info_ == provided_password:
                 print(f"User '{username}' logged in with pregenerated password '{provided_password}'. Setting change password cookie.")
                 # Create the specific cookie needed for this case
@@ -143,7 +147,7 @@ def verify_password(stored_password_info, provided_password, username):
             print(f"Error: Invalid or missing stored password info for user '{username}'.")
             return False, [] # <-- MODIFIED: Return tuple
     try:
-        salt_hex, key_hex = stored_password_info.split(':')
+        salt_hex, key_hex = password_hash.split(':')
         salt = binascii.unhexlify(salt_hex)
         stored_key = binascii.unhexlify(key_hex)
     except (ValueError, binascii.Error):
@@ -303,7 +307,11 @@ def parse_classes_sql_line(line):
 
 # --- Parsing for logins.sql --- <--- NEW
 def parse_logins_sql_line(line):
-    """Parses a single valid INSERT line for the users table."""
+    """
+    Parses a single valid INSERT line for the users table.
+    Handles formats with and without profile_picture_url.
+    Returns (username, password_hash, profile_picture_url) or None.
+    """
     line = line.strip()
 
     # Skip empty lines or comments
@@ -314,22 +322,51 @@ def parse_logins_sql_line(line):
     if not line.upper().startswith("INSERT INTO USERS"):
         return None
 
-    # Regex to extract username and password_hash
-    match = re.match(
-        r"INSERT INTO users\s*\(\s*username\s*,\s*password_hash\s*\)\s*VALUES\s*\(\s*'([^']+)'\s*,\s*'([^']+)'\s*\);",
-        line,
-        re.IGNORECASE
-    )
+    # Generic parser for INSERT INTO users (...) VALUES (...)
+    match = re.match(r"INSERT INTO users\s*\((.*?)\)\s*VALUES\s*\((.*?)\);", line, re.IGNORECASE)
 
     if match:
-        username, password_hash = match.groups()
-        if ':' in password_hash or password_hash.upper() == '_NULL_' or (password_hash[0] == '_' and password_hash[-1] == '_'):
-            return username, password_hash
-        else:
-            print(f"Warning: Skipped user due to bad hash format: {line}")
+        columns_str, values_str = match.groups()
+        columns = [col.strip().lower() for col in columns_str.split(',')]
+        
+        # Naive value splitting assuming values are simple strings in single quotes and no escaped quotes/commas within values
+        value_parts = []
+        temp_val = ""
+        in_string_literal = False
+        for char_idx, char_val in enumerate(values_str):
+            if char_val == "'":
+                if in_string_literal and char_idx + 1 < len(values_str) and values_str[char_idx+1] == "'": # Escaped quote ''
+                    temp_val += "'"
+                    # Skip next char as it's part of escaped quote, but regex for this is hard
+                    # This simple parser doesn't handle escaped quotes robustly.
+                    # For this app, assume simple non-escaped values.
+                else:
+                    in_string_literal = not in_string_literal
+                    if not in_string_literal: # End of a string literal
+                        value_parts.append(temp_val)
+                        temp_val = ""
+            elif in_string_literal:
+                temp_val += char_val
+        
+        if len(columns) != len(value_parts):
+            print(f"Warning: Column count ({len(columns)}) doesn't match value count ({len(value_parts)}) in logins line: {line.strip()}")
             return None
+    
+        parsed_data = dict(zip(columns, value_parts))
+        username = parsed_data.get('username')
+        password_hash = parsed_data.get('password_hash')
+        profile_picture_url = parsed_data.get('profile_picture_url', '_NULL_')
+
+        if not username or not password_hash:
+            print(f"Warning: Missing username or password_hash in parsed data from logins line: {line.strip()}")
+            return None
+        # Basic validation for password_hash format (can be expanded)
+        if not (':' in password_hash or password_hash.upper() == '_NULL_' or password_hash.upper() == 'GOOGLE_AUTH_USER' or (password_hash.startswith('_') and password_hash.endswith('_'))):
+            print(f"Warning: Skipped user '{username}' due to unrecognized password_hash format: '{password_hash}' in line: {line.strip()}")
+            return None
+        return username, password_hash, profile_picture_url
     else:
-        print(f"Warning: Could not parse logins line format: {line}")
+        print(f"Warning: Could not parse logins line format (regex mismatch): {line.strip()}")
         return None
 
 # --- Loading for tables.sql ---
@@ -442,8 +479,11 @@ def load_user_data_from_sql():
                 for line_num, line in enumerate(f, 1):
                     parsed = parse_logins_sql_line(line)
                     if parsed:
-                        username, password_hash = parsed
-                        temp_user_store[username] = password_hash
+                        username, password_hash, profile_picture_url = parsed
+                        temp_user_store[username] = {
+                            'password_hash': password_hash,
+                            'profile_picture_url': profile_picture_url if profile_picture_url else '_NULL_'
+                        }
                         users_loaded_count += 1
 
             print(f"Loaded {users_loaded_count} user(s) from {LOGINS_SQL_FILE_PATH}.")
@@ -571,11 +611,13 @@ def save_user_data_to_sql():
 
             # Iterate through the in-memory store and generate INSERT statements
             # Sort by username for consistent file output
-            for username, password_hash in sorted(user_password_store.items()):
+            for username, user_data in sorted(user_password_store.items()):
                  # Basic escaping for username (should be sufficient if usernames don't contain quotes)
                  safe_username = username.replace("'", "''")
-                 # Password hash is already hex, should be safe
-                 insert_statement = f"INSERT INTO users (username, password_hash) VALUES ('{safe_username}', '{password_hash}');"
+                 password_hash = user_data['password_hash'] # Already hex or special string
+                 profile_pic_url = user_data.get('profile_picture_url', '_NULL_')
+                 safe_profile_pic_url = profile_pic_url.replace("'", "''") if profile_pic_url else '_NULL_'
+                 insert_statement = f"INSERT INTO users (username, password_hash, profile_picture_url) VALUES ('{safe_username}', '{password_hash}', '{safe_profile_pic_url}');"
                  sql_lines.append(insert_statement)
 
             # Write the file (overwrite existing)
@@ -764,10 +806,11 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
     def handle_get_users(self):
         users = load_user_data_from_sql() # <--- Corrected line (no argument)
         user_list = []
-        for username, password_hash in users.items():
+        for username, user_data in users.items():
+            password_hash = user_data['password_hash']
             # Determine status based on the hash format from the file
             if password_hash is None or password_hash.upper() == '_NULL_': # Check for NULL explicitly if handle_add_user writes it
-                status = "not_set"
+                status = "NOT_SET" # Match frontend expectation
             # You might need a more robust check than just length if handle_add_user writes NULL
             # Let's assume parse_logins_sql_line filters out bad hashes, so what's loaded is valid or None/NULL
             elif password_hash[0] == '_' and password_hash[-1] == '_':
@@ -805,7 +848,10 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 return
 
             # Add the user with NOT_SET as the password
-            user_password_store[username] = "NOT_SET"
+            user_password_store[username] = {
+                'password_hash': 'NOT_SET', # Or use "_NOT_SET_" if you prefer the underscore convention
+                'profile_picture_url': '_NULL_'
+            }
 
             # Call your save function here!
             success = save_user_data_to_sql()
@@ -873,7 +919,12 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
         with data_lock: # Use the lock
             if username not in user_password_store:
-                message = f"User '{username}' not found."
+                # Check if it's a case issue by iterating keys
+                found_user_case_insensitive = next((k for k in user_password_store if k.lower() == username.lower()), None)
+                if found_user_case_insensitive:
+                    message = f"User '{username}' not found (case mismatch? Found: '{found_user_case_insensitive}')."
+                else:
+                    message = f"User '{username}' not found."
                 status_code = 404 # Not Found
             else:
                 del user_password_store[username] # Remove from memory
@@ -926,7 +977,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             else:
                 try:
                     # Update the in-memory store
-                    user_password_store[username] = hashed
+                    user_password_store[username]['password_hash'] = hashed # Only update hash
                     save_needed = True
                     print(f"Password set/reset in memory for user '{username}'.")
                 except Exception as e:
@@ -1116,6 +1167,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
                 user_email = user_info.get('email')
                 user_name_from_google_raw = user_info.get('name', user_email) # Get the raw name
+                profile_picture = user_info.get('picture') # Get profile picture URL
 
                 # Determine the name to be used for the cookie
                 name_for_cookie = ''
@@ -1126,7 +1178,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 # If both email and raw name are missing, name_for_cookie will be empty.
                 # This is unlikely with Google OAuth scopes requesting email.
 
-                print(f"--- DEBUG: OAuth - Email: '{user_email}', Raw Google Name: '{user_name_from_google_raw}', Generated Name for Cookie: '{name_for_cookie}' ---")
+                print(f"--- DEBUG: OAuth - Email: '{user_email}', Raw Google Name: '{user_name_from_google_raw}', Picture: '{profile_picture}', Generated Name for Cookie: '{name_for_cookie}' ---")
 
                 if not user_email:
                     self._send_response(400, {"error": "Could not retrieve email from Google."})
@@ -1135,7 +1187,10 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 with data_lock:
                     if user_email not in user_password_store:
                         print(f"--- DEBUG: New Google user '{user_email}' (name: '{name_for_cookie}'). Adding to store. ---")
-                        user_password_store[user_email] = "GOOGLE_AUTH_USER"
+                        user_password_store[user_email] = {
+                            'password_hash': '_GOOGLE_AUTH_USER_',
+                            'profile_picture_url': profile_picture if profile_picture else '_NULL_'
+                        }
                         save_user_data_to_sql()
 
                 all_cookies = create_cookies(USERNAME_COOKIE_NAME, name_for_cookie, path='/', httponly=False) + \
@@ -1280,7 +1335,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
                 if stored_info and submitted_password:
                     # --- UNPACK the tuple returned by verify_password ---
-                    login_successful, extra_cookie_headers = verify_password(stored_info, submitted_password, username)
+                    login_successful, extra_cookie_headers = verify_password(stored_user_data, submitted_password, username)
                     # --- END CHANGE ---
                     if not login_successful:
                         print(f"Password verification failed for user: {username}")
@@ -1292,8 +1347,12 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
                 if login_successful:
                     # --- Prepare the standard cookies ---
-                    user_cookie_headers = create_cookies(USERNAME_COOKIE_NAME, f"{username}", path='/', httponly=False) # Allow JS to read username
-                    session_cookie_headers = create_cookies(SESSION_COOKIE_NAME, f"{VALID_SESSION_VALUE}", path='/')
+                    # Ensure username doesn't have accidental surrounding quotes before setting cookie
+                    cleaned_username = username.strip('"') if username else ""
+                    
+                    # Use cleaned_username for the cookie
+                    user_cookie_headers = create_cookies(USERNAME_COOKIE_NAME, cleaned_username, path='/', httponly=False)
+                    session_cookie_headers = create_cookies(SESSION_COOKIE_NAME, VALID_SESSION_VALUE, path='/')
 
                     # --- COMBINE standard cookies with any extra ones returned ---
                     all_cookie_headers = user_cookie_headers + session_cookie_headers + extra_cookie_headers
@@ -1428,13 +1487,19 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                     if pass_null == False:
                         try:
                             hashed_pw = hash_password(password)
-                            user_password_store[username] = hashed_pw
+                            user_password_store[username] = {
+                                'password_hash': hashed_pw,
+                                'profile_picture_url': '_NULL_'
+                            }
                             save_needed = True
                             print(f"User '{username}' added to memory.")
                         except Exception as e:
                             print(f"!!! Error hashing password for {username}: {e}")
                             message = "Server error during password hashing."
                             status_code = 500
+                    elif pass_null == True and username in user_password_store: # User exists, setting password to NULL
+                        user_password_store[username]['password_hash'] = "_NULL_"
+                        save_needed = True
                     else:
                         hashed_pw = "_NULL_" # Explicitly set to null
                         user_password_store[username] = hashed_pw
@@ -1634,15 +1699,15 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             save_needed = False
 
             with data_lock: # Or use a dedicated user_data_lock
-                stored_password_info = user_password_store.get(username)
+                stored_user_data = user_password_store.get(username)
 
-                if not stored_password_info:
+                if not stored_user_data:
                     message = f"User '{username}' not found."
                     status_code = 404 # Not Found
                 else:
                     if verification_needed == True:
                         # verify_password returns a tuple (bool, headers)
-                        is_old_valid, _ = verify_password(stored_password_info, old_password, username)
+                        is_old_valid, _ = verify_password(stored_user_data, old_password, username)
                         if not is_old_valid:
                         # if verify_password(stored_password_info, old_password, username) == False:
                             message = "Old password verification failed."
@@ -1652,7 +1717,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
                     try:
                         hashed_pw = hash_password(new_password)
-                        user_password_store[username] = hashed_pw
+                        user_password_store[username]['password_hash'] = hashed_pw # Update only hash
                         save_needed = True
                         print(f"Password changed in memory for user '{username}'.")
                     except Exception as e:
