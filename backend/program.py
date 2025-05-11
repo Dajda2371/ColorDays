@@ -124,7 +124,7 @@ def verify_password(stored_password_info, provided_password, username):
     password_hash = stored_password_info['password_hash']
     extra_cookie_headers = [] # Initialize default empty list
 
-    if not password_hash or (':' not in password_hash and not (password_hash.startswith('_') and password_hash.endswith('_'))):
+    if not password_hash or (':' not in password_hash and (password_hash.startswith('_') and password_hash.endswith('_'))):
         if password_hash and password_hash.startswith('_') and password_hash.endswith('_'): # Check for pre-generated password format _password_
             _stored_password_info_ = password_hash[1:-1]
             if _stored_password_info_ == provided_password:
@@ -1355,7 +1355,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
                 if stored_info and submitted_password:
                     # --- UNPACK the tuple returned by verify_password ---
-                    login_successful, extra_cookie_headers = verify_password(stored_user_data, submitted_password, username)
+                    login_successful, extra_cookie_headers = verify_password(stored_info, submitted_password, username)
                     # --- END CHANGE ---
                     if not login_successful:
                         print(f"Password verification failed for user: {username}")
@@ -1893,6 +1893,8 @@ if __name__ == "__main__":
     print(f"Using hashlib.pbkdf2_hmac with {ITERATIONS} iterations.")
     print(f"\nAccess the application via: http://{HOST}:{PORT}/")
     print(f"(Will redirect to /login.html if not logged in)")
+    print("-------------------------------------------------------------")
+    print("")
 
 
     try:
