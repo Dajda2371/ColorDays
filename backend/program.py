@@ -810,7 +810,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             password_hash = user_data['password_hash']
             # Determine status based on the hash format from the file
             if password_hash is None or password_hash.upper() == '_NULL_': # Check for NULL explicitly if handle_add_user writes it
-                status = "NOT_SET" # Match frontend expectation
+                status = "not_set" # Match frontend expectation
             # You might need a more robust check than just length if handle_add_user writes NULL
             # Let's assume parse_logins_sql_line filters out bad hashes, so what's loaded is valid or None/NULL
             elif password_hash[0] == '_' and password_hash[-1] == '_':
@@ -1499,10 +1499,13 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                             status_code = 500
                     elif pass_null == True and username in user_password_store: # User exists, setting password to NULL
                         user_password_store[username]['password_hash'] = "_NULL_"
-                        save_needed = True
+                        save_needed = True # This branch is unlikely to be hit due to outer check, but if it were, it's fine.
                     else:
                         hashed_pw = "_NULL_" # Explicitly set to null
-                        user_password_store[username] = hashed_pw
+                        user_password_store[username] = { # Ensure a dictionary is stored
+                            'password_hash': hashed_pw,
+                            'profile_picture_url': '_NULL_' # Default profile picture URL
+                        }
                         print(f"User '{username}' added to memory with NULL password.")
                         save_needed = True
 
