@@ -1130,7 +1130,26 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 all_cookies = create_cookies(USERNAME_COOKIE_NAME, user_name_from_google, path='/', httponly=False) + \
                               create_cookies(SESSION_COOKIE_NAME, VALID_SESSION_VALUE, path='/') + \
                               create_cookie_clear_headers(CHANGE_PASSWORD_COOKIE_NAME, path='/')
-                self._send_response(302, headers={'Location': '/menu.html', **dict(all_cookies)})
+                
+                # --- Send response headers MANUALLY for OAuth callback ---
+                self.send_response(302) # Redirect
+                self.send_header('Location', '/menu.html') # Redirect location
+                # CORS Headers (important if the redirect target needs them, though usually not for 302)
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+                self.send_header('Access-Control-Allow-Headers', 'Content-Type, Cookie')
+                self.send_header('Access-Control-Allow-Credentials', 'true')
+
+                # Send EACH Set-Cookie header individually
+                print(f"--- DEBUG: OAuth - Preparing to send {len(all_cookies)} cookie(s)... ---")
+                for header_name, header_value in all_cookies:
+                    self.send_header(header_name, header_value)
+                    print(f"--- DEBUG: OAuth - Sent {header_name} header: {header_value} ---")
+                
+                self.end_headers()
+                # No body needed for a 302 redirect
+                print(f"--- DEBUG: OAuth successful for user '{user_name_from_google}', redirecting to /menu.html with cookies. ---")
+                # self._send_response(302, headers={'Location': '/menu.html', **dict(all_cookies)}) # Old problematic line
             except Exception as e:
                 print(f"!!! Error during Google OAuth callback: {e}")
                 print(traceback.format_exc())
