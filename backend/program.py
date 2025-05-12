@@ -94,6 +94,12 @@ ITERATIONS = 390000 # Example value, tune as needed
 SALT_BYTES = 16     # Size of the salt (16 bytes is common)
 DK_LENGTH = 32      # Desired key length in bytes (e.g., 32 for SHA256)
 
+# --- Role Configuration ---
+ADMIN_ROLE = 'administrator'
+TEACHER_ROLE = 'teacher'
+DEFAULT_ROLE_FOR_NEW_USERS = TEACHER_ROLE # Default role for users created without a specified role
+# --- End Role Configuration ---
+
 # --- Helper Functions for Hashing ---
 
 def hash_password(password):
@@ -192,12 +198,41 @@ data_store = collections.defaultdict(lambda: collections.defaultdict(lambda: col
 data_lock = threading.RLock()
 class_data_store = [] # To store data from classes.sql as a list of dicts
 
+def get_current_user_info(handler_instance): # Returns username_key, role
+    """
+    Retrieves the authenticated user's key (as used in user_password_store) and their role.
+    """
+    cookies = handler_instance.get_cookies()
+    
+    username_key_in_store = None
+    # Prioritize specific auth cookies that hold the exact key from user_password_store
+    sql_auth_cookie = cookies.get(SQL_COOKIE_NAME)
+    if sql_auth_cookie and sql_auth_cookie.value in user_password_store:
+        username_key_in_store = sql_auth_cookie.value
+    
+    if not username_key_in_store:
+        google_auth_cookie = cookies.get(GOOGLE_COOKIE_NAME)
+        if google_auth_cookie and google_auth_cookie.value in user_password_store:
+            username_key_in_store = google_auth_cookie.value
+
+    # Fallback for USERNAME_COOKIE_NAME if it directly matches a key (less common for Google users)
+    if not username_key_in_store:
+        username_cookie = cookies.get(USERNAME_COOKIE_NAME)
+        if username_cookie and username_cookie.value in user_password_store:
+            username_key_in_store = username_cookie.value
+
+    if username_key_in_store:
+        user_data = user_password_store.get(username_key_in_store)
+        if user_data:
+            return username_key_in_store, user_data.get('role', DEFAULT_ROLE_FOR_NEW_USERS) # Default if role somehow missing
+    return None, None
+
 def is_user_using_oauth(username, self):
-    if username in user_password_store:
-        if user_password_store[username]['password_hash'] == '_GOOGLE_AUTH_USER_':
-            print(f"User '{username}' is using Google OAuth. Password change not allowed.")
-            self._send_response(403, {"error": "Password change not allowed for Google OAuth users."})
-            return
+    user_data = user_password_store.get(username) # username here is the key in user_password_store
+    if user_data and user_data.get('password_hash') == '_GOOGLE_AUTH_USER_':
+        print(f"User '{username}' is using Google OAuth. Password change not allowed.")
+        return True
+    return False
 
 def create_cookies(name, value, path='/', expires=None, max_age=None, httponly=True, samesite='Lax'):
     """
@@ -318,7 +353,7 @@ def parse_classes_sql_line(line):
 def parse_logins_sql_line(line):
     """
     Parses a single valid INSERT line for the users table.
-    Handles formats with and without profile_picture_url.
+    Handles formats with and without profile_picture_url and role.
     Returns (username, password_hash, profile_picture_url) or None.
     """
     line = line.strip()
@@ -365,17 +400,25 @@ def parse_logins_sql_line(line):
         username = parsed_data.get('username')
         password_hash = parsed_data.get('password_hash')
         profile_picture_url = parsed_data.get('profile_picture_url', '_NULL_')
+        role = parsed_data.get('role') # Get role
+
+        if not role: # If role column is missing or value is empty/None from parsed_data
+            # This handles cases where the 'role' column might not be in the INSERT statement
+            print(f"Warning: 'role' not found or empty for user '{username}' in logins line: {line.strip()}. Assigning default role: '{DEFAULT_ROLE_FOR_NEW_USERS}'.")
+            role = DEFAULT_ROLE_FOR_NEW_USERS
 
         if not username or not password_hash:
             print(f"Warning: Missing username or password_hash in parsed data from logins line: {line.strip()}")
             return None
         # Basic validation for password_hash format (can be expanded)
         if not (':' in password_hash or password_hash.upper() == '_NULL_' or password_hash.upper() == 'GOOGLE_AUTH_USER' or (password_hash.startswith('_') and password_hash.endswith('_'))):
-            print(f"Warning: Skipped user '{username}' due to unrecognized password_hash format: '{password_hash}' in line: {line.strip()}")
+            print(f"Warning: User '{username}' has unrecognized password_hash format: '{password_hash}' in line: {line.strip()}. Will be loaded but may cause issues.")
             return None
-        return username, password_hash, profile_picture_url
+        return username, password_hash, profile_picture_url, role
     else:
-        print(f"Warning: Could not parse logins line format (regex mismatch): {line.strip()}")
+        # Only print warning for lines that look like they should be INSERTs but don't match
+        if line.upper().startswith("INSERT INTO USERS"):
+            print(f"Warning: Could not parse logins line format (regex mismatch): {line.strip()}")
         return None
 
 # --- Loading for tables.sql ---
@@ -488,10 +531,11 @@ def load_user_data_from_sql():
                 for line_num, line in enumerate(f, 1):
                     parsed = parse_logins_sql_line(line)
                     if parsed:
-                        username, password_hash, profile_picture_url = parsed
+                        username, password_hash, profile_picture_url, role = parsed # Unpack role
                         temp_user_store[username] = {
                             'password_hash': password_hash,
-                            'profile_picture_url': profile_picture_url if profile_picture_url else '_NULL_'
+                            'profile_picture_url': profile_picture_url if profile_picture_url else '_NULL_',
+                            'role': role # Store role
                         }
                         users_loaded_count += 1
 
@@ -621,13 +665,15 @@ def save_user_data_to_sql():
             # Iterate through the in-memory store and generate INSERT statements
             # Sort by username for consistent file output
             for username, user_data in sorted(user_password_store.items()):
-                 # Basic escaping for username (should be sufficient if usernames don't contain quotes)
-                 safe_username = username.replace("'", "''")
-                 password_hash = user_data['password_hash'] # Already hex or special string
-                 profile_pic_url = user_data.get('profile_picture_url', '_NULL_')
-                 safe_profile_pic_url = profile_pic_url.replace("'", "''") if profile_pic_url else '_NULL_'
-                 insert_statement = f"INSERT INTO users (username, password_hash, profile_picture_url) VALUES ('{safe_username}', '{password_hash}', '{safe_profile_pic_url}');"
-                 sql_lines.append(insert_statement)
+                # Basic escaping for username (should be sufficient if usernames don't contain quotes)
+                safe_username = username.replace("'", "''")
+                password_hash = user_data['password_hash'] # Already hex or special string
+                profile_pic_url = user_data.get('profile_picture_url', '_NULL_')
+                role = user_data.get('role', DEFAULT_ROLE_FOR_NEW_USERS) # Get role, default if missing
+                safe_profile_pic_url = profile_pic_url.replace("'", "''") if profile_pic_url else '_NULL_'
+                safe_role = role.replace("'", "''") # Escape role
+                insert_statement = f"INSERT INTO users (username, password_hash, role, profile_picture_url) VALUES ('{safe_username}', '{password_hash}', '{safe_role}', '{safe_profile_pic_url}');"
+                sql_lines.append(insert_statement)
 
             # Write the file (overwrite existing)
             with open(LOGINS_SQL_FILE_PATH, 'w', encoding='utf-8') as f:
@@ -852,24 +898,35 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
     # Inside your request handler (e.g., in do_GET or do_POST):
 
     def handle_get_users(self):
-        users = load_user_data_from_sql() # <--- Corrected line (no argument)
-        user_list = []
-        for username, user_data in users.items():
-            password_hash = user_data['password_hash']
-            # Determine status based on the hash format from the file
-            if password_hash is None or password_hash.upper() == '_NULL_': # Check for NULL explicitly if handle_add_user writes it
-                status = "not_set" # Match frontend expectation
-            # You might need a more robust check than just length if handle_add_user writes NULL
-            # Let's assume parse_logins_sql_line filters out bad hashes, so what's loaded is valid or None/NULL
-            elif password_hash == '_GOOGLE_AUTH_USER_':
-                status = "google_auth_user" # Match frontend expectation
-            elif password_hash[0] == '_' and password_hash[-1] == '_':
-                status = password_hash[1:-1] # Extract the password between underscores
-            else:
-                status = "set" # If it has a valid hash format, it's set
+        # RBAC Check
+        _user_key, user_role = get_current_user_info(self)
+        if not self.is_logged_in() or user_role != ADMIN_ROLE:
+            self._send_response(403, {"error": "Forbidden: Administrator access required."})
+            return
 
-            # The frontend expects 'password' field, map status to it
-            user_list.append({"username": username, "password": status})
+        # Use in-memory user_password_store, no need to reload from file here
+        user_list = []
+        with data_lock: # Access user_password_store safely
+            for username_key, user_data_val in user_password_store.items():
+                password_hash = user_data_val['password_hash']
+                role = user_data_val.get('role', DEFAULT_ROLE_FOR_NEW_USERS) # Get role
+
+                # Determine password status for frontend
+                status = "set" # Default
+                if password_hash is None or password_hash.upper() == '_NULL_':
+                    status = "not_set"
+                elif password_hash == '_GOOGLE_AUTH_USER_':
+                    status = "google_auth_user"
+                # Check for pre-generated passwords like _password_, but not _NULL_ or _GOOGLE_AUTH_USER_
+                elif password_hash.startswith('_') and password_hash.endswith('_') and \
+                     password_hash.upper() != '_NULL_' and password_hash.upper() != '_GOOGLE_AUTH_USER_':
+                    status = password_hash[1:-1] # Extract the pre-generated password
+                
+                user_list.append({
+                    "username": username_key,
+                    "password": status, # 'password' field name is for frontend compatibility
+                    "role": role
+                })
         self.send_json(user_list)
 
     def handle_post_users(self):
@@ -900,7 +957,8 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             # Add the user with NOT_SET as the password
             user_password_store[username] = {
                 'password_hash': 'NOT_SET', # Or use "_NOT_SET_" if you prefer the underscore convention
-                'profile_picture_url': '_NULL_'
+                'profile_picture_url': '_NULL_',
+                'role': DEFAULT_ROLE_FOR_NEW_USERS # Assign default role
             }
 
             # Call your save function here!
@@ -954,6 +1012,12 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         if not username:
             self._send_response(400, {"error": "Missing username"})
             return
+                    
+        # RBAC check (already done by caller in do_POST, but good for standalone use)
+        _user_key, current_user_role = get_current_user_info(self)
+        if not self.is_logged_in() or current_user_role != ADMIN_ROLE:
+            self._send_response(403, {"error": "Forbidden: Administrator access required."})
+            return
 
         # --- Prevent deleting admin user ---
         if username == 'admin':
@@ -1000,11 +1064,16 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
     def handle_reset_password(self, data): # Accept parsed data
         username = data.get("username")
-
-        if is_user_using_oauth(username, self):
-            return
-
         new_password = data.get("new_password")
+
+        # RBAC check (already done by caller in do_POST, but good for standalone use)
+        # _user_key, current_user_role = get_current_user_info(self)
+        # if not self.is_logged_in() or current_user_role != ADMIN_ROLE:
+        #     self._send_response(403, {"error": "Forbidden: Administrator access required."})
+        #     return
+        if is_user_using_oauth(username, self): # username is the key from user_password_store
+            self._send_response(403, {"error": "Password change not allowed for Google OAuth users."})
+            return
 
         # --- Add checks for missing data ---
         if not username or not new_password:
@@ -1068,13 +1137,19 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         # DEBUG: Print the requested path at the beginning of do_GET
         print(f"--- DEBUG: do_GET received request for path: '{path}', full self.path: '{self.path}' ---")
 
+        user_key, user_role = get_current_user_info(self) # Get user info once
+
         if path == '/list_users':
             # --- Authentication Check ---
             if not self.is_logged_in():
                 print(f"Denied GET request to {path} - User not logged in.")
                 self._send_response(401, {"error": "Authentication required"})
                 return
-            # --- End Authentication Check ---
+            # --- RBAC Check ---
+            if user_role != ADMIN_ROLE:
+                self._send_response(403, {"error": "Forbidden: Administrator access required."})
+                return
+            # --- End RBAC Check ---
 
             # Acquire lock briefly to read user list safely
             with data_lock: # Or use a dedicated user_data_lock
@@ -1108,12 +1183,12 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         # --- End Password Change Check for API GET ---
 
         elif path == '/api/users':
-            # Note: handle_get_users currently doesn't check authentication
-            # Add authentication check here if needed:
-            # if not self.is_logged_in():
-            #     print(f"Denied GET request to {path} - User not logged in.")
-            #     self._send_response(401, {"error": "Authentication required"})
-            #     return
+            # RBAC is handled inside handle_get_users
+            if not self.is_logged_in(): # Basic auth check
+                print(f"Denied GET request to {path} - User not logged in.")
+                self._send_response(401, {"error": "Authentication required"})
+                return
+            
             print(f"Handling GET request for {path}") # Add log
             self.handle_get_users() # Call the handler function
             return # Make sure to return after handling
@@ -1122,6 +1197,12 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             if not self.is_logged_in():
                 print(f"Denied GET request to {path} - User not logged in.")
                 self._send_response(401, {"error": "Authentication required"})
+                return
+        
+            # RBAC Check
+            _user_key, current_user_role = get_current_user_info(self)
+            if current_user_role != ADMIN_ROLE:
+                self._send_response(403, {"error": "Forbidden: Administrator access required."})
                 return
             
             with data_lock: # Ensure thread-safe read
@@ -1132,14 +1213,16 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
         # API Endpoint: /api/counts?class=ClassName
         elif path == '/api/counts':
-            # ... (existing code for /api/counts remains the same)
-            # ... make sure it also has an authentication check if needed!
-            # --- Authentication Check (Example - Add if counts should be protected) ---
-            # if not self.is_logged_in():
-            #     print(f"Denied GET request to {path} - User not logged in.")
-            #     self._send_response(401, {"error": "Authentication required"})
-            #     return
-            # --- End Authentication Check ---
+            if not self.is_logged_in():
+                print(f"Denied GET request to {path} - User not logged in.")
+                self._send_response(401, {"error": "Authentication required"})
+                return
+
+            # RBAC Check: Allow teachers and admins
+            if user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
+                self._send_response(403, {"error": "Forbidden: Access denied for your role."})
+                return
+
             class_name = query.get('class', [None])[0]
             if not class_name:
                 self._send_response(400, {"error": "Missing 'class' query parameter"})
@@ -1246,7 +1329,8 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                         print(f"--- DEBUG: New Google user '{user_email}' (name: '{name_for_cookie}'). Adding to store. ---")
                         user_password_store[user_email] = {
                             'password_hash': '_GOOGLE_AUTH_USER_',
-                            'profile_picture_url': profile_picture if profile_picture else '_NULL_'
+                            'profile_picture_url': profile_picture if profile_picture else '_NULL_',
+                            'role': DEFAULT_ROLE_FOR_NEW_USERS # Assign default role for new Google users
                         }
                         save_user_data_to_sql()
 
@@ -1390,6 +1474,12 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         # Read request body
         content_length = int(self.headers.get('Content-Length', 0))
         # Allow empty body for /logout
+        body = b'' # Initialize body to empty bytes
+        if content_length > 0 :
+            body = self.rfile.read(content_length)
+        elif content_length == 0 and path != '/logout': # Path check was here
+             self._send_response(400, {"error": "Empty request body for non-logout endpoint"})
+             return
         if content_length == 0 and path != '/logout':
              self._send_response(400, {"error": "Empty request body"})
              return
@@ -1451,7 +1541,17 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
                     self.end_headers()
 
-                    response_body = json.dumps({"success": True, "message": "Login successful"}).encode('utf-8')
+                    # Include role in login response
+                    user_key_for_role = username # This is the key used to lookup in user_password_store
+                    role = user_password_store.get(user_key_for_role, {}).get('role', DEFAULT_ROLE_FOR_NEW_USERS)
+
+                    response_payload = {
+                        "success": True,
+                        "message": "Login successful",
+                        "username": cleaned_username, # The display username for the cookie
+                        "role": role
+                    }
+                    response_body = json.dumps(response_payload).encode('utf-8')
                     self.wfile.write(response_body)
 
                     print(f"Login successful for user: {username}, {len(all_cookie_headers)} session/other cookie(s) sent.")
@@ -1524,6 +1624,13 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             return
         # --- End Password Change Check ---
 
+        # --- RBAC: Get current user's role for protected endpoints ---
+        user_key_for_rbac, current_user_role = get_current_user_info(self)
+        if not self.is_logged_in(): # Should be caught by password_change_required logic too, but good to double check
+            self._send_response(401, {"error": "Authentication required for this action."})
+            return
+
+
         # --- Protected Endpoints below require login ---
         print(f"Processing authenticated POST request to {path}...") # Log access
 
@@ -1540,6 +1647,11 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
         # --- Handle /add_user ---
         if path == '/add_user':
+            # RBAC Check
+            if current_user_role != ADMIN_ROLE:
+                self._send_response(403, {"error": "Forbidden: Administrator access required."})
+                return
+
             username = data.get('username')
             password = data.get('password')
 
@@ -1567,7 +1679,8 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                             hashed_pw = hash_password(password)
                             user_password_store[username] = {
                                 'password_hash': hashed_pw,
-                                'profile_picture_url': '_NULL_'
+                                'profile_picture_url': '_NULL_',
+                                'role': DEFAULT_ROLE_FOR_NEW_USERS # Assign default role
                             }
                             save_needed = True
                             print(f"User '{username}' added to memory.")
@@ -1582,7 +1695,8 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                         hashed_pw = "_NULL_" # Explicitly set to null
                         user_password_store[username] = { # Ensure a dictionary is stored
                             'password_hash': hashed_pw,
-                            'profile_picture_url': '_NULL_' # Default profile picture URL
+                            'profile_picture_url': '_NULL_', # Default profile picture URL
+                            'role': DEFAULT_ROLE_FOR_NEW_USERS # Assign default role
                         }
                         print(f"User '{username}' added to memory with NULL password.")
                         save_needed = True
@@ -1609,8 +1723,9 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
         # --- Handle /api/classes/add ---
         elif path == '/api/classes/add':
-            if not self.is_logged_in():
-                self._send_response(401, {"error": "Authentication required"})
+            # RBAC Check
+            if current_user_role != ADMIN_ROLE:
+                self._send_response(403, {"error": "Forbidden: Administrator access required."})
                 return
 
             class_name = data.get('class')
@@ -1660,8 +1775,9 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
         # --- Handle /api/classes/remove ---
         elif path == '/api/classes/remove':
-            if not self.is_logged_in():
-                self._send_response(401, {"error": "Authentication required"})
+            # RBAC Check
+            if current_user_role != ADMIN_ROLE:
+                self._send_response(403, {"error": "Forbidden: Administrator access required."})
                 return
 
             class_name_to_remove = data.get('class')
@@ -1698,8 +1814,9 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
         # --- Handle /api/classes/update_counts ---
         elif path == '/api/classes/update_counts':
-            if not self.is_logged_in():
-                self._send_response(401, {"error": "Authentication required"})
+            # RBAC Check
+            if current_user_role != ADMIN_ROLE:
+                self._send_response(403, {"error": "Forbidden: Administrator access required."})
                 return
 
             class_name = data.get('class')
@@ -1748,20 +1865,15 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
         # --- Handle /change_password ---
         elif path == '/api/auth/change':
-            # --- CORRECTED USERNAME RETRIEVAL ---
-            username_cookie = self.get_cookies().get(USERNAME_COOKIE_NAME)
-            if username_cookie:
-                username = username_cookie.value # Extract the string value from the Morsel
-            else:
-                # This case should ideally not happen if the request is authenticated,
-                # but handle it defensively.
+            # user_key_for_rbac (user's actual key in user_password_store) is already available
+            if not user_key_for_rbac: # Should be caught by is_logged_in earlier
                 print("Error: Username cookie missing in authenticated /api/auth/change request.")
                 self._send_response(401, {"error": "Authentication error: User identity not found."})
                 return
-            # --- END CORRECTION ---
-
-            if is_user_using_oauth(username, self):
+            if is_user_using_oauth(user_key_for_rbac, self): # Pass the correct key
+                self._send_response(403, {"error": "Password change not allowed for Google OAuth users."})
                 return
+            username_for_messages = user_key_for_rbac # For logging/messages
 
             old_password = data.get('oldPassword')
             new_password = data.get('newPassword') # Get new password from request
@@ -1773,7 +1885,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 verification_needed = False # Override whatever the client sent
             # --- End cookie check ---
             
-            if not username or not new_password:
+            if not user_key_for_rbac or not new_password: # Check against the actual key
                 self._send_response(400, {"error": "Missing username or new password"})
                 return
 
@@ -1783,17 +1895,16 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             save_needed = False
 
             with data_lock: # Or use a dedicated user_data_lock
-                stored_user_data = user_password_store.get(username)
+                stored_user_data = user_password_store.get(user_key_for_rbac)
 
                 if not stored_user_data:
-                    message = f"User '{username}' not found."
+                    message = f"User '{username_for_messages}' not found."
                     status_code = 404 # Not Found
                 else:
                     if verification_needed == True:
                         # verify_password returns a tuple (bool, headers)
-                        is_old_valid, _ = verify_password(stored_user_data, old_password, username)
+                        is_old_valid, _ = verify_password(stored_user_data, old_password, username_for_messages)
                         if not is_old_valid:
-                        # if verify_password(stored_password_info, old_password, username) == False:
                             message = "Old password verification failed."
                             status_code = 401
                             self._send_response(status_code, {"error": message})
@@ -1801,22 +1912,22 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
                     try:
                         hashed_pw = hash_password(new_password)
-                        user_password_store[username]['password_hash'] = hashed_pw # Update only hash
+                        user_password_store[user_key_for_rbac]['password_hash'] = hashed_pw # Update only hash
                         save_needed = True
-                        print(f"Password changed in memory for user '{username}'.")
+                        print(f"Password changed in memory for user '{username_for_messages}'.")
                     except Exception as e:
-                        print(f"!!! Error hashing new password for {username}: {e}")
+                        print(f"!!! Error hashing new password for {username_for_messages}: {e}")
                         message = "Server error during password hashing."
                         status_code = 500
 
                 if save_needed:
                     if save_user_data_to_sql():
                         success = True
-                        message = f"Password for user '{username}' changed successfully."
+                        message = f"Password for user '{username_for_messages}' changed successfully."
                         status_code = 200 # OK
                     else:
                         success = False
-                        message = f"Password changed in memory for '{username}', but FAILED to save to file."
+                        message = f"Password changed in memory for '{username_for_messages}', but FAILED to save to file."
                         status_code = 500
 
             if success:
@@ -1850,6 +1961,11 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
         # --- Handle /remove_user ---
         elif path == '/remove_user':
+            # RBAC Check
+            if current_user_role != ADMIN_ROLE:
+                self._send_response(403, {"error": "Forbidden: Administrator access required."})
+                return
+
             username = data.get('username')
 
             if not username:
@@ -1895,15 +2011,31 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                  self._send_response(status_code, {"error": message})
             return # Handled
         
-        elif self.path == "/api/users":
-            self.handle_add_user()
+        elif path == "/api/users": # POST to /api/users
+            # RBAC check is inside handle_post_users, called after auth check
+            self.handle_post_users() # This adds a user with 'NOT_SET' password
             return # Handled
-        elif self.path == "/api/users/remove":
+        elif path == "/api/users/remove":
+            # RBAC Check
+            if current_user_role != ADMIN_ROLE:
+                self._send_response(403, {"error": "Forbidden: Administrator access required."})
+                return
             self.handle_remove_user(data)
-        elif self.path == "/api/users/set":
+            return # Handled
+        elif path == "/api/users/set":
+            # RBAC Check
+            if current_user_role != ADMIN_ROLE:
+                self._send_response(403, {"error": "Forbidden: Administrator access required."})
+                return
             self.handle_reset_password(data)
-        elif self.path == "/api/users/reset":
+            return # Handled
+        elif path == "/api/users/reset": # Alias for /set
+            # RBAC Check
+            if current_user_role != ADMIN_ROLE:
+                self._send_response(403, {"error": "Forbidden: Administrator access required."})
+                return
             self.handle_reset_password(data)
+            return # Handled
 
         # --- Handle /api/increment & /api/decrement ---
         elif path == '/api/increment':
@@ -1913,10 +2045,11 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         elif path == '/api/decrement':
             handle_decrement_module(self, data, self.path)
 
-        # --- Handle /api/oauth/config/save ---
+        # --- Handle /api/data/save/config ---
         elif path == '/api/data/save/config':
-            if not self.is_logged_in():
-                self._send_response(401, {"error": "Authentication required"})
+            # RBAC Check
+            if current_user_role != ADMIN_ROLE:
+                self._send_response(403, {"error": "Forbidden: Administrator access required."})
                 return
             
             # Data is already parsed from the start of do_POST
