@@ -309,6 +309,154 @@ async function updateClassCount(className, countField, isChecked) {
   }
 }
 
+// --- Debounce Utility ---
+function debounce(func, delay) {
+  let timeout;
+  return function(...args) {
+      const context = this;
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func.apply(context, args), delay);
+  };
+}
+
+// Create a debounced version of saveGoogleOauth
+// Saves will be triggered 1 second after the last change.
+const debouncedSaveGoogleOauth = debounce(saveGoogleOauth, 1000);
+
+// --- Oauth Management Functions ---
+
+async function loadOauthConfig() {
+  try {
+      // Adjust the path if your frontend and backend are served differently
+      // Assuming config.html is in /frontend/ and config.json is in /backend/data/
+      const response = await fetch('api/data/config');
+      if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const config = await response.json();
+
+      // Populate Google OAuth settings
+      const googleOauthCheckbox = document.getElementById('googleOauth');
+      if (googleOauthCheckbox) {
+          // The JSON stores "true" as a string, so we compare it.
+          googleOauthCheckbox.checked = config.oauth_eneabled === "true";
+          googleOauthCheckbox.addEventListener('change', debouncedSaveGoogleOauth); // Auto-save on change
+      }
+
+      const googleOauthTableBody = document.getElementById('googleOauthTableBody');
+      if (googleOauthTableBody) {
+          // Clear existing rows (if any, though HTML is now empty)
+          googleOauthTableBody.innerHTML = '';
+
+          if (config.allowed_oauth_domains && Array.isArray(config.allowed_oauth_domains)) {
+              config.allowed_oauth_domains.forEach((domain, index) => {
+                  const row = googleOauthTableBody.insertRow();
+                  
+                  const domainCell = row.insertCell();
+                  const domainInput = document.createElement('input');
+                  domainInput.type = 'text';
+                  domainInput.id = `domain-${index}`; // Unique ID for each domain input
+                  domainInput.value = domain;
+                  domainInput.placeholder = 'domain.com';
+                  domainInput.addEventListener('blur', debouncedSaveGoogleOauth); // Auto-save on blur
+                  domainCell.appendChild(domainInput);
+
+                  const actionsCell = row.insertCell();
+                  const removeButton = document.createElement('button');
+                  removeButton.textContent = 'remove';
+                  removeButton.onclick = function() {
+                      row.remove(); // Removes the current row from the table
+                      debouncedSaveGoogleOauth(); // Auto-save after removal
+                  };
+                  actionsCell.appendChild(removeButton);
+              });
+          }
+      }
+  } catch (error) {
+      console.error('Failed to load OAuth configuration:', error);
+      // Optionally display an error message to the user in the UI
+      const googleOauthTableBody = document.getElementById('googleOauthTableBody');
+      if (googleOauthTableBody) {
+        googleOauthTableBody.innerHTML = '<tr><td colspan="2">Error loading OAuth config.</td></tr>';
+      }
+  }
+}
+
+function addGoogleOauthDomain() {
+  const domainName = prompt("Enter the new allowed domain (e.g., example.com):");
+  if (domainName && domainName.trim() !== "") {
+    const googleOauthTableBody = document.getElementById('googleOauthTableBody');
+    if (googleOauthTableBody) {
+      const row = googleOauthTableBody.insertRow();
+      
+      const domainCell = row.insertCell();
+      const domainInput = document.createElement('input');
+      domainInput.type = 'text';
+      // No need for a unique ID if we select all inputs by type later
+      domainInput.value = domainName.trim();
+      domainInput.addEventListener('blur', debouncedSaveGoogleOauth); // Auto-save on blur for new inputs
+      domainInput.placeholder = 'domain.com';
+      domainCell.appendChild(domainInput);
+
+      const actionsCell = row.insertCell();
+      const removeButton = document.createElement('button');
+      removeButton.textContent = 'remove';
+      removeButton.onclick = function() {
+          row.remove(); // Removes the current row from the table
+          debouncedSaveGoogleOauth(); // Auto-save after removal
+      };
+      actionsCell.appendChild(removeButton);
+      debouncedSaveGoogleOauth(); // Auto-save after adding a new domain row
+    }
+  } else if (domainName !== null) { // User pressed OK but field was empty
+    alert("Domain name cannot be empty.");
+  }
+}
+
+async function saveGoogleOauth() {
+  const googleOauthCheckbox = document.getElementById('googleOauth');
+  const isEnabled = googleOauthCheckbox ? googleOauthCheckbox.checked : false;
+
+  const googleOauthTableBody = document.getElementById('googleOauthTableBody');
+  const domains = [];
+  if (googleOauthTableBody) {
+    const rows = googleOauthTableBody.getElementsByTagName('tr');
+    for (let i = 0; i < rows.length; i++) {
+      const inputElement = rows[i].querySelector('input[type="text"]');
+      if (inputElement && inputElement.value.trim() !== "") {
+        domains.push(inputElement.value.trim());
+      }
+    }
+  }
+
+  const oauthConfigData = {
+    oauth_eneabled: isEnabled.toString(), // Server expects "true" or "false" as string
+    allowed_oauth_domains: domains
+  };
+  console.log("Auto-saving Google OAuth settings:", oauthConfigData); // For debugging
+
+  try {
+    const response = await fetch('/api/data/save/config', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(oauthConfigData),
+    });
+
+    const result = await response.json();
+    if (response.ok) {
+      //alert(result.message || 'OAuth settings saved successfully!');
+    } else {
+      alert(`Error saving OAuth settings: ${result.error || 'Unknown server error'}`);
+    }
+  } catch (error) {
+    console.error('Failed to save OAuth settings:', error);
+    alert('Failed to save OAuth settings. Check console for details.');
+  }
+}
+
 // Load user list on page load
 loadUsers();
 loadClasses(); // Load class list on page load
+loadOauthConfig(); // Load OAuth configuration on page load
