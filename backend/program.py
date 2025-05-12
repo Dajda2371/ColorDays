@@ -792,7 +792,13 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                     self.send_header(key, value)
             self.end_headers()
             if data is not None:
-                response_body = json.dumps(data).encode('utf-8') if content_type == 'application/json' else data
+                if content_type == 'application/json':
+                    if isinstance(data, bytes): # Data is already bytes (e.g., pre-read JSON file)
+                        response_body = data
+                    else: # Data is a Python object (dict/list) to be serialized
+                        response_body = json.dumps(data).encode('utf-8')
+                else: # Not JSON content type, assume data is already in correct byte format or is a Python object for non-JSON
+                    response_body = data
                 self.wfile.write(response_body)
         except Exception as e:
             print(f"!!! Error sending response (status {status_code}): {e}")
@@ -1239,6 +1245,23 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 print(f"!!! Error during Google OAuth callback: {e}")
                 print(traceback.format_exc())
                 self._send_response(500, {"error": "Google OAuth callback failed."})
+            return
+
+        elif path == '/api/data/config': # Serve the main config.json
+            print(f"--- DEBUG: Matched request for '/backend/data/config.json' ---")
+            config_file_path = DATA_DIR / 'config.json'
+            if config_file_path.is_file():
+                try:
+                    with open(config_file_path, 'rb') as f:
+                        content = f.read()
+                    # _send_response handles CORS and content type if data is bytes
+                    self._send_response(200, data=content, content_type='application/json')
+                except Exception as e:
+                    print(f"!!! Error serving {config_file_path}: {e}")
+                    self._send_response(500, {"error": f"Error serving server configuration file: {e}"}, content_type='application/json')
+            else:
+                print(f"!!! CRITICAL: Server configuration file {config_file_path} not found.")
+                self._send_response(404, {"error": "Server configuration file not found."}, content_type='application/json')
             return
 
         # File Serving Logic

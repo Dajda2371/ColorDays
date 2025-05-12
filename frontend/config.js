@@ -309,6 +309,75 @@ async function updateClassCount(className, countField, isChecked) {
   }
 }
 
+// --- Oauth Management Functions ---
+
+async function loadOauthConfig() {
+  try {
+      // Adjust the path if your frontend and backend are served differently
+      // Assuming config.html is in /frontend/ and config.json is in /backend/data/
+      const response = await fetch('api/data/config');
+      if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const config = await response.json();
+
+      // Populate Google OAuth settings
+      const googleOauthCheckbox = document.getElementById('googleOauth');
+      if (googleOauthCheckbox) {
+          // The JSON stores "true" as a string, so we compare it.
+          googleOauthCheckbox.checked = config.oauth_eneabled === "true";
+      }
+
+      const googleOauthTableBody = document.getElementById('googleOauthTableBody');
+      if (googleOauthTableBody) {
+          // Clear existing rows (if any, though HTML is now empty)
+          googleOauthTableBody.innerHTML = '';
+
+          if (config.allowed_oauth_domains && Array.isArray(config.allowed_oauth_domains)) {
+              config.allowed_oauth_domains.forEach((domain, index) => {
+                  const row = googleOauthTableBody.insertRow();
+                  
+                  const domainCell = row.insertCell();
+                  const domainInput = document.createElement('input');
+                  domainInput.type = 'text';
+                  domainInput.id = `domain-${index}`; // Unique ID for each domain input
+                  domainInput.value = domain;
+                  domainInput.placeholder = 'domain.com';
+                  domainCell.appendChild(domainInput);
+
+                  const actionsCell = row.insertCell();
+                  const removeButton = document.createElement('button');
+                  removeButton.textContent = 'remove';
+                  removeButton.onclick = function() {
+                      row.remove(); // Removes the current row from the table
+                  };
+                  actionsCell.appendChild(removeButton);
+              });
+          }
+      }
+  } catch (error) {
+      console.error('Failed to load OAuth configuration:', error);
+      // Optionally display an error message to the user in the UI
+      const googleOauthTableBody = document.getElementById('googleOauthTableBody');
+      if (googleOauthTableBody) {
+        googleOauthTableBody.innerHTML = '<tr><td colspan="2">Error loading OAuth config.</td></tr>';
+      }
+  }
+}
+
+// Placeholder for save function - implement according to your backend needs
+function saveGoogleOauth() {
+  alert('Save Google OAuth settings functionality not yet implemented.');
+  // Gather data from checkbox and domain inputs
+  // Send to backend
+}
+
+// Placeholder for add function - implement according to your backend needs
+function addGoogleOauthDomain() {
+  alert('Add Google OAuth domain functionality not yet implemented.');
+}
+
 // Load user list on page load
 loadUsers();
 loadClasses(); // Load class list on page load
+loadOauthConfig(); // Load OAuth configuration on page load
