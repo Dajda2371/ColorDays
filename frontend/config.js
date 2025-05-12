@@ -309,6 +309,20 @@ async function updateClassCount(className, countField, isChecked) {
   }
 }
 
+// --- Debounce Utility ---
+function debounce(func, delay) {
+  let timeout;
+  return function(...args) {
+      const context = this;
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func.apply(context, args), delay);
+  };
+}
+
+// Create a debounced version of saveGoogleOauth
+// Saves will be triggered 1 second after the last change.
+const debouncedSaveGoogleOauth = debounce(saveGoogleOauth, 1000);
+
 // --- Oauth Management Functions ---
 
 async function loadOauthConfig() {
@@ -326,6 +340,7 @@ async function loadOauthConfig() {
       if (googleOauthCheckbox) {
           // The JSON stores "true" as a string, so we compare it.
           googleOauthCheckbox.checked = config.oauth_eneabled === "true";
+          googleOauthCheckbox.addEventListener('change', debouncedSaveGoogleOauth); // Auto-save on change
       }
 
       const googleOauthTableBody = document.getElementById('googleOauthTableBody');
@@ -343,6 +358,7 @@ async function loadOauthConfig() {
                   domainInput.id = `domain-${index}`; // Unique ID for each domain input
                   domainInput.value = domain;
                   domainInput.placeholder = 'domain.com';
+                  domainInput.addEventListener('blur', debouncedSaveGoogleOauth); // Auto-save on blur
                   domainCell.appendChild(domainInput);
 
                   const actionsCell = row.insertCell();
@@ -350,6 +366,7 @@ async function loadOauthConfig() {
                   removeButton.textContent = 'remove';
                   removeButton.onclick = function() {
                       row.remove(); // Removes the current row from the table
+                      debouncedSaveGoogleOauth(); // Auto-save after removal
                   };
                   actionsCell.appendChild(removeButton);
               });
@@ -377,6 +394,7 @@ function addGoogleOauthDomain() {
       domainInput.type = 'text';
       // No need for a unique ID if we select all inputs by type later
       domainInput.value = domainName.trim();
+      domainInput.addEventListener('blur', debouncedSaveGoogleOauth); // Auto-save on blur for new inputs
       domainInput.placeholder = 'domain.com';
       domainCell.appendChild(domainInput);
 
@@ -385,8 +403,10 @@ function addGoogleOauthDomain() {
       removeButton.textContent = 'remove';
       removeButton.onclick = function() {
           row.remove(); // Removes the current row from the table
+          debouncedSaveGoogleOauth(); // Auto-save after removal
       };
       actionsCell.appendChild(removeButton);
+      debouncedSaveGoogleOauth(); // Auto-save after adding a new domain row
     }
   } else if (domainName !== null) { // User pressed OK but field was empty
     alert("Domain name cannot be empty.");
@@ -413,6 +433,7 @@ async function saveGoogleOauth() {
     oauth_eneabled: isEnabled.toString(), // Server expects "true" or "false" as string
     allowed_oauth_domains: domains
   };
+  console.log("Auto-saving Google OAuth settings:", oauthConfigData); // For debugging
 
   try {
     const response = await fetch('/api/data/save/config', {
@@ -425,7 +446,7 @@ async function saveGoogleOauth() {
 
     const result = await response.json();
     if (response.ok) {
-      alert(result.message || 'OAuth settings saved successfully!');
+      //alert(result.message || 'OAuth settings saved successfully!');
     } else {
       alert(`Error saving OAuth settings: ${result.error || 'Unknown server error'}`);
     }
