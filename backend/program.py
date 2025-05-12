@@ -124,7 +124,7 @@ def verify_password(stored_password_info, provided_password, username):
     password_hash = stored_password_info['password_hash']
     extra_cookie_headers = [] # Initialize default empty list
 
-    if not password_hash or (':' not in password_hash and not (password_hash.startswith('_') and password_hash.endswith('_'))):
+    if not password_hash or (':' not in password_hash and (password_hash.startswith('_') and password_hash.endswith('_'))):
         if password_hash and password_hash.startswith('_') and password_hash.endswith('_'): # Check for pre-generated password format _password_
             _stored_password_info_ = password_hash[1:-1]
             if _stored_password_info_ == provided_password:
@@ -182,6 +182,8 @@ USERNAME_COOKIE_NAME = "ColorDaysUser"
 SESSION_COOKIE_NAME = "ColorDaysSession"
 VALID_SESSION_VALUE = "user_is_logged_in_secret_value" # Replace with a secure, random session ID mechanism
 CHANGE_PASSWORD_COOKIE_NAME = "ChangePasswordVerificationNotNeeded" # For the change password flow
+GOOGLE_COOKIE_NAME = "GoogleAuthUser" # For Google OAuth users
+SQL_COOKIE_NAME = "SQLAuthUser" # For SQL users
 # --- End Session Configuration ---
 
 
@@ -1178,16 +1180,19 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 # DEBUG: Print user_info from Google
                 print(f"--- DEBUG: User info from Google: {user_info} ---")
 
-                user_email = user_info.get('email')
-                user_name_from_google_raw = user_info.get('name', user_email) # Get the raw name
+                _user_email_from_google = user_info.get('email') # Get the email as Google provides it
+                # Ensure the email used for cookies and storage is stripped of any surrounding quotes.
+                user_email = _user_email_from_google.strip('"') if _user_email_from_google else None
+
+                user_name_from_google_raw = user_info.get('name', _user_email_from_google) # Get the raw name, fallback to original email from Google
                 profile_picture = user_info.get('picture') # Get profile picture URL
 
                 # Determine the name to be used for the cookie
                 name_for_cookie = ''
-                if user_email: # If we have an email from Google
+                if user_email: # If we have an email from Google (now stripped)
                     name_for_cookie = user_email.split('@', 1)[0] # Take the part before the first '@'
                 elif user_name_from_google_raw: # Fallback to Google display name if email is somehow missing
-                    name_for_cookie = user_name_from_google_raw.strip('"')
+                    name_for_cookie = user_name_from_google_raw.strip('"') # Ensure raw name is also stripped if used
                 # If both email and raw name are missing, name_for_cookie will be empty.
                 # This is unlikely with Google OAuth scopes requesting email.
 
@@ -1208,7 +1213,8 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
                 all_cookies = create_cookies(USERNAME_COOKIE_NAME, name_for_cookie, path='/', httponly=False) + \
                               create_cookies(SESSION_COOKIE_NAME, VALID_SESSION_VALUE, path='/') + \
-                              create_cookie_clear_headers(CHANGE_PASSWORD_COOKIE_NAME, path='/')
+                              create_cookie_clear_headers(CHANGE_PASSWORD_COOKIE_NAME, path='/') + \
+                              create_cookies(GOOGLE_COOKIE_NAME, user_email, path='/', httponly=False)
                 
                 # --- Send response headers MANUALLY for OAuth callback ---
                 self.send_response(302) # Redirect
@@ -1348,7 +1354,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
                 if stored_info and submitted_password:
                     # --- UNPACK the tuple returned by verify_password ---
-                    login_successful, extra_cookie_headers = verify_password(stored_user_data, submitted_password, username)
+                    login_successful, extra_cookie_headers = verify_password(stored_info, submitted_password, username)
                     # --- END CHANGE ---
                     if not login_successful:
                         print(f"Password verification failed for user: {username}")
@@ -1366,9 +1372,10 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                     # Use cleaned_username for the cookie
                     user_cookie_headers = create_cookies(USERNAME_COOKIE_NAME, cleaned_username, path='/', httponly=False)
                     session_cookie_headers = create_cookies(SESSION_COOKIE_NAME, VALID_SESSION_VALUE, path='/')
+                    sql_user_cookie_headers = create_cookies(SQL_COOKIE_NAME, username, path='/', httponly=False) # Set the SQL auth cookie
 
                     # --- COMBINE standard cookies with any extra ones returned ---
-                    all_cookie_headers = user_cookie_headers + session_cookie_headers + extra_cookie_headers
+                    all_cookie_headers = user_cookie_headers + session_cookie_headers + extra_cookie_headers + sql_user_cookie_headers
                     # --- END CHANGE ---
 
                     # --- Send response headers MANUALLY ---
@@ -1415,7 +1422,9 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             session_clear_headers = create_cookie_clear_headers(SESSION_COOKIE_NAME, path='/')
             user_clear_headers = create_cookie_clear_headers(USERNAME_COOKIE_NAME, path='/')
             change_pw_clear_headers = create_cookie_clear_headers(CHANGE_PASSWORD_COOKIE_NAME, path='/') # Clear this too
-            all_clear_headers = session_clear_headers + user_clear_headers + change_pw_clear_headers
+            sql_user_clear_headers = create_cookie_clear_headers(SQL_COOKIE_NAME, path='/') # Clear SQL user cookie if used
+            google_auth_clear_headers = create_cookie_clear_headers(GOOGLE_COOKIE_NAME, path='/') # Clear Google auth cookie if used
+            all_clear_headers = session_clear_headers + user_clear_headers + change_pw_clear_headers + sql_user_clear_headers + google_auth_clear_headers
             # --- End using new function ---
 
             # --- Send response headers MANUALLY ---
@@ -1884,6 +1893,8 @@ if __name__ == "__main__":
     print(f"Using hashlib.pbkdf2_hmac with {ITERATIONS} iterations.")
     print(f"\nAccess the application via: http://{HOST}:{PORT}/")
     print(f"(Will redirect to /login.html if not logged in)")
+    print("-------------------------------------------------------------")
+    print("")
 
 
     try:
