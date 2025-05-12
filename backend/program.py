@@ -649,6 +649,39 @@ def save_user_data_to_sql():
 
 # --- End of new function ---
 
+# --- Function to save main config.json ---
+def save_main_config_to_json(new_oauth_data):
+    """
+    Reads the existing config.json, updates OAuth specific keys,
+    and writes the entire config back.
+    Returns True on success, False on failure.
+    """
+    config_file_path = DATA_DIR / 'config.json'
+    print(f"Attempting to update OAuth settings in: {config_file_path}")
+
+    with data_lock: # Reuse data_lock for simplicity
+        try:
+            current_config = {}
+            if config_file_path.exists():
+                with open(config_file_path, 'r', encoding='utf-8') as f:
+                    current_config = json.load(f)
+            
+            # Update only the OAuth related keys from the new_oauth_data
+            current_config['oauth_eneabled'] = new_oauth_data.get('oauth_eneabled', current_config.get('oauth_eneabled', 'false'))
+            current_config['allowed_oauth_domains'] = new_oauth_data.get('allowed_oauth_domains', current_config.get('allowed_oauth_domains', []))
+
+            with open(config_file_path, 'w', encoding='utf-8') as f:
+                json.dump(current_config, f, indent=4) # Pretty print with indent
+            
+            print(f"OAuth settings successfully updated in {config_file_path}")
+            return True
+        except Exception as e:
+            print(f"!!! UNEXPECTED ERROR during save_main_config_to_json:")
+            print(traceback.format_exc())
+            return False
+
+# --- End function to save main config.json ---
+
 # --- Module-level Handler Functions for Increment/Decrement ---
 
 def handle_increment_module(handler_instance, data, request_path):
@@ -1880,6 +1913,30 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         elif path == '/api/decrement':
             handle_decrement_module(self, data, self.path)
 
+        # --- Handle /api/oauth/config/save ---
+        elif path == '/api/data/save/config':
+            if not self.is_logged_in():
+                self._send_response(401, {"error": "Authentication required"})
+                return
+            
+            # Data is already parsed from the start of do_POST
+            oauth_eneabled = data.get('oauth_eneabled')
+            allowed_domains = data.get('allowed_oauth_domains')
+
+            if oauth_eneabled is None or not isinstance(allowed_domains, list):
+                self._send_response(400, {"error": "Invalid payload. 'oauth_eneabled' (string) and 'allowed_oauth_domains' (list) are required."})
+                return
+            
+            # Ensure oauth_eneabled is "true" or "false"
+            if oauth_eneabled not in ["true", "false"]:
+                self._send_response(400, {"error": "'oauth_eneabled' must be the string 'true' or 'false'."})
+                return
+
+            if save_main_config_to_json(data):
+                self._send_response(200, {"message": "OAuth configuration saved successfully."})
+            else:
+                self._send_response(500, {"error": "Failed to save OAuth configuration to file."})
+            return
         # --- Handle unknown authenticated POST paths ---
         else:
             print(f"Authenticated POST request to unknown path: {path}")

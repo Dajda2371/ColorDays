@@ -365,16 +365,74 @@ async function loadOauthConfig() {
   }
 }
 
-// Placeholder for save function - implement according to your backend needs
-function saveGoogleOauth() {
-  alert('Save Google OAuth settings functionality not yet implemented.');
-  // Gather data from checkbox and domain inputs
-  // Send to backend
+function addGoogleOauthDomain() {
+  const domainName = prompt("Enter the new allowed domain (e.g., example.com):");
+  if (domainName && domainName.trim() !== "") {
+    const googleOauthTableBody = document.getElementById('googleOauthTableBody');
+    if (googleOauthTableBody) {
+      const row = googleOauthTableBody.insertRow();
+      
+      const domainCell = row.insertCell();
+      const domainInput = document.createElement('input');
+      domainInput.type = 'text';
+      // No need for a unique ID if we select all inputs by type later
+      domainInput.value = domainName.trim();
+      domainInput.placeholder = 'domain.com';
+      domainCell.appendChild(domainInput);
+
+      const actionsCell = row.insertCell();
+      const removeButton = document.createElement('button');
+      removeButton.textContent = 'remove';
+      removeButton.onclick = function() {
+          row.remove(); // Removes the current row from the table
+      };
+      actionsCell.appendChild(removeButton);
+    }
+  } else if (domainName !== null) { // User pressed OK but field was empty
+    alert("Domain name cannot be empty.");
+  }
 }
 
-// Placeholder for add function - implement according to your backend needs
-function addGoogleOauthDomain() {
-  alert('Add Google OAuth domain functionality not yet implemented.');
+async function saveGoogleOauth() {
+  const googleOauthCheckbox = document.getElementById('googleOauth');
+  const isEnabled = googleOauthCheckbox ? googleOauthCheckbox.checked : false;
+
+  const googleOauthTableBody = document.getElementById('googleOauthTableBody');
+  const domains = [];
+  if (googleOauthTableBody) {
+    const rows = googleOauthTableBody.getElementsByTagName('tr');
+    for (let i = 0; i < rows.length; i++) {
+      const inputElement = rows[i].querySelector('input[type="text"]');
+      if (inputElement && inputElement.value.trim() !== "") {
+        domains.push(inputElement.value.trim());
+      }
+    }
+  }
+
+  const oauthConfigData = {
+    oauth_eneabled: isEnabled.toString(), // Server expects "true" or "false" as string
+    allowed_oauth_domains: domains
+  };
+
+  try {
+    const response = await fetch('/api/data/save/config', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(oauthConfigData),
+    });
+
+    const result = await response.json();
+    if (response.ok) {
+      alert(result.message || 'OAuth settings saved successfully!');
+    } else {
+      alert(`Error saving OAuth settings: ${result.error || 'Unknown server error'}`);
+    }
+  } catch (error) {
+    console.error('Failed to save OAuth settings:', error);
+    alert('Failed to save OAuth settings. Check console for details.');
+  }
 }
 
 // Load user list on page load
