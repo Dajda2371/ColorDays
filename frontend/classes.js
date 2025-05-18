@@ -2,9 +2,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const mondaySection = document.getElementById('monday-classes');
     const tuesdaySection = document.getElementById('tuesday-classes');
     const wednesdaySection = document.getElementById('wednesday-classes');
+    const classCountingTbody = document.getElementById('class-counting-tbody');
 
     if (!mondaySection || !tuesdaySection || !wednesdaySection) {
         console.error('One or more day sections are missing from the HTML.');
+        return;
+    }
+
+    if (!classCountingTbody) {
+        console.error('The class counting table body is missing from the HTML.');
         return;
     }
 
@@ -17,12 +23,17 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .then(classes => {
             if (!classes || classes.length === 0) {
-                const noClassesMsg = document.createElement('p');
-                noClassesMsg.textContent = 'No classes available to display.';
-                // Append to a general area or the first section if appropriate
-                mondaySection.appendChild(noClassesMsg.cloneNode(true));
-                tuesdaySection.appendChild(noClassesMsg.cloneNode(true));
-                wednesdaySection.appendChild(noClassesMsg.cloneNode(true));
+                const noClassesMsgP = document.createElement('p');
+                noClassesMsgP.textContent = 'No classes available to display.';
+                mondaySection.appendChild(noClassesMsgP.cloneNode(true));
+                tuesdaySection.appendChild(noClassesMsgP.cloneNode(true));
+                wednesdaySection.appendChild(noClassesMsgP.cloneNode(true));
+
+                const noDataRow = classCountingTbody.insertRow();
+                const cell = noDataRow.insertCell();
+                cell.colSpan = 4; // Span across all columns
+                cell.textContent = 'No class counting data available.';
+                cell.style.textAlign = 'center';
             }
             classes.forEach(cls => {
                 // cls.class is the class name, e.g., '1.A'
@@ -40,6 +51,28 @@ document.addEventListener('DOMContentLoaded', function() {
                     const button = createClassButton(cls.class);
                     wednesdaySection.appendChild(button);
                 }
+
+                // Populate the "Class Counting List" table
+                const row = classCountingTbody.insertRow();
+
+                const cellClass = row.insertCell();
+                cellClass.textContent = cls.class;
+
+                const cellIsCountedBy1 = row.insertCell();
+                cellIsCountedBy1.textContent = cls.iscountedby1 === '_NULL_' ? 'N/A' : cls.iscountedby1;
+
+                const cellIsCountedBy2 = row.insertCell();
+                cellIsCountedBy2.textContent = cls.iscountedby2 === '_NULL_' ? 'N/A' : cls.iscountedby2;
+
+                const cellIsCountedBy3 = row.insertCell();
+                cellIsCountedBy3.textContent = cls.iscountedby3 === '_NULL_' ? 'N/A' : cls.iscountedby3;
+
+                // Style N/A cells if desired
+                [cellIsCountedBy1, cellIsCountedBy2, cellIsCountedBy3].forEach(cell => {
+                    if (cell.textContent === 'N/A') {
+                        cell.style.color = '#777'; // Lighter text for N/A
+                    }
+                });
             });
         })
         .catch(error => {

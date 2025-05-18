@@ -3,27 +3,47 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Classes</title>
+  <title>Class Schedule & Counting Links</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <h1>Students Page</h1>
+  <h1>Class Schedule & Counting Links</h1>
+  
+  <section style="margin-top: 3rem;">
+    <h2>Days</h2>
+    
+    <section id="monday-classes">
+      <h3>Monday</h3>
+      <!-- Buttons for Monday classes will be dynamically added here -->
+    </section>
 
-  <section id="monday-classes">
-    <h2>Monday</h2>
-    <!-- Buttons for Monday classes will be dynamically added here -->
+    <section id="tuesday-classes">
+      <h3>Tuesday</h3>
+      <!-- Buttons for Tuesday classes will be dynamically added here -->
+    </section>
+
+    <section id="wednesday-classes">
+      <h3>Wednesday</h3>
+      <!-- Buttons for Wednesday classes will be dynamically added here -->
+    </section>
   </section>
 
-  <section id="tuesday-classes">
-    <h2>Tuesday</h2>
-    <!-- Buttons for Tuesday classes will be dynamically added here -->
+  <section style="margin-top: 3rem;">
+    <h2>Class Counting List</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Class</th>
+          <th>Monday</th>
+          <th>Tuesday</th>
+          <th>Wednesday</th>
+        </tr>
+      </thead>
+      <tbody id="class-counting-tbody">
+        <!-- Class counting data will be dynamically added here -->
+      </tbody>
+    </table>
   </section>
-
-  <section id="wednesday-classes">
-    <h2>Wednesday</h2>
-    <!-- Buttons for Wednesday classes will be dynamically added here -->
-  </section>
-
   <p style="margin-top: 2rem;"><a href="menu.html">Back to Class Selection</a></p>
 
   <!-- Ensure classes.js is linked -->
