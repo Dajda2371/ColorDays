@@ -123,35 +123,59 @@ def hash_password(password):
 
 def verify_password(stored_password_info, provided_password, username):
     """Verifies a provided password against the stored salt and hash."""
+    # Ensure stored_password_info is the expected dictionary structure
     if not isinstance(stored_password_info, dict) or 'password_hash' not in stored_password_info:
         print(f"Error: Invalid stored_password_info structure for user '{username}'. Expected a dict with 'password_hash'.")
         return False, []
     
     password_hash = stored_password_info['password_hash']
-    extra_cookie_headers = [] # Initialize default empty list
+    extra_cookie_headers = [] # Initialize for cookies that might be set on successful pre-gen password login
 
-    if not password_hash or (':' not in password_hash and (password_hash.startswith('_') and password_hash.endswith('_'))):
-        if password_hash and password_hash.startswith('_') and password_hash.endswith('_'): # Check for pre-generated password format _password_
-            _stored_password_info_ = password_hash[1:-1]
-            if _stored_password_info_ == provided_password:
-                print(f"User '{username}' logged in with pregenerated password '{provided_password}'. Setting change password cookie.")
-                # Create the specific cookie needed for this case
-                change_pw_cookie_headers = create_cookies(
-                    CHANGE_PASSWORD_COOKIE_NAME,
-                    "not-required", # Use a simple value like "required" or "true"
-                    path='/', # Apply cookie to root path so it's sent for all requests
-                    # max_age=3600, # Optional: Give it a lifetime (e.g., 1 hour)
-                    httponly=False # Allow JavaScript to read this specific cookie
-                )
-                return True, change_pw_cookie_headers # Return True and the specific cookie headers
-            else:
-                # Pregenerated password provided, but it didn't match
-                print(f"Pregenerated password verification failed for user: {username}")
-                return False, [] # <-- MODIFIED: Return tuple
+    # 1. Handle special, non-loginable password states or unset passwords
+    # These states mean the user cannot log in with a password.
+    if not password_hash or \
+       password_hash.upper() == '_NULL_' or \
+       password_hash == 'NOT_SET' or \
+       password_hash == '_GOOGLE_AUTH_USER_':
+        
+        if password_hash == '_GOOGLE_AUTH_USER_':
+            print(f"Login attempt for Google OAuth user '{username}' with password. Denied.")
+        elif not password_hash or password_hash.upper() == '_NULL_' or password_hash == 'NOT_SET':
+            print(f"Login attempt for user '{username}' with unset, null, or 'NOT_SET' password state.")
+        else: # Should not happen if above conditions are exhaustive for non-loginable
+            print(f"Login attempt for user '{username}' with an unhandled special password state: {password_hash}")
+        return False, []
+
+    # 2. Handle pre-generated passwords (e.g., _password123_)
+    # These are temporary passwords that usually require a change.
+    # This check explicitly excludes _NULL_ and _GOOGLE_AUTH_USER_ due to the checks above.
+    if password_hash.startswith('_') and password_hash.endswith('_'):
+        # Extract the actual password part from within the underscores
+        _stored_actual_password_ = password_hash[1:-1] 
+        if _stored_actual_password_ == provided_password:
+            print(f"User '{username}' logged in with pregenerated password. Setting change password cookie.")
+            # Create a cookie to indicate that a password change is required/prompted
+            change_pw_cookie_headers = create_cookies(
+                CHANGE_PASSWORD_COOKIE_NAME,
+                "not-required", # Value indicates verification (old pass) isn't needed for change
+                path='/', 
+                httponly=False # Allow JS to read this to manage UI for password change
+            )
+            return True, change_pw_cookie_headers
         else:
-            # Stored info is invalid (not pregenerated format and no ':')
-            print(f"Error: Invalid or missing stored password info for user '{username}'.")
-            return False, [] # <-- MODIFIED: Return tuple
+            # Pregenerated password was provided, but it didn't match
+            print(f"Pregenerated password verification failed for user: {username}")
+            return False, []
+
+    # 3. Handle normally hashed passwords (format: salt_hex:key_hex)
+    # This is the standard case for secure password storage.
+    # We only proceed here if password_hash is not a special state and not a pre-generated one.
+    # It must contain a ':' to be a valid salt:key pair.
+    if ':' not in password_hash:
+        # If it's not pre-generated and doesn't have a colon, it's an invalid format.
+        print(f"Error: Unrecognized or invalid password_hash format ('{password_hash}') for user '{username}'. Expected 'salt:key'.")
+        return False, []
+
     try:
         salt_hex, key_hex = password_hash.split(':')
         salt = binascii.unhexlify(salt_hex)
@@ -159,7 +183,7 @@ def verify_password(stored_password_info, provided_password, username):
     except (ValueError, binascii.Error):
         # Invalid format or hex decoding failed
         print(f"Error: Invalid stored password format for hash starting with '{salt_hex[:8]}...' for user '{username}'")
-        return False, [] # <-- MODIFIED: Return tuple
+        return False, []
 
     # Password must be bytes
     provided_pwd_bytes = provided_password.encode('utf-8')
@@ -176,7 +200,11 @@ def verify_password(stored_password_info, provided_password, username):
     # Compare the derived key with the stored key
     # hmac.compare_digest helps prevent timing attacks
     is_match = hmac.compare_digest(stored_key, new_key)
-    return is_match, [] # <-- MODIFIED: Return tuple (True/False, empty list)
+    if not is_match:
+        print(f"Password hash mismatch for user '{username}'.")
+    # For standard hash verification, no extra cookies are typically set by this function itself.
+    # The login handler will set session cookies if is_match is True.
+    return is_match, []
 
 # --- User Credentials Store (Loaded from logins.sql) --- <--- MODIFIED
 # This dictionary will be populated by load_user_data_from_sql()
@@ -1471,26 +1499,25 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         parsed_path = urllib.parse.urlparse(self.path)
         path = parsed_path.path
 
-        # Read request body
         content_length = int(self.headers.get('Content-Length', 0))
-        # Allow empty body for /logout
-        body = b'' # Initialize body to empty bytes
-        if content_length > 0 :
-            body = self.rfile.read(content_length)
-        elif content_length == 0 and path != '/logout': # Path check was here
-             self._send_response(400, {"error": "Empty request body for non-logout endpoint"})
-             return
-        if content_length == 0 and path != '/logout':
-             self._send_response(400, {"error": "Empty request body"})
-             return
-        body = self.rfile.read(content_length)
+        post_body_bytes = b'' # Use a more descriptive name for the raw bytes
+        if content_length > 0:
+            post_body_bytes = self.rfile.read(content_length)
+        # Note: We don't immediately reject empty bodies here,
+        # as /logout allows it. Specific endpoints will check if they need a body.
 
         # --- LOGIN Endpoint ---
         if path == '/login':
+            # Login endpoint specifically requires a non-empty body
+            if not post_body_bytes:
+                self._send_response(400, {"error": "Missing request body for login"})
+                return
             try:
-                credentials = json.loads(body)
+                credentials = json.loads(post_body_bytes) # Use the correctly read body
                 username = credentials.get('username')
                 submitted_password = credentials.get('password')
+                print(f"DEBUG: Login attempt for username: '{username}'") # Log username
+
 
                 # Initialize login result and extra headers
                 login_successful = False
@@ -1610,15 +1637,21 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             return # Stop processing after handling /logout
         # --- End Authentication Check ---
 
+        # --- For all other POST endpoints below, a JSON body is generally expected ---
+        # (and authentication is required)
+
         # --- Password Change Check for POST ---
         # Must happen *after* login check but *before* executing protected endpoint logic
         cookies = self.get_cookies() # Get fresh cookies for POST check
         password_change_required = cookies.get(CHANGE_PASSWORD_COOKIE_NAME)
 
-        # Define allowed POST paths during forced change
+        # Define POST paths allowed even if a password change is "pending" (e.g., from pre-gen password)
+        # /api/auth/change is the endpoint TO change the password.
         allowed_post_paths_during_change = ['/login', '/logout', '/api/auth/change']
 
-        if password_change_required and path not in allowed_post_paths_during_change:
+        # If the "ChangePasswordVerificationNotNeeded" cookie exists, it means they logged in with a pre-gen password.
+        # They should only be able to call /api/auth/change or /logout.
+        if password_change_required and password_change_required.value == "not-required" and path not in allowed_post_paths_during_change:
             print(f"Denied POST request to {path} - Password change required.")
             self._send_response(403, {"error": "Password change required before performing this action."})
             return
@@ -1636,15 +1669,15 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
         # Parse JSON body (already read, just need to decode)
         try:
-            # Handle potential empty body for endpoints that might not need it (though ours do)
-            if content_length > 0:
-                data = json.loads(body)
-            else:
-                data = {} # Or handle error if body is required
+            # Most subsequent endpoints expect a JSON body.
+            # If post_body_bytes is empty here, it means content_length was 0 and it wasn't /login or /logout.
+            if not post_body_bytes:
+                self._send_response(400, {"error": "Missing JSON payload for this endpoint"})
+                return
+            data = json.loads(post_body_bytes)
         except json.JSONDecodeError:
             self._send_response(400, {"error": "Invalid JSON payload"})
             return
-
         # --- Handle /add_user ---
         if path == '/add_user':
             # RBAC Check
