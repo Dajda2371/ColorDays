@@ -362,15 +362,27 @@ def parse_sql_line(line):
 def parse_classes_sql_line(line):
     """Parses a single INSERT statement line for the classes table."""
     # Regex for: INSERT INTO classes (class, teacher, counts1, counts2, counts3) VALUES ('1.A', 'name', 'F', 'F', 'F');
-    # Note the typo 'counts2' and 'counts3' in the SQL file.
+    # Updated to include iscountedby1, iscountedby2, iscountedby3
     match = re.match(
-        r"INSERT INTO classes\s*\(\s*class\s*,\s*teacher\s*,\s*counts1\s*,\s*counts2\s*,\s*counts3\s*\)\s*VALUES\s*\(\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([TF])'\s*,\s*'([TF])'\s*,\s*'([TF])'\s*\);",
+        r"INSERT INTO classes\s*\("
+        r"\s*class\s*,\s*teacher\s*,\s*counts1\s*,\s*counts2\s*,\s*counts3\s*,"
+        r"\s*iscountedby1\s*,\s*iscountedby2\s*,\s*iscountedby3\s*"  # New columns
+        r"\)\s*VALUES\s*\("
+        r"\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([TF])'\s*,\s*'([TF])'\s*,\s*'([TF])'\s*,"  # class, teacher, counts1-3
+        r"\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*"  # iscountedby1-3
+        r"\);",
         line.strip(),
         re.IGNORECASE
     )
     if match:
-        class_name, teacher, counts1, counts2, counts3 = match.groups()
-        return {"class": class_name, "teacher": teacher, "counts1": counts1, "counts2": counts2, "counts3": counts3}
+        class_name, teacher, counts1, counts2, counts3, iscountedby1, iscountedby2, iscountedby3 = match.groups()
+        return {
+            "class": class_name, "teacher": teacher,
+            "counts1": counts1, "counts2": counts2, "counts3": counts3,
+            "iscountedby1": iscountedby1,
+            "iscountedby2": iscountedby2,
+            "iscountedby3": iscountedby3
+        }
     else:
         # Ignore comments and empty lines silently
         if line.strip() and not line.strip().startswith('--') and not line.strip().upper().startswith('CREATE TABLE'):
@@ -653,9 +665,15 @@ def save_class_data_to_sql():
                 # Basic escaping for class name and teacher (should be sufficient if they don't contain quotes)
                 safe_class_name = class_item['class'].replace("'", "''")
                 safe_teacher = class_item['teacher'].replace("'", "''")
+                # Get new fields, defaulting to '_NULL_' if somehow missing (though parser/add should ensure they exist)
+                safe_iscountedby1 = str(class_item.get('iscountedby1', '_NULL_')).replace("'", "''")
+                safe_iscountedby2 = str(class_item.get('iscountedby2', '_NULL_')).replace("'", "''")
+                safe_iscountedby3 = str(class_item.get('iscountedby3', '_NULL_')).replace("'", "''")
+
                 insert_statement = (
-                    f"INSERT INTO classes (class, teacher, counts1, counts2, counts3) VALUES "
-                    f"('{safe_class_name}', '{safe_teacher}', '{class_item['counts1']}', '{class_item['counts2']}', '{class_item['counts3']}');"
+                    f"INSERT INTO classes (class, teacher, counts1, counts2, counts3, iscountedby1, iscountedby2, iscountedby3) VALUES "
+                    f"('{safe_class_name}', '{safe_teacher}', '{class_item['counts1']}', '{class_item['counts2']}', '{class_item['counts3']}', "
+                    f"'{safe_iscountedby1}', '{safe_iscountedby2}', '{safe_iscountedby3}');"
                 )
                 sql_lines.append(insert_statement)
 
@@ -1766,6 +1784,10 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             counts1 = data.get('counts1', 'F') # Default to 'F' if not provided
             counts2 = data.get('counts2', 'F')  # Use 'counts2' to match SQL and JS
             counts3 = data.get('counts3', 'F')  # Use 'counts3' to match SQL and JS
+            # Get new fields, defaulting to _NULL_
+            iscountedby1 = data.get('iscountedby1', '_NULL_')
+            iscountedby2 = data.get('iscountedby2', '_NULL_')
+            iscountedby3 = data.get('iscountedby3', '_NULL_')
 
             if not class_name or not teacher:
                 self._send_response(400, {"error": "Missing class name or teacher"})
@@ -1785,7 +1807,9 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 else:
                     new_class = {
                         "class": class_name, "teacher": teacher,
-                        "counts1": counts1, "counts2": counts2, "counts3": counts3
+                        "counts1": counts1, "counts2": counts2, "counts3": counts3,
+                        "iscountedby1": iscountedby1, "iscountedby2": iscountedby2,
+                        "iscountedby3": iscountedby3
                     }
                     class_data_store.append(new_class)
                     # Sort the class_data_store alphabetically by class name
