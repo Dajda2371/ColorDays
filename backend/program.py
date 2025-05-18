@@ -2284,9 +2284,9 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 self._send_response(403, {"error": "Forbidden: Administrator access required."})
                 return
 
-            student_class_to_remove = data.get('class') # Identify student by their 'class' field
-            if not student_class_to_remove:
-                self._send_response(400, {"error": "Missing 'class' of student to remove"})
+            student_code_to_remove = data.get('code') # Identify student by their 'code'
+            if not student_code_to_remove:
+                self._send_response(400, {"error": "Missing 'code' of student configuration to remove"})
                 return
 
             success = False
@@ -2296,18 +2296,19 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             with data_lock:
                 original_len = len(students_data_store)
                 # Filter out the student to remove
-                students_data_store[:] = [s for s in students_data_store if s['class'] != student_class_to_remove]
+                students_data_store[:] = [s_config for s_config in students_data_store if s_config.get('code') != student_code_to_remove]
                 
                 if len(students_data_store) < original_len: # If something was removed
                     if save_students_data_to_sql():
                         success = True
-                        message = f"Student configuration for class '{student_class_to_remove}' removed successfully."
+                        # We don't easily have the note/class here without finding it first, so a generic message is fine
+                        message = f"Student configuration with code '{student_code_to_remove}' removed successfully."
                         status_code = 200
                     else:
-                        message = f"Student configuration for '{student_class_to_remove}' removed from memory, but FAILED to save to file."
+                        message = f"Student configuration with code '{student_code_to_remove}' removed from memory, but FAILED to save to file."
                         status_code = 500 # Internal Server Error
                 else:
-                    message = f"Student configuration for class '{student_class_to_remove}' not found."
+                    message = f"Student configuration with code '{student_code_to_remove}' not found."
                     status_code = 404 # Not Found
             self._send_response(status_code, {"success": success, "message": message} if success else {"error": message})
             return

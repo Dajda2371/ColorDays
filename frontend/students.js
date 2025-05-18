@@ -81,20 +81,20 @@ document.addEventListener('DOMContentLoaded', function() {
             const removeButton = document.createElement('button');
             removeButton.textContent = 'Remove';
             removeButton.className = 'button-danger'; // Add a class for styling if needed
-            removeButton.addEventListener('click', () => removeStudent(student.class)); // student.class is the identifier
+            removeButton.addEventListener('click', () => removeStudent(student.code, student.note, student.class)); // Pass code, note, and class for confirmation
             actionsCell.appendChild(removeButton);
         });
     }
 
-    function removeStudent(studentClassIdentifier) {
-        if (!confirm(`Are you sure you want to remove the student configuration for class "${studentClassIdentifier}"?`)) {
+    function removeStudent(studentCode, studentNote, studentClass) {
+        if (!confirm(`Are you sure you want to remove the student configuration:\nCode: ${studentCode}\nClass: ${studentClass}\nNote: ${studentNote || '(No note)'}?`)) {
             return;
         }
 
         fetch('/api/students/remove', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ class: studentClassIdentifier })
+            body: JSON.stringify({ code: studentCode }) // Send the student's code
         })
         .then(response => response.json().then(data => ({ ok: response.ok, data })))
         .then(({ ok, data }) => {
