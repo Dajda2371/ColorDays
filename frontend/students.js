@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .catch(error => {
                 console.error('Error fetching students:', error);
-                studentsTableBody.innerHTML = `<tr><td colspan="4" style="color: red; text-align: center;">Error loading students: ${error.message}</td></tr>`;
+                studentsTableBody.innerHTML = `<tr><td colspan="5" style="color: red; text-align: center;">Error loading students: ${error.message}</td></tr>`;
             });
     }
 
@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', function() {
         studentsTableBody.innerHTML = ''; // Clear existing rows
 
         if (students.length === 0) {
-            studentsTableBody.innerHTML = '<tr><td colspan="4" style="text-align: center;">No student configurations found.</td></tr>';
+            studentsTableBody.innerHTML = '<tr><td colspan="5" style="text-align: center;">No student configurations found.</td></tr>';
             return;
         }
 
@@ -37,6 +37,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const row = studentsTableBody.insertRow();
 
             row.insertCell().textContent = student.code;
+            row.insertCell().textContent = student.class; // Add the student's class
             row.insertCell().textContent = student.note;
             
             // 'counting_classes' is expected to be an array from the backend
