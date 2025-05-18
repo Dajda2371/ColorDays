@@ -88,4 +88,43 @@ document.addEventListener('DOMContentLoaded', function() {
             alert(`Failed to remove student configuration: ${error.message}`);
         });
     }
+
+    // Make this function globally accessible for the inline onclick
+    window.addStudentConfiguration = function() {
+        const studentClass = prompt("Enter the student's class (e.g., 9.A):");
+        if (studentClass === null || studentClass.trim() === "") {
+            alert("Class cannot be empty. Operation cancelled.");
+            return;
+        }
+
+        const note = prompt("Enter a note for this student configuration:");
+        if (note === null) { // Allow empty note, but not if cancelled
+            alert("Operation cancelled.");
+            return;
+        }
+
+        fetch('/api/students/add', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                class: studentClass.trim(),
+                note: note // Note can be empty string
+            }),
+        })
+        .then(response => response.json().then(data => ({ ok: response.ok, data })))
+        .then(({ok, data}) => {
+            if (ok && data.success) {
+                alert(data.message || 'Student configuration added successfully.');
+                loadStudents(); // Reload the table to show the new student
+            } else {
+                alert(`Error adding student configuration: ${data.error || 'Unknown error'}`);
+            }
+        })
+        .catch(error => {
+            console.error('Error adding student configuration:', error);
+            alert(`Failed to add student configuration: ${error.message}`);
+        });
+    }
 });

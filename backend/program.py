@@ -2222,6 +2222,52 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             self._send_response(status_code, {"success": success, "message": message} if success else {"error": message})
             return
 
+        # --- Handle /api/students/add ---
+        elif path == '/api/students/add':
+            if not self.is_logged_in():
+                self._send_response(401, {"error": "Authentication required"})
+                return
+            # RBAC Check - Only Admins can add student configurations
+            if current_user_role != ADMIN_ROLE:
+                self._send_response(403, {"error": "Forbidden: Administrator access required."})
+                return
+
+            student_class = data.get('class')
+            note = data.get('note', '') # Default to empty string if note is not provided
+
+            if not student_class:
+                self._send_response(400, {"error": "Missing 'class' for the new student configuration."})
+                return
+
+            success = False
+            message = "Failed to add student configuration."
+            status_code = 500
+
+            with data_lock:
+                # Check if a student configuration for this class already exists
+                if any(s['class'] == student_class for s in students_data_store):
+                    message = f"A student configuration for class '{student_class}' already exists."
+                    status_code = 409 # Conflict
+                else:
+                    new_student_config = {
+                        "code": generate_random_code(), # Server generates the code
+                        "class": student_class,
+                        "note": note,
+                        "counts_classes_str": "[]" # New students start with no classes to count
+                    }
+                    students_data_store.append(new_student_config)
+                    students_data_store.sort(key=lambda x: x['class']) # Keep sorted
+
+                    if save_students_data_to_sql():
+                        success = True
+                        message = f"Student configuration for class '{student_class}' added successfully."
+                        status_code = 201 # Created
+                    else:
+                        students_data_store.pop() # Revert in-memory change if save fails
+                        message = f"Failed to save new student configuration for '{student_class}' to file."
+                        status_code = 500
+            self._send_response(status_code, {"success": success, "message": message} if success else {"error": message})
+            return
         # --- Handle /api/auth/change ---
         elif path == '/api/auth/change':
             # user_key_for_rbac (user's actual key in user_password_store) is already available
