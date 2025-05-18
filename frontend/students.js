@@ -8,6 +8,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     loadStudents();
 
+    // Get the 'day' parameter from the current URL if it exists
+    const urlParams = new URLSearchParams(window.location.search);
+    const dayFromUrl = urlParams.get('day');
+    const classFromUrl = urlParams.get('class'); // Get the 'class' parameter
+
     function loadStudents() {
         fetch('/api/students')
             .then(response => {
@@ -17,7 +22,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 return response.json();
             })
             .then(students => {
-                renderStudentsTable(students);
+                let studentsToRender = students;
+                if (classFromUrl) {
+                    studentsToRender = students.filter(student => student.class === classFromUrl);
+                    // Optionally, update a subtitle or heading to indicate filtering
+                    const pageHeading = document.querySelector('h1');
+                    if (pageHeading) {
+                        pageHeading.textContent = `Students for Class: ${classFromUrl}`;
+                    }
+                }
+                renderStudentsTable(studentsToRender);
             })
             .catch(error => {
                 console.error('Error fetching students:', error);
@@ -29,7 +43,11 @@ document.addEventListener('DOMContentLoaded', function() {
         studentsTableBody.innerHTML = ''; // Clear existing rows
 
         if (students.length === 0) {
-            studentsTableBody.innerHTML = '<tr><td colspan="5" style="text-align: center;">No student configurations found.</td></tr>';
+            let noStudentsMessage = 'No student configurations found.';
+            if (classFromUrl) {
+                noStudentsMessage = `No student configurations found for class ${classFromUrl}.`;
+            }
+            studentsTableBody.innerHTML = `<tr><td colspan="5" style="text-align: center;">${noStudentsMessage}</td></tr>`;
             return;
         }
 
@@ -49,7 +67,11 @@ document.addEventListener('DOMContentLoaded', function() {
             const actionsCell = row.insertCell();
             
             const editButton = document.createElement('a');
-            editButton.href = `student-is-counting.html?note=${encodeURIComponent(student.note)}`;
+            let editHref = `student-is-counting.html?note=${encodeURIComponent(student.note)}`;
+            if (dayFromUrl) { // If 'day' was in the URL of students.html, pass it along
+                editHref += `&day=${encodeURIComponent(dayFromUrl)}`;
+            }
+            editButton.href = editHref;
             editButton.textContent = 'Edit Classes';
             editButton.className = 'button'; // Add a class for styling if needed
             actionsCell.appendChild(editButton);
@@ -91,12 +113,19 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Make this function globally accessible for the inline onclick
     window.addStudentConfiguration = function() {
-        const studentClass = prompt("Enter the student's class (e.g., 9.A):");
-        if (studentClass === null || studentClass.trim() === "") {
-            alert("Class cannot be empty. Operation cancelled.");
-            return;
-        }
+        let studentClassToAdd;
 
+        if (classFromUrl) {
+            studentClassToAdd = classFromUrl;
+            console.log(`Adding student configuration for class from URL: ${studentClassToAdd}`);
+        } else {
+            studentClassToAdd = prompt("Enter the student's class (e.g., 9.A):");
+            if (studentClassToAdd === null || studentClassToAdd.trim() === "") {
+                alert("Class cannot be empty. Operation cancelled.");
+                return;
+            }
+            studentClassToAdd = studentClassToAdd.trim();
+        }
         const note = prompt("Enter a note for this student configuration:");
         if (note === null) { // Allow empty note, but not if cancelled
             alert("Operation cancelled.");
@@ -109,7 +138,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                class: studentClass.trim(),
+                class: studentClassToAdd,
                 note: note // Note can be empty string
             }),
         })

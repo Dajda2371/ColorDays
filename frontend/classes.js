@@ -55,15 +55,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 // cls.counts1, cls.counts2, cls.counts3 are 'T' or 'F'
 
                 if (cls.counts1 === 'T') {
-                    const button = createClassButton(cls.class);
+                    const button = createClassButton(cls.class, '1'); // Pass day identifier 1 for Monday
                     mondaySection.appendChild(button);
                 }
                 if (cls.counts2 === 'T') {
-                    const button = createClassButton(cls.class);
+                    const button = createClassButton(cls.class, '2'); // Pass day identifier 2 for Tuesday
                     tuesdaySection.appendChild(button);
                 }
                 if (cls.counts3 === 'T') {
-                    const button = createClassButton(cls.class);
+                    const button = createClassButton(cls.class, '3'); // Pass day identifier 3 for Wednesday
                     wednesdaySection.appendChild(button);
                 }
 
@@ -97,10 +97,10 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-    function createClassButton(className) {
+    function createClassButton(className, dayIdentifier) {
         const link = document.createElement('a');
         // Link to students.html with class name as a query parameter
-        link.href = `students.html?class=${encodeURIComponent(className)}`;
+        link.href = `students.html?class=${encodeURIComponent(className)}&day=${dayIdentifier}`;
         link.textContent = className;
         link.className = 'button class-button'; // Use 'button' or a custom class for styling
         // You can add more specific styling via style.css for '.class-button'
