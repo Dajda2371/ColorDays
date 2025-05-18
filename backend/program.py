@@ -2334,28 +2334,26 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             status_code = 500
 
             with data_lock:
-                # Check if a student configuration for this class already exists
-                if any(s['class'] == student_class for s in students_data_store):
-                    message = f"A student configuration for class '{student_class}' already exists."
-                    status_code = 409 # Conflict
-                else:
-                    new_student_config = {
-                        "code": generate_random_code(), # Server generates the code
-                        "class": student_class,
-                        "note": note,
-                        "counts_classes_str": "[]" # New students start with no classes to count
-                    }
-                    students_data_store.append(new_student_config)
-                    students_data_store.sort(key=lambda x: x['class']) # Keep sorted
+                # Removed the check for existing student configuration by class.
+                # Now multiple configurations can exist for the same class,
+                # distinguished by their notes or codes.
+                new_student_config = {
+                    "code": generate_random_code(), # Server generates the code
+                    "class": student_class,
+                    "note": note,
+                    "counts_classes_str": "[]" # New students start with no classes to count
+                }
+                students_data_store.append(new_student_config)
+                students_data_store.sort(key=lambda x: (x['class'], x.get('note', ''))) # Keep sorted by class, then note
 
-                    if save_students_data_to_sql():
-                        success = True
-                        message = f"Student configuration for class '{student_class}' added successfully."
-                        status_code = 201 # Created
-                    else:
-                        students_data_store.pop() # Revert in-memory change if save fails
-                        message = f"Failed to save new student configuration for '{student_class}' to file."
-                        status_code = 500
+                if save_students_data_to_sql():
+                    success = True
+                    message = f"Student configuration for class '{student_class}' (Note: '{note}') added successfully."
+                    status_code = 201 # Created
+                else:
+                    students_data_store.pop() # Revert in-memory change if save fails
+                    message = f"Failed to save new student configuration for '{student_class}' (Note: '{note}') to file."
+                    status_code = 500
             self._send_response(status_code, {"success": success, "message": message} if success else {"error": message})
             return
         
