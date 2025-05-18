@@ -403,18 +403,19 @@ def parse_classes_sql_line(line):
 # --- Parsing for students.sql ---
 def parse_students_sql_line(line):
     """Parses a single INSERT statement line for the students table."""
-    # Regex for: INSERT INTO students (class, note, classes) VALUES ('9.A', 'note', '[1.A, 1.B, 1.C]');
+    # Updated Regex for: INSERT INTO students (code, class, note, counts_classes) VALUES ('somecode', '9.A', 'note', '[1.A, 1.B, 1.C]');
     match = re.match(
-        r"INSERT INTO students\s*\(\s*class\s*,\s*note\s*,\s*classes\s*\)\s*VALUES\s*\(\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*\);",
+        r"INSERT INTO students\s*\(\s*code\s*,\s*class\s*,\s*note\s*,\s*counts_classes\s*\)\s*VALUES\s*\(\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*\);",
         line.strip(),
         re.IGNORECASE
     )
     if match:
-        class_name, note, classes_str = match.groups()
+        code, class_name, note, counts_classes_str = match.groups()
         return {
+            "code": code, # Store the code from the file
             "class": class_name,
             "note": note,
-            "classes_str": classes_str # Keep as string, parse later or on demand
+            "counts_classes_str": counts_classes_str # Renamed field
         }
     else:
         # Ignore comments and empty lines silently
@@ -605,8 +606,12 @@ def load_students_data_from_sql():
                 for line_num, line in enumerate(f, 1):
                     parsed = parse_students_sql_line(line)
                     if parsed:
-                        # Add a generated code to each student record
-                        parsed['code'] = generate_random_code()
+                        # If code from file is empty or placeholder, generate a new one.
+                        # Otherwise, use the code from the file.
+                        if not parsed.get('code') or parsed['code'] == "''" or parsed['code'] == "": # Check for empty string or literal ''
+                            parsed['code'] = generate_random_code()
+                        # If the SQL has an empty string for code, like VALUES ('', ...), the regex captures it as an empty string.
+                        # The above check handles this.
                         temp_students_store.append(parsed)
                         students_loaded_count += 1
             print(f"Loaded {students_loaded_count} student configuration(s) from {students_sql_file_path}.")
@@ -758,7 +763,7 @@ def save_class_data_to_sql():
 # --- Saving for students.sql ---
 def save_students_data_to_sql():
     """Saves the current in-memory students_data_store back to students.sql.
-       The 'code' field is not saved as it's generated on load.
+       The 'code' field (either from file or generated if was empty) is now saved.
        Returns True on success, False on failure.
     """
     global students_data_store
@@ -773,13 +778,14 @@ def save_students_data_to_sql():
 
             for student_item in students_data_store:
                 # Basic escaping
+                safe_code = student_item.get('code', generate_random_code()).replace("'", "''") # Ensure code exists and is escaped
                 safe_class_name = student_item['class'].replace("'", "''")
                 safe_note = student_item['note'].replace("'", "''")
-                # classes_str should already be in the correct format like '[1.A, 1.B]'
-                # No extra escaping needed for classes_str if it doesn't contain single quotes itself.
+                # counts_classes_str should already be in the correct format like '[1.A, 1.B]'
+                counts_classes_value = student_item.get('counts_classes_str', '[]') # Default to empty list string
                 insert_statement = (
-                    f"INSERT INTO students (class, note, classes) VALUES "
-                    f"('{safe_class_name}', '{safe_note}', '{student_item['classes_str']}');"
+                    f"INSERT INTO students (code, class, note, counts_classes) VALUES "
+                    f"('{safe_code}', '{safe_class_name}', '{safe_note}', '{counts_classes_value}');"
                 )
                 sql_lines.append(insert_statement)
 
@@ -1407,10 +1413,21 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 for student in students_data_store:
                     # Parse the classes_str into a list for the frontend
                     try:
-                        # The string is like '[1.A, 1.B]', json.loads can parse this.
-                        counting_classes_list = json.loads(student['classes_str'].replace("'", "\""))
-                    except json.JSONDecodeError:
-                        print(f"Warning: Could not parse classes_str for student {student['class']}: {student['classes_str']}")
+                        s = student.get('counts_classes_str', '[]') # Default to '[]' if missing
+                        if s.startswith('[') and s.endswith(']'):
+                            # Remove brackets
+                            s_content = s[1:-1]
+                            if not s_content.strip(): # Handles "[]" or "[ ]"
+                                counting_classes_list = []
+                            else:
+                                # Split by comma, then strip whitespace from each item
+                                counting_classes_list = [item.strip() for item in s_content.split(',')]
+                        else:
+                            # If it's not in the expected format, treat as error or empty
+                            print(f"Warning: counts_classes_str for student {student['class']} is not in expected list format: {s}")
+                            counting_classes_list = []
+                    except Exception as e: # Catch any unexpected error during string parsing
+                        print(f"Error parsing counts_classes_str for student {student['class']}: '{student.get('counts_classes_str')}'. Error: {e}")
                         counting_classes_list = [] # Default to empty list on error
                     response_payload.append({**student, "counting_classes": counting_classes_list})
             self._send_response(200, response_payload)
