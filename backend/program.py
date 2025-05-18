@@ -1974,9 +1974,28 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             field_to_update = f"iscountedby{day_identifier}"
 
             # --- Server-side check for can_students_count_their_own_class ---
-            # server_config is loaded at startup
-            allow_self_count_str = server_config.get('can_students_count_their_own_class', 'true') # Default to true if missing
+            # Read config.json directly for this check on every request
+            allow_self_count_str = 'true' # Default to true (allow self-count)
+            config_file_path = DATA_DIR / 'config.json'
+            try:
+                if config_file_path.is_file():
+                    with open(config_file_path, 'r', encoding='utf-8') as f:
+                        current_config_on_disk = json.load(f)
+                    allow_self_count_str = current_config_on_disk.get('can_students_count_their_own_class', 'true')
+                    print(f"DEBUG: Read 'can_students_count_their_own_class' from disk: {allow_self_count_str}")
+                else:
+                    print(f"Warning: {config_file_path} not found during iscountedby update. Defaulting 'can_students_count_their_own_class' to 'true'.")
+            except json.JSONDecodeError:
+                print(f"!!! ERROR: Invalid JSON in {config_file_path} during iscountedby update. Defaulting 'can_students_count_their_own_class' to 'true'.")
+            except Exception as e:
+                print(f"!!! ERROR reading {config_file_path} during iscountedby update: {e}. Defaulting 'can_students_count_their_own_class' to 'true'.")
+            
             allow_self_count = allow_self_count_str.lower() == 'true'
+            # --- End of direct config file read ---
+
+            # Old way using in-memory server_config:
+            # allow_self_count_str = server_config.get('can_students_count_their_own_class', 'true') # Default to true if missing
+            # allow_self_count = allow_self_count_str.lower() == 'true'
 
             if not allow_self_count and new_value == class_name_to_update:
                 self._send_response(400, {"error": f"Configuration prevents class '{class_name_to_update}' from counting itself."})
