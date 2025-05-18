@@ -2198,8 +2198,8 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         # --- Handle /api/classes/update_iscountedby ---
         elif path == '/api/classes/update_iscountedby':
             # RBAC Check
-            if current_user_role != ADMIN_ROLE:
-                self._send_response(403, {"error": "Forbidden: Administrator access required."})
+            if current_user_role not in [ADMIN_ROLE, TEACHER_ROLE]: # Allow Admins and Teachers
+                self._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
                 return
 
             class_name_to_update = data.get('class')
