@@ -86,6 +86,15 @@ GOOGLE_REDIRECT_URI = f'http://{HOST}:{PORT}/oauth2callback' # Must match one in
 # --- Secure Login Configuration (Using hashlib.pbkdf2_hmac) ---
 
 # Parameters for PBKDF2
+import random # For generating random codes
+import string # For character sets for random codes
+
+# --- Student Code Generation ---
+def generate_random_code(length=15):
+    """Generates a random alphanumeric code of a given length."""
+    characters = string.ascii_letters + string.digits
+    return ''.join(random.choice(characters) for i in range(length))
+
 HASH_ALGORITHM = 'sha256'
 # Iterations: Higher is more secure but slower. Start high (e.g., 260000+)
 # Adjust based on your server performance and security needs.
@@ -224,7 +233,9 @@ SQL_COOKIE_NAME = "SQLAuthUser" # For SQL users
 # --- In-Memory Data Store and Lock ---
 data_store = collections.defaultdict(lambda: collections.defaultdict(lambda: collections.defaultdict(int)))
 data_lock = threading.RLock()
+server_config = {} # To store data from config.json
 class_data_store = [] # To store data from classes.sql as a list of dicts
+students_data_store = [] # To store data from students.sql
 
 def get_current_user_info(handler_instance): # Returns username_key, role
     """
@@ -361,20 +372,55 @@ def parse_sql_line(line):
 # --- Parsing for classes.sql ---
 def parse_classes_sql_line(line):
     """Parses a single INSERT statement line for the classes table."""
-    # Regex for: INSERT INTO classes (class, teacher, counts1, couts2, couts3) VALUES ('1.A', 'name', 'F', 'F', 'F');
-    # Note the typo 'couts2' and 'couts3' in the SQL file.
+    # Regex for: INSERT INTO classes (class, teacher, counts1, counts2, counts3) VALUES ('1.A', 'name', 'F', 'F', 'F');
+    # Updated to include iscountedby1, iscountedby2, iscountedby3
     match = re.match(
-        r"INSERT INTO classes\s*\(\s*class\s*,\s*teacher\s*,\s*counts1\s*,\s*couts2\s*,\s*couts3\s*\)\s*VALUES\s*\(\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([TF])'\s*,\s*'([TF])'\s*,\s*'([TF])'\s*\);",
+        r"INSERT INTO classes\s*\("
+        r"\s*class\s*,\s*teacher\s*,\s*counts1\s*,\s*counts2\s*,\s*counts3\s*,"
+        r"\s*iscountedby1\s*,\s*iscountedby2\s*,\s*iscountedby3\s*"  # New columns
+        r"\)\s*VALUES\s*\("
+        r"\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([TF])'\s*,\s*'([TF])'\s*,\s*'([TF])'\s*,"  # class, teacher, counts1-3
+        r"\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*"  # iscountedby1-3
+        r"\);",
         line.strip(),
         re.IGNORECASE
     )
     if match:
-        class_name, teacher, counts1, couts2, couts3 = match.groups()
-        return {"class": class_name, "teacher": teacher, "counts1": counts1, "couts2": couts2, "couts3": couts3}
+        class_name, teacher, counts1, counts2, counts3, iscountedby1, iscountedby2, iscountedby3 = match.groups()
+        return {
+            "class": class_name, "teacher": teacher,
+            "counts1": counts1, "counts2": counts2, "counts3": counts3,
+            "iscountedby1": iscountedby1,
+            "iscountedby2": iscountedby2,
+            "iscountedby3": iscountedby3
+        }
     else:
         # Ignore comments and empty lines silently
         if line.strip() and not line.strip().startswith('--') and not line.strip().upper().startswith('CREATE TABLE'):
-             print(f"Warning: Could not parse classes line format: {line.strip()}")
+            print(f"Warning: Could not parse classes line format: {line.strip()}")
+        return None
+
+# --- Parsing for students.sql ---
+def parse_students_sql_line(line):
+    """Parses a single INSERT statement line for the students table."""
+    # Updated Regex for: INSERT INTO students (code, class, note, counts_classes) VALUES ('somecode', '9.A', 'note', '[1.A, 1.B, 1.C]');
+    match = re.match(
+        r"INSERT INTO students\s*\(\s*code\s*,\s*class\s*,\s*note\s*,\s*counts_classes\s*\)\s*VALUES\s*\(\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*\);",
+        line.strip(),
+        re.IGNORECASE
+    )
+    if match:
+        code, class_name, note, counts_classes_str = match.groups()
+        return {
+            "code": code, # Store the code from the file
+            "class": class_name,
+            "note": note,
+            "counts_classes_str": counts_classes_str # Renamed field
+        }
+    else:
+        # Ignore comments and empty lines silently
+        if line.strip() and not line.strip().startswith('--') and not line.strip().upper().startswith('CREATE TABLE'):
+             print(f"Warning: Could not parse students line format: {line.strip()}")
         return None
 
 # --- Parsing for logins.sql --- <--- NEW
@@ -542,6 +588,53 @@ def load_class_data_from_sql():
 
     print("Class data loading complete.")
 
+# --- Loading for students.sql ---
+def load_students_data_from_sql():
+    """Loads data from students.sql into the in-memory students_data_store."""
+    global students_data_store
+    students_sql_file_path = DATA_DIR / 'students.sql'
+    print(f"Attempting to load student data from: {students_sql_file_path}")
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    temp_students_store = []
+    file_exists = students_sql_file_path.exists()
+    students_loaded_count = 0
+    codes_were_generated = False # Flag to track if we generated any codes
+
+    if file_exists:
+        try:
+            with open(students_sql_file_path, 'r', encoding='utf-8') as f:
+                for line_num, line in enumerate(f, 1):
+                    parsed = parse_students_sql_line(line)
+                    if parsed:
+                        # If code from file is empty or placeholder, generate a new one.
+                        # Otherwise, use the code from the file.
+                        if not parsed.get('code') or parsed['code'] == "''" or parsed['code'] == "": # Check for empty string or literal ''
+                            parsed['code'] = generate_random_code()
+                            codes_were_generated = True # Mark that a code was generated
+                        # If the SQL has an empty string for code, like VALUES ('', ...), the regex captures it as an empty string.
+                        # The above check handles this.
+                        temp_students_store.append(parsed)
+                        students_loaded_count += 1
+            print(f"Loaded {students_loaded_count} student configuration(s) from {students_sql_file_path}.")
+        except Exception as e:
+            print(f"!!! ERROR reading or parsing {students_sql_file_path}: {e}. Student data store might be empty or incomplete.")
+            temp_students_store.clear()
+    else:
+        print(f"Warning: {students_sql_file_path} not found. No student configurations loaded.")
+
+    # Update the global data store under lock
+    with data_lock: # Reusing data_lock for simplicity
+        students_data_store = temp_students_store
+
+    # If we generated any codes for students with initially empty code fields, save the data back.
+    if codes_were_generated:
+        print("Generated new codes for some students during load. Saving student data...")
+        if not save_students_data_to_sql(): # This function already handles locking
+            print("!!! CRITICAL: Failed to save student data to file after generating new codes.")
+
+    print("Student data loading complete.")
+
 # --- Loading for logins.sql --- <--- NEW
 def load_user_data_from_sql():
     """Loads user data from logins.sql into the in-memory user_password_store."""
@@ -653,9 +746,15 @@ def save_class_data_to_sql():
                 # Basic escaping for class name and teacher (should be sufficient if they don't contain quotes)
                 safe_class_name = class_item['class'].replace("'", "''")
                 safe_teacher = class_item['teacher'].replace("'", "''")
+                # Get new fields, defaulting to '_NULL_' if somehow missing (though parser/add should ensure they exist)
+                safe_iscountedby1 = str(class_item.get('iscountedby1', '_NULL_')).replace("'", "''")
+                safe_iscountedby2 = str(class_item.get('iscountedby2', '_NULL_')).replace("'", "''")
+                safe_iscountedby3 = str(class_item.get('iscountedby3', '_NULL_')).replace("'", "''")
+
                 insert_statement = (
-                    f"INSERT INTO classes (class, teacher, counts1, couts2, couts3) VALUES "
-                    f"('{safe_class_name}', '{safe_teacher}', '{class_item['counts1']}', '{class_item['couts2']}', '{class_item['couts3']}');"
+                    f"INSERT INTO classes (class, teacher, counts1, counts2, counts3, iscountedby1, iscountedby2, iscountedby3) VALUES "
+                    f"('{safe_class_name}', '{safe_teacher}', '{class_item['counts1']}', '{class_item['counts2']}', '{class_item['counts3']}', "
+                    f"'{safe_iscountedby1}', '{safe_iscountedby2}', '{safe_iscountedby3}');"
                 )
                 sql_lines.append(insert_statement)
 
@@ -669,7 +768,70 @@ def save_class_data_to_sql():
             print(traceback.format_exc())
             return False
 
+# --- Saving for students.sql ---
+def save_students_data_to_sql():
+    """Saves the current in-memory students_data_store back to students.sql.
+       The 'code' field (either from file or generated if was empty) is now saved.
+       Returns True on success, False on failure.
+    """
+    global students_data_store
+    students_sql_file_path = DATA_DIR / 'students.sql'
+    print(f"Attempting to save student data to: {students_sql_file_path}")
+    with data_lock: # Reusing data_lock
+        try:
+            sql_lines = []
+            # Optional: Add a timestamp comment
+            # sql_lines.append(f"-- Student data saved on {datetime.datetime.now().isoformat()} --")
+            # sql_lines.append("")
+
+            for student_item in students_data_store:
+                # Basic escaping
+                safe_code = student_item.get('code', generate_random_code()).replace("'", "''") # Ensure code exists and is escaped
+                safe_class_name = student_item['class'].replace("'", "''")
+                safe_note = student_item['note'].replace("'", "''")
+                # counts_classes_str should already be in the correct format like '[1.A, 1.B]'
+                counts_classes_value = student_item.get('counts_classes_str', '[]') # Default to empty list string
+                insert_statement = (
+                    f"INSERT INTO students (code, class, note, counts_classes) VALUES "
+                    f"('{safe_code}', '{safe_class_name}', '{safe_note}', '{counts_classes_value}');"
+                )
+                sql_lines.append(insert_statement)
+
+            with open(students_sql_file_path, 'w', encoding='utf-8') as f:
+                f.write("\n".join(sql_lines))
+                f.write("\n")
+            print(f"Student data successfully saved to {students_sql_file_path}")
+            return True
+        except Exception as e:
+            print(f"!!! UNEXPECTED ERROR during save_students_data_to_sql:")
+            print(traceback.format_exc())
+            return False
+
 # --- Add this function near save_data_to_sql ---
+
+# --- Loading for config.json ---
+def load_main_config_from_json():
+    """Loads configuration from config.json into the in-memory server_config."""
+    global server_config
+    config_file_path = DATA_DIR / 'config.json'
+    print(f"Attempting to load server configuration from: {config_file_path}")
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    temp_config = {}
+    if config_file_path.is_file():
+        try:
+            with open(config_file_path, 'r', encoding='utf-8') as f:
+                temp_config = json.load(f)
+            print(f"Server configuration loaded from {config_file_path}.")
+        except json.JSONDecodeError:
+            print(f"!!! ERROR: Invalid JSON format in {config_file_path}. Server configuration might be incomplete or default.")
+        except Exception as e:
+            print(f"!!! ERROR reading {config_file_path}: {e}. Server configuration might be incomplete or default.")
+    else:
+        print(f"Warning: {config_file_path} not found. Using default server configuration.")
+
+    server_config = temp_config # Update the global variable
+    print("Server configuration loading complete.")
 
 # --- Lock for user data modifications ---
 # It's better practice to have a separate lock for user data
@@ -728,6 +890,7 @@ def save_main_config_to_json(new_oauth_data):
     """
     Reads the existing config.json, updates OAuth specific keys,
     and writes the entire config back.
+    Also updates the in-memory server_config.
     Returns True on success, False on failure.
     """
     config_file_path = DATA_DIR / 'config.json'
@@ -740,9 +903,13 @@ def save_main_config_to_json(new_oauth_data):
                 with open(config_file_path, 'r', encoding='utf-8') as f:
                     current_config = json.load(f)
             
-            # Update only the OAuth related keys from the new_oauth_data
+            # Update keys from the provided data (assuming it's the full config or a partial update)
+            # A more robust approach would merge keys carefully. For now, assume new_oauth_data has relevant keys.
+            current_config.update(new_oauth_data) # Update with all keys from new_oauth_data
+
+            # Ensure specific keys are handled if needed, e.g., oauth_eneabled as string
             current_config['oauth_eneabled'] = new_oauth_data.get('oauth_eneabled', current_config.get('oauth_eneabled', 'false'))
-            current_config['allowed_oauth_domains'] = new_oauth_data.get('allowed_oauth_domains', current_config.get('allowed_oauth_domains', []))
+            # allowed_oauth_domains and can_students_count_their_own_class will be updated by .update()
 
             with open(config_file_path, 'w', encoding='utf-8') as f:
                 json.dump(current_config, f, indent=4) # Pretty print with indent
@@ -750,6 +917,7 @@ def save_main_config_to_json(new_oauth_data):
             print(f"OAuth settings successfully updated in {config_file_path}")
             return True
         except Exception as e:
+            # Note: If saving fails, the in-memory server_config might be inconsistent with the file.
             print(f"!!! UNEXPECTED ERROR during save_main_config_to_json:")
             print(traceback.format_exc())
             return False
@@ -1237,6 +1405,131 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 # Send a copy to avoid issues if it's modified elsewhere during serialization
                 response_data = list(class_data_store) 
             self._send_response(200, response_data)
+            return
+
+        elif path == '/api/students':
+            if not self.is_logged_in():
+                self._send_response(401, {"error": "Authentication required"})
+                return
+            # RBAC: Allow admin/teacher to view student configurations
+            if user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
+                self._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
+                return
+
+            response_payload = []
+            with data_lock: # Ensure thread-safe read
+                for student in students_data_store:
+                    # Parse the classes_str into a list for the frontend
+                    try:
+                        s = student.get('counts_classes_str', '[]') # Default to '[]' if missing
+                        if s.startswith('[') and s.endswith(']'):
+                            # Remove brackets
+                            s_content = s[1:-1]
+                            if not s_content.strip(): # Handles "[]" or "[ ]"
+                                counting_classes_list = []
+                            else:
+                                # Split by comma, then strip whitespace from each item
+                                counting_classes_list = [item.strip() for item in s_content.split(',')]
+                        else:
+                            # If it's not in the expected format, treat as error or empty
+                            print(f"Warning: counts_classes_str for student {student['class']} is not in expected list format: {s}")
+                            counting_classes_list = []
+                    except Exception as e: # Catch any unexpected error during string parsing
+                        print(f"Error parsing counts_classes_str for student {student['class']}: '{student.get('counts_classes_str')}'. Error: {e}")
+                        counting_classes_list = [] # Default to empty list on error
+                    response_payload.append({**student, "counting_classes": counting_classes_list})
+            self._send_response(200, response_payload)
+            return
+
+        elif path == '/api/student/counting-details': # GET endpoint
+            if not self.is_logged_in():
+                self._send_response(401, {"error": "Authentication required"})
+                return
+            # RBAC: Allow admin/teacher
+            if user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
+                self._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
+                return
+
+            student_code_param = query.get('code', [None])[0] # Changed from note to code
+            day_param_str = query.get('day', [None])[0]
+
+            if not student_code_param or not day_param_str:
+                self._send_response(400, {"error": "Missing 'code' or 'day' query parameter."})
+                return
+            if day_param_str not in ['1', '2', '3']:
+                self._send_response(400, {"error": "Invalid 'day' parameter. Must be 1, 2, or 3."})
+                return
+            
+            target_student_config = None
+            with data_lock:
+                # Find the target student by note
+                for s_config in students_data_store:
+                    if s_config.get('code') == student_code_param: # Changed to find by code
+                        target_student_config = s_config
+                        break
+
+                if not target_student_config:
+                    self._send_response(404, {"error": f"Student configuration with code '{student_code_param}' not found."})
+                    return
+
+                student_main_class_name = target_student_config.get('class')
+                if not student_main_class_name:
+                    self._send_response(500, {"error": f"Student with code '{student_code_param}' has no class assigned."})
+                    return
+
+                # Determine the field to check in classes.sql based on the day
+                is_counted_by_field = f"iscountedby{day_param_str}"
+                response_payload = []
+
+                # Get the set of classes the current student (by note) is personally configured to count
+                target_student_personal_counts_str = target_student_config.get('counts_classes_str', '[]')
+                student_personal_counts_set = set()
+                try:
+                    if target_student_personal_counts_str.startswith('[') and target_student_personal_counts_str.endswith(']'):
+                        content = target_student_personal_counts_str[1:-1]
+                        if content.strip():
+                            student_personal_counts_set = {c.strip() for c in content.split(',') if c.strip()}
+                except Exception:
+                    print(f"Warning: Could not parse counts_classes_str for student with code {student_code_param}: {target_student_personal_counts_str}")
+
+                # Iterate through ALL classes in class_data_store to find which ones student_main_class_name is supposed to count today
+                for class_being_evaluated in class_data_store:
+                    # Check if student_main_class_name is responsible for counting class_being_evaluated on this day
+                    if class_being_evaluated.get(is_counted_by_field) == student_main_class_name:
+                        class_to_display_name = class_being_evaluated['class']
+
+                        # Check if the target_student (by note) has this class_to_display_name in their personal list
+                        student_is_counting_this_class = class_to_display_name in student_personal_counts_set
+
+                        # Find other students also counting this class_to_display_name
+                        also_counted_by_notes = []
+                        for other_student_config in students_data_store:
+                            if other_student_config.get('code') == student_code_param: # Skip the target student
+                                continue
+                            other_student_counts_classes_str = other_student_config.get('counts_classes_str', '[]')
+                            try:
+                                if other_student_counts_classes_str.startswith('[') and other_student_counts_classes_str.endswith(']'):
+                                    other_content = other_student_counts_classes_str[1:-1]
+                                    if other_content.strip():
+                                        if class_to_display_name in {c.strip() for c in other_content.split(',') if c.strip()}:
+                                            also_counted_by_notes.append(other_student_config.get('note', 'Unknown Note'))
+                            except Exception:
+                                print(f"Warning: Could not parse counts_classes_str for other student {other_student_config.get('note')}: {other_student_counts_classes_str}")
+                        
+                        response_payload.append({
+                            "class_name": class_to_display_name,
+                            "is_counted_by_current_student": student_is_counting_this_class,
+                            "also_counted_by_notes": sorted(list(set(also_counted_by_notes)))
+                        })
+                
+                # Prepare the final response object
+                final_api_response = {
+                    "student_note": target_student_config.get('note', ''), # Include student's note
+                    "student_class": target_student_config.get('class', ''), # Include student's main class
+                    "counting_details": sorted(response_payload, key=lambda x: x['class_name'])
+                }
+
+            self._send_response(200, final_api_response)
             return
 
         # API Endpoint: /api/counts?class=ClassName
@@ -1764,8 +2057,12 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             class_name = data.get('class')
             teacher = data.get('teacher')
             counts1 = data.get('counts1', 'F') # Default to 'F' if not provided
-            counts2 = data.get('couts2', 'F')  # Use 'couts2' to match SQL and JS
-            counts3 = data.get('couts3', 'F')  # Use 'couts3' to match SQL and JS
+            counts2 = data.get('counts2', 'F')  # Use 'counts2' to match SQL and JS
+            counts3 = data.get('counts3', 'F')  # Use 'counts3' to match SQL and JS
+            # Get new fields, defaulting to _NULL_
+            iscountedby1 = data.get('iscountedby1', '_NULL_')
+            iscountedby2 = data.get('iscountedby2', '_NULL_')
+            iscountedby3 = data.get('iscountedby3', '_NULL_')
 
             if not class_name or not teacher:
                 self._send_response(400, {"error": "Missing class name or teacher"})
@@ -1785,7 +2082,9 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 else:
                     new_class = {
                         "class": class_name, "teacher": teacher,
-                        "counts1": counts1, "couts2": counts2, "couts3": counts3
+                        "counts1": counts1, "counts2": counts2, "counts3": counts3,
+                        "iscountedby1": iscountedby1, "iscountedby2": iscountedby2,
+                        "iscountedby3": iscountedby3
                     }
                     class_data_store.append(new_class)
                     # Sort the class_data_store alphabetically by class name
@@ -1853,7 +2152,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 return
 
             class_name = data.get('class')
-            count_field = data.get('countField') # e.g., "counts1", "couts2", "couts3"
+            count_field = data.get('countField') # e.g., "counts1", "counts2", "counts3"
             new_value = data.get('value')       # 'T' or 'F'
 
             if not all([class_name, count_field, new_value is not None]): # new_value can be 'F'
@@ -1861,7 +2160,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 return
             
             # Ensure count_field matches the keys used in your data (including the typo)
-            valid_count_fields = ["counts1", "couts2", "couts3"]
+            valid_count_fields = ["counts1", "counts2", "counts3"]
             if count_field not in valid_count_fields:
                 self._send_response(400, {"error": f"Invalid countField. Must be one of {valid_count_fields}"})
                 return
@@ -1896,7 +2195,232 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 self._send_response(status_code, {"error": message})
             return
 
-        # --- Handle /change_password ---
+        # --- Handle /api/classes/update_iscountedby ---
+        elif path == '/api/classes/update_iscountedby':
+            # RBAC Check
+            if current_user_role not in [ADMIN_ROLE, TEACHER_ROLE]: # Allow Admins and Teachers
+                self._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
+                return
+
+            class_name_to_update = data.get('class')
+            day_identifier = data.get('dayIdentifier') # '1', '2', or '3'
+            new_value = data.get('value')
+
+            if not all([class_name_to_update, day_identifier, new_value is not None]):
+                self._send_response(400, {"error": "Missing class, dayIdentifier, or value"})
+                return
+
+            if day_identifier not in ['1', '2', '3']:
+                self._send_response(400, {"error": "Invalid dayIdentifier. Must be '1', '2', or '3'."})
+                return
+            
+            # Map dayIdentifier to the actual field name
+            field_to_update = f"iscountedby{day_identifier}"
+
+            # --- Server-side check for can_students_count_their_own_class ---
+            # Read config.json directly for this check on every request
+            allow_self_count_str = 'true' # Default to true (allow self-count)
+            config_file_path = DATA_DIR / 'config.json'
+            try:
+                if config_file_path.is_file():
+                    with open(config_file_path, 'r', encoding='utf-8') as f:
+                        current_config_on_disk = json.load(f)
+                    allow_self_count_str = current_config_on_disk.get('can_students_count_their_own_class', 'true')
+                    print(f"DEBUG: Read 'can_students_count_their_own_class' from disk: {allow_self_count_str}")
+                else:
+                    print(f"Warning: {config_file_path} not found during iscountedby update. Defaulting 'can_students_count_their_own_class' to 'true'.")
+            except json.JSONDecodeError:
+                print(f"!!! ERROR: Invalid JSON in {config_file_path} during iscountedby update. Defaulting 'can_students_count_their_own_class' to 'true'.")
+            except Exception as e:
+                print(f"!!! ERROR reading {config_file_path} during iscountedby update: {e}. Defaulting 'can_students_count_their_own_class' to 'true'.")
+            
+            allow_self_count = allow_self_count_str.lower() == 'true'
+            # --- End of direct config file read ---
+
+            # Old way using in-memory server_config:
+            # allow_self_count_str = server_config.get('can_students_count_their_own_class', 'true') # Default to true if missing
+            # allow_self_count = allow_self_count_str.lower() == 'true'
+
+            if not allow_self_count and new_value == class_name_to_update:
+                self._send_response(400, {"error": f"Configuration prevents class '{class_name_to_update}' from counting itself."})
+                return
+            # --- End server-side check ---
+
+            success = False
+            message = "Failed to update class counting assignment."
+            status_code = 500
+
+            with data_lock:
+                class_found = False
+                for cls_item in class_data_store:
+                    if cls_item['class'] == class_name_to_update:
+                        cls_item[field_to_update] = new_value
+                        class_found = True
+                        break
+                
+                if not class_found:
+                    message = f"Class '{class_name_to_update}' not found."
+                    status_code = 404
+                else:
+                    if save_class_data_to_sql():
+                        success = True
+                        message = f"Assignment for class '{class_name_to_update}' on day {day_identifier} updated to '{new_value}' and saved."
+                        status_code = 200
+                    else:
+                        message = f"Assignment for class '{class_name_to_update}' updated in memory, but FAILED to save to file."
+                        status_code = 500
+            if success:
+                self._send_response(status_code, {"success": True, "message": message})
+            else:
+                self._send_response(status_code, {"error": message})
+            return
+
+        # --- Handle /api/students/remove ---
+        elif path == '/api/students/remove':
+            if not self.is_logged_in(): # Should be caught by earlier checks
+                self._send_response(401, {"error": "Authentication required"})
+                return
+            # RBAC Check
+            if current_user_role not in [ADMIN_ROLE, TEACHER_ROLE]: # Allow Admins and Teachers
+                self._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
+                return
+
+            student_code_to_remove = data.get('code') # Identify student by their 'code'
+            if not student_code_to_remove:
+                self._send_response(400, {"error": "Missing 'code' of student configuration to remove"})
+                return
+
+            success = False
+            message = "Failed to remove student configuration."
+            status_code = 500
+
+            with data_lock:
+                original_len = len(students_data_store)
+                # Filter out the student to remove
+                students_data_store[:] = [s_config for s_config in students_data_store if s_config.get('code') != student_code_to_remove]
+                
+                if len(students_data_store) < original_len: # If something was removed
+                    if save_students_data_to_sql():
+                        success = True
+                        # We don't easily have the note/class here without finding it first, so a generic message is fine
+                        message = f"Student configuration with code '{student_code_to_remove}' removed successfully."
+                        status_code = 200
+                    else:
+                        message = f"Student configuration with code '{student_code_to_remove}' removed from memory, but FAILED to save to file."
+                        status_code = 500 # Internal Server Error
+                else:
+                    message = f"Student configuration with code '{student_code_to_remove}' not found."
+                    status_code = 404 # Not Found
+            self._send_response(status_code, {"success": success, "message": message} if success else {"error": message})
+            return
+
+        # --- Handle /api/students/add ---
+        elif path == '/api/students/add':
+            if not self.is_logged_in():
+                self._send_response(401, {"error": "Authentication required"})
+                return
+            # RBAC Check - Allow Admins and Teachers to add student configurations
+            if current_user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
+                self._send_response(403, {"error": "Forbidden: Administrator access required."})
+                return
+
+            student_class = data.get('class')
+            note = data.get('note', '') # Default to empty string if note is not provided
+
+            if not student_class:
+                self._send_response(400, {"error": "Missing 'class' for the new student configuration."})
+                return
+
+            success = False
+            message = "Failed to add student configuration."
+            status_code = 500
+
+            with data_lock:
+                # Removed the check for existing student configuration by class.
+                # Now multiple configurations can exist for the same class,
+                # distinguished by their notes or codes.
+                new_student_config = {
+                    "code": generate_random_code(), # Server generates the code
+                    "class": student_class,
+                    "note": note,
+                    "counts_classes_str": "[]" # New students start with no classes to count
+                }
+                students_data_store.append(new_student_config)
+                students_data_store.sort(key=lambda x: (x['class'], x.get('note', ''))) # Keep sorted by class, then note
+
+                if save_students_data_to_sql():
+                    success = True
+                    message = f"Student configuration for class '{student_class}' (Note: '{note}') added successfully."
+                    status_code = 201 # Created
+                else:
+                    students_data_store.pop() # Revert in-memory change if save fails
+                    message = f"Failed to save new student configuration for '{student_class}' (Note: '{note}') to file."
+                    status_code = 500
+            self._send_response(status_code, {"success": success, "message": message} if success else {"error": message})
+            return
+        
+        # --- Handle /api/student/update-counting-class ---
+        elif path == '/api/student/update-counting-class': # POST endpoint
+            if not self.is_logged_in():
+                self._send_response(401, {"error": "Authentication required"})
+                return
+            # RBAC Check - Only Admins/Teachers can modify student counting assignments
+            if current_user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
+                self._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
+                return
+
+            student_code_to_update = data.get('student_code') # Changed from student_note
+            class_to_update = data.get('class_name')
+            is_counting = data.get('is_counting') # boolean
+
+            if not student_code_to_update or not class_to_update or is_counting is None:
+                self._send_response(400, {"error": "Missing student_code, class_name, or is_counting status."})
+                return
+
+            success = False
+            message = "Failed to update student's counting classes."
+            status_code = 500
+            student_note_for_message = "Unknown" # For user-friendly messages
+
+            with data_lock:
+                target_student_config = next((s for s in students_data_store if s.get('code') == student_code_to_update), None)
+
+                if not target_student_config:
+                    message = f"Student configuration with code '{student_code_to_update}' not found."
+                    status_code = 404
+                else:
+                    student_note_for_message = target_student_config.get('note', student_code_to_update)
+                    counts_str = target_student_config.get('counts_classes_str', '[]')
+                    current_counts_set = set()
+                    if counts_str.startswith('[') and counts_str.endswith(']'):
+                        content = counts_str[1:-1]
+                        if content.strip():
+                            current_counts_set = {c.strip() for c in content.split(',') if c.strip()}
+                    
+                    if is_counting:
+                        current_counts_set.add(class_to_update)
+                    else:
+                        current_counts_set.discard(class_to_update) # Use discard to not raise error if not present
+                    
+                    # Reconstruct the string, sorted for consistency
+                    sorted_list_of_classes = sorted(list(current_counts_set))
+                    new_counts_classes_str = f"[{', '.join(sorted_list_of_classes)}]" if sorted_list_of_classes else "[]"
+                    
+                    target_student_config['counts_classes_str'] = new_counts_classes_str
+
+                    if save_students_data_to_sql():
+                        success = True
+                        action = "added to" if is_counting else "removed from"
+                        message = f"Class '{class_to_update}' {action} student '{student_note_for_message}'s counting list."
+                        status_code = 200
+                    else:
+                        # Attempt to revert in-memory change if save fails (though original counts_str was overwritten)
+                        # For simplicity, we'll just report the error. A more robust undo would store original_counts_str.
+                        message = f"Failed to save updated counting list for student '{student_note_for_message}' to file."
+                        status_code = 500
+            self._send_response(status_code, {"success": success, "message": message} if success else {"error": message})
+            return
+        # --- Handle /api/auth/change ---
         elif path == '/api/auth/change':
             # user_key_for_rbac (user's actual key in user_password_store) is already available
             if not user_key_for_rbac: # Should be caught by is_logged_in earlier
@@ -2119,8 +2643,10 @@ if __name__ == "__main__":
     # Load counts data first
     load_data_from_sql()
     # Load user login data <--- NEW
+    load_main_config_from_json() # Load server configuration
     load_user_data_from_sql()
     load_class_data_from_sql() # Load class data
+    load_students_data_from_sql() # Load student data
     # --- End Load Data ---
 
     # Server setup using ThreadingMixIn for basic concurrency
@@ -2135,6 +2661,7 @@ if __name__ == "__main__":
     print(f"Using counts data file: {SQL_FILE_PATH}")
     print(f"Using logins data file: {LOGINS_SQL_FILE_PATH}") # <--- NEW
     print(f"Using classes data file: {CLASSES_SQL_FILE_PATH}")
+    print(f"Using students data file: {DATA_DIR / 'students.sql'}")
     print(f"Using Google client secrets file: {CLIENT_SECRETS_FILE}")
     print(f"Using hashlib.pbkdf2_hmac with {ITERATIONS} iterations.")
     print(f"\nAccess the application via: http://{HOST}:{PORT}/")
