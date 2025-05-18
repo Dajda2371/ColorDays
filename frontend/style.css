@@ -20,3 +20,22 @@ body {
     font-size: 16px;
     cursor: pointer;
   }
+
+/* Styles for the dynamically added class buttons */
+.class-button {
+  display: inline-block; /* Allows setting padding, margin, etc. */
+  padding: 8px 15px;
+  margin: 5px;
+  border: 1px solid #ccc;
+  background-color: #f0f0f0; /* Light grey background */
+  color: #333; /* Dark grey text */
+  text-decoration: none; /* Remove underline from the link */
+  border-radius: 4px; /* Rounded corners */
+  transition: background-color 0.2s, color 0.2s; /* Smooth transition for hover effect */
+}
+
+.class-button:hover {
+  background-color: #007bff; /* Blue background on hover */
+  color: white; /* White text on hover */
+  border-color: #0056b3;
+}
