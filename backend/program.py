@@ -1973,6 +1973,16 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             # Map dayIdentifier to the actual field name
             field_to_update = f"iscountedby{day_identifier}"
 
+            # --- Server-side check for can_students_count_their_own_class ---
+            # server_config is loaded at startup
+            allow_self_count_str = server_config.get('can_students_count_their_own_class', 'true') # Default to true if missing
+            allow_self_count = allow_self_count_str.lower() == 'true'
+
+            if not allow_self_count and new_value == class_name_to_update:
+                self._send_response(400, {"error": f"Configuration prevents class '{class_name_to_update}' from counting itself."})
+                return
+            # --- End server-side check ---
+
             success = False
             message = "Failed to update class counting assignment."
             status_code = 500

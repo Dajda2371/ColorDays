@@ -14,14 +14,24 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
     }
 
-    fetch('/api/classes')
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
+    // Fetch both classes and config concurrently
+    Promise.all([
+        fetch('/api/classes').then(response => {
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status} for /api/classes`);
+            return response.json();
+        }),
+        fetch('/api/data/config').then(response => { // Fetch server configuration
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status} for /api/data/config`);
             return response.json();
         })
-        .then(classes => {
+    ])
+    .then(([classes, config]) => { // Destructure the results from Promise.all
+        // Convert the config string to a boolean for easier use
+        // If config.can_students_count_their_own_class is "false", then canStudentsCountOwnClass will be false.
+        // If it's "true" (or anything else, or missing), it defaults to true (allowing self-count).
+        const canStudentsCountOwnClass = config.can_students_count_their_own_class !== "false";
+        console.log("Can students count their own class:", canStudentsCountOwnClass, "(raw config value:", config.can_students_count_their_own_class, ")");
+
             // Prepare lists of classes that count for each day
             const mondayCountingClasses = classes.filter(c => c.counts1 === 'T').map(c => c.class);
             const tuesdayCountingClasses = classes.filter(c => c.counts2 === 'T').map(c => c.class);
@@ -64,13 +74,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 cellClass.textContent = cls.class;
 
                 const cellIsCountedBy1 = row.insertCell();
-                cellIsCountedBy1.appendChild(createCountingDropdown(mondayCountingClasses, cls.iscountedby1, cls.class, '1'));
+                cellIsCountedBy1.appendChild(createCountingDropdown(mondayCountingClasses, cls.iscountedby1, cls.class, '1', canStudentsCountOwnClass));
 
                 const cellIsCountedBy2 = row.insertCell();
-                cellIsCountedBy2.appendChild(createCountingDropdown(tuesdayCountingClasses, cls.iscountedby2, cls.class, '2'));
+                cellIsCountedBy2.appendChild(createCountingDropdown(tuesdayCountingClasses, cls.iscountedby2, cls.class, '2', canStudentsCountOwnClass));
 
                 const cellIsCountedBy3 = row.insertCell();
-                cellIsCountedBy3.appendChild(createCountingDropdown(wednesdayCountingClasses, cls.iscountedby3, cls.class, '3'));
+                cellIsCountedBy3.appendChild(createCountingDropdown(wednesdayCountingClasses, cls.iscountedby3, cls.class, '3', canStudentsCountOwnClass));
             });
         })
         .catch(error => {
@@ -97,7 +107,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return link;
     }
 
-    function createCountingDropdown(availableClasses, selectedValue, classIdentifier, dayIdentifier) {
+    function createCountingDropdown(availableClasses, selectedValue, classIdentifier, dayIdentifier, canStudentsCountOwnClass) {
         const select = document.createElement('select');
         select.dataset.class = classIdentifier; // e.g., '1.A'
         select.dataset.day = dayIdentifier;     // e.g., '1' for Monday, '2' for Tuesday
@@ -115,6 +125,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const option = document.createElement('option');
             option.value = countingClass;
             option.textContent = countingClass;
+
+            // If students cannot count their own class AND this option is for the class itself
+            if (!canStudentsCountOwnClass && countingClass === classIdentifier) {
+                option.disabled = true;
+                option.title = "This class cannot be set to count itself based on server configuration.";
+            }
             select.appendChild(option);
         });
 
