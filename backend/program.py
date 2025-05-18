@@ -1451,10 +1451,15 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 return
 
             student_note_param = query.get('note', [None])[0]
-            if not student_note_param:
-                self._send_response(400, {"error": "Missing 'note' query parameter for the student."})
-                return
+            day_param_str = query.get('day', [None])[0]
 
+            if not student_note_param or not day_param_str:
+                self._send_response(400, {"error": "Missing 'note' or 'day' query parameter."})
+                return
+            if day_param_str not in ['1', '2', '3']:
+                self._send_response(400, {"error": "Invalid 'day' parameter. Must be 1, 2, or 3."})
+                return
+            
             target_student_config = None
             with data_lock:
                 # Find the target student by note
@@ -1467,50 +1472,55 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                     self._send_response(404, {"error": f"Student configuration with note '{student_note_param}' not found."})
                     return
 
-                # Parse the classes the target student is counting
-                target_student_counting_classes_str = target_student_config.get('counts_classes_str', '[]')
-                current_student_counts_set = set()
-                try:
-                    if target_student_counting_classes_str.startswith('[') and target_student_counting_classes_str.endswith(']'):
-                        content = target_student_counting_classes_str[1:-1]
-                        if content.strip():
-                            current_student_counts_set = {c.strip() for c in content.split(',') if c.strip()}
-                except Exception:
-                    print(f"Warning: Could not parse counts_classes_str for student {student_note_param}: {target_student_counting_classes_str}")
-                    # current_student_counts_set remains empty
+                student_main_class_name = target_student_config.get('class')
+                if not student_main_class_name:
+                    self._send_response(500, {"error": f"Student with note '{student_note_param}' has no class assigned."})
+                    return
 
+                # Determine the field to check in classes.sql based on the day
+                is_counted_by_field = f"iscountedby{day_param_str}"
                 response_payload = []
-                # Iterate through ALL classes from class_data_store
-                for class_item in class_data_store:
-                    class_name_from_store = class_item['class']
-                    is_counted_by_current = class_name_from_store in current_student_counts_set
 
-                    # Find other students counting this class_name_from_store
-                    also_counted_by_notes = []
-                    for other_student in students_data_store:
-                        if other_student.get('note') == student_note_param: # Skip the current student
-                            continue
-                        other_student_classes_str = other_student.get('counts_classes_str', '[]')
-                        try:
-                            if other_student_classes_str.startswith('[') and other_student_classes_str.endswith(']'):
-                                other_content = other_student_classes_str[1:-1]
-                                if other_content.strip():
-                                    other_student_counts_this_class = class_name_from_store in {c.strip() for c in other_content.split(',') if c.strip()}
-                                    if other_student_counts_this_class:
-                                        also_counted_by_notes.append(other_student.get('note', 'Unknown Note'))
-                        except Exception:
-                            print(f"Warning: Could not parse counts_classes_str for other student {other_student.get('note')}: {other_student_classes_str}")
+                # Get the set of classes the current student (by note) is personally configured to count
+                target_student_personal_counts_str = target_student_config.get('counts_classes_str', '[]')
+                student_personal_counts_set = set()
+                try:
+                    if target_student_personal_counts_str.startswith('[') and target_student_personal_counts_str.endswith(']'):
+                        content = target_student_personal_counts_str[1:-1]
+                        if content.strip():
+                            student_personal_counts_set = {c.strip() for c in content.split(',') if c.strip()}
+                except Exception:
+                    print(f"Warning: Could not parse counts_classes_str for student {student_note_param}: {target_student_personal_counts_str}")
 
-                    response_payload.append({
-                        "class_name": class_name_from_store,
-                        "is_counted_by_current_student": is_counted_by_current,
-                        # "day_statuses": { # If you still want to show class's own T/F status
-                        #     "monday": class_item.get('counts1', 'N/A'),
-                        #     "tuesday": class_item.get('counts2', 'N/A'),
-                        #     "wednesday": class_item.get('counts3', 'N/A')
-                        # },
-                        "also_counted_by_notes": sorted(list(set(also_counted_by_notes))) # Unique notes, sorted
-                    })
+                # Iterate through ALL classes in class_data_store to find which ones student_main_class_name is supposed to count today
+                for class_being_evaluated in class_data_store:
+                    # Check if student_main_class_name is responsible for counting class_being_evaluated on this day
+                    if class_being_evaluated.get(is_counted_by_field) == student_main_class_name:
+                        class_to_display_name = class_being_evaluated['class']
+
+                        # Check if the target_student (by note) has this class_to_display_name in their personal list
+                        student_is_counting_this_class = class_to_display_name in student_personal_counts_set
+
+                        # Find other students also counting this class_to_display_name
+                        also_counted_by_notes = []
+                        for other_student_config in students_data_store:
+                            if other_student_config.get('note') == student_note_param: # Skip the target student
+                                continue
+                            other_student_counts_classes_str = other_student_config.get('counts_classes_str', '[]')
+                            try:
+                                if other_student_counts_classes_str.startswith('[') and other_student_counts_classes_str.endswith(']'):
+                                    other_content = other_student_counts_classes_str[1:-1]
+                                    if other_content.strip():
+                                        if class_to_display_name in {c.strip() for c in other_content.split(',') if c.strip()}:
+                                            also_counted_by_notes.append(other_student_config.get('note', 'Unknown Note'))
+                            except Exception:
+                                print(f"Warning: Could not parse counts_classes_str for other student {other_student_config.get('note')}: {other_student_counts_classes_str}")
+                        
+                        response_payload.append({
+                            "class_name": class_to_display_name,
+                            "is_counted_by_current_student": student_is_counting_this_class,
+                            "also_counted_by_notes": sorted(list(set(also_counted_by_notes)))
+                        })
                 
                 # Sort the final payload by class name for consistent display
                 response_payload.sort(key=lambda x: x['class_name'])

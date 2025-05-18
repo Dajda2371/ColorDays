@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const urlParams = new URLSearchParams(window.location.search);
     const studentNote = urlParams.get('note');
+    const day = urlParams.get('day');
 
     if (!studentNote) {
         pageTitleElement.textContent = 'Error';
@@ -21,12 +22,20 @@ document.addEventListener('DOMContentLoaded', function() {
         studentIsCountingTableBody.innerHTML = `<tr><td colspan="3" style="color: red; text-align: center;">No student note provided in the URL.</td></tr>`;
         return;
     }
+    if (!day || !['1', '2', '3'].includes(day)) {
+        pageTitleElement.textContent = `Student: ${studentNote}`;
+        subTitleElement.textContent = 'Error: Day Parameter Invalid';
+        studentIsCountingTableBody.innerHTML = `<tr><td colspan="3" style="color: red; text-align: center;">Day parameter is missing or invalid (must be 1, 2, or 3).</td></tr>`;
+        return;
+    }
+
+    const dayNames = { '1': 'Monday', '2': 'Tuesday', '3': 'Wednesday' };
 
     // Update titles
     pageTitleElement.textContent = `Student: ${studentNote}`;
-    subTitleElement.textContent = `Manage Classes Counted by ${studentNote}`;
+    subTitleElement.textContent = `Manage Class Counted by ${studentNote} for ${dayNames[day]}`;
 
-    fetch(`/api/student/counting-details?note=${encodeURIComponent(studentNote)}`)
+    fetch(`/api/student/counting-details?note=${encodeURIComponent(studentNote)}&day=${encodeURIComponent(day)}`)
         .then(response => {
             if (!response.ok) {
                 return response.json().then(err => { throw new Error(err.error || `HTTP error! status: ${response.status}`) });
@@ -46,7 +55,7 @@ document.addEventListener('DOMContentLoaded', function() {
         studentIsCountingTableBody.innerHTML = ''; // Clear existing rows
 
         if (!details || details.length === 0) {
-            studentIsCountingTableBody.innerHTML = '<tr><td colspan="3" style="text-align: center;">No classes available to configure for this student.</td></tr>';
+            studentIsCountingTableBody.innerHTML = `<tr><td colspan="3" style="text-align: center;">This student's class is not assigned to count any classes on ${dayNames[day]}.</td></tr>`;
             return;
         }
 
