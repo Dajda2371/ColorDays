@@ -1200,9 +1200,9 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 return
         
             # RBAC Check
-            _user_key, current_user_role = get_current_user_info(self)
-            if current_user_role != ADMIN_ROLE:
-                self._send_response(403, {"error": "Forbidden: Administrator access required."})
+            # _user_key, current_user_role = get_current_user_info(self) # user_role is already available from the top of do_GET
+            if user_role not in [ADMIN_ROLE, TEACHER_ROLE]: # Allow both Admin and Teacher
+                self._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
                 return
             
             with data_lock: # Ensure thread-safe read
