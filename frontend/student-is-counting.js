@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const subTitleElement = document.querySelector('h2'); // The h2 "Name is Counting"
 
     let fetchedClassDetails = []; // Store fetched details for dynamic updates
+    let currentStudentNoteForDisplay = ''; // Store the note of the current student
     if (!studentIsCountingTableBody || !pageTitleElement || !subTitleElement) {
         console.error('Required HTML elements (table body or title) not found!');
         if (studentIsCountingTableBody) {
@@ -13,37 +14,38 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     const urlParams = new URLSearchParams(window.location.search);
-    const studentNote = urlParams.get('note');
+    const studentCode = urlParams.get('code'); // Changed from note to code
     const day = urlParams.get('day');
 
-    if (!studentNote) {
+    if (!studentCode) {
         pageTitleElement.textContent = 'Error';
-        subTitleElement.textContent = 'Student Note Missing';
-        studentIsCountingTableBody.innerHTML = `<tr><td colspan="3" style="color: red; text-align: center;">No student note provided in the URL.</td></tr>`;
+        subTitleElement.textContent = 'Student Code Missing';
+        studentIsCountingTableBody.innerHTML = `<tr><td colspan="3" style="color: red; text-align: center;">No student code provided in the URL.</td></tr>`;
         return;
     }
     if (!day || !['1', '2', '3'].includes(day)) {
-        pageTitleElement.textContent = `Student: ${studentNote}`;
+        pageTitleElement.textContent = `Student Code: ${studentCode}`;
         subTitleElement.textContent = 'Error: Day Parameter Invalid';
         studentIsCountingTableBody.innerHTML = `<tr><td colspan="3" style="color: red; text-align: center;">Day parameter is missing or invalid (must be 1, 2, or 3).</td></tr>`;
         return;
     }
 
     const dayNames = { '1': 'Monday', '2': 'Tuesday', '3': 'Wednesday' };
+    pageTitleElement.textContent = `Student Code: ${studentCode}`; // Initial title
 
-    // Update titles
-    pageTitleElement.textContent = `Student: ${studentNote}`;
-    subTitleElement.textContent = `Manage Class Counted by ${studentNote} for ${dayNames[day]}`;
-
-    fetch(`/api/student/counting-details?note=${encodeURIComponent(studentNote)}&day=${encodeURIComponent(day)}`)
+    fetch(`/api/student/counting-details?code=${encodeURIComponent(studentCode)}&day=${encodeURIComponent(day)}`)
         .then(response => {
             if (!response.ok) {
                 return response.json().then(err => { throw new Error(err.error || `HTTP error! status: ${response.status}`) });
             }
             return response.json();
         })
-        .then(countingDetails => {
-            fetchedClassDetails = countingDetails; // Store for later use
+        .then(apiResponse => {
+            currentStudentNoteForDisplay = apiResponse.student_note || studentCode; // Use note if available, else code
+            fetchedClassDetails = apiResponse.counting_details; // Store for later use
+            // Update titles with the fetched note
+            pageTitleElement.textContent = `Student: ${currentStudentNoteForDisplay}`;
+            subTitleElement.textContent = `Manage Class Counted by ${currentStudentNoteForDisplay} for ${dayNames[day]}`;
             renderCountingDetailsTable(fetchedClassDetails);
         })
         .catch(error => {
@@ -79,7 +81,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (item.is_counted_by_current_student) {
                 const liCurrentStudent = document.createElement('li');
                 const strongTag = document.createElement('strong');
-                strongTag.textContent = studentNote; // studentNote is from the URL params
+                strongTag.textContent = currentStudentNoteForDisplay; // Use the fetched note
                 liCurrentStudent.appendChild(strongTag);
                 notesToDisplayElements.push(liCurrentStudent);
             }
@@ -109,7 +111,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const checkbox = event.target;
         const className = checkbox.dataset.className;
         const isCounting = checkbox.checked;
-        const studentNoteForAPI = urlParams.get('note'); // Get student note again for the API call
+        const studentCodeForAPI = urlParams.get('code'); // Get student code for the API call
 
         fetch('/api/student/update-counting-class', {
             method: 'POST',
@@ -117,7 +119,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                student_note: studentNoteForAPI,
+                student_code: studentCodeForAPI, // Send student_code
                 class_name: className,
                 is_counting: isCounting
             }),
@@ -141,7 +143,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         if (isCounting) { // Use the new state of the checkbox
                             const liCurrentStudent = document.createElement('li');
                             const strongTag = document.createElement('strong');
-                            strongTag.textContent = studentNoteForAPI;
+                            strongTag.textContent = currentStudentNoteForDisplay; // Use stored note for display
                             liCurrentStudent.appendChild(strongTag);
                             notesToDisplayElements.push(liCurrentStudent);
                         }

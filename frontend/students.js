@@ -67,7 +67,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const actionsCell = row.insertCell();
             
             const editButton = document.createElement('a');
-            let editHref = `student-is-counting.html?note=${encodeURIComponent(student.note)}`;
+            let editHref = `student-is-counting.html?code=${encodeURIComponent(student.code)}`;
             if (dayFromUrl) { // If 'day' was in the URL of students.html, pass it along
                 editHref += `&day=${encodeURIComponent(dayFromUrl)}`;
             }

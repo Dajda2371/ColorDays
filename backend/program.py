@@ -1450,11 +1450,11 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 self._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
                 return
 
-            student_note_param = query.get('note', [None])[0]
+            student_code_param = query.get('code', [None])[0] # Changed from note to code
             day_param_str = query.get('day', [None])[0]
 
-            if not student_note_param or not day_param_str:
-                self._send_response(400, {"error": "Missing 'note' or 'day' query parameter."})
+            if not student_code_param or not day_param_str:
+                self._send_response(400, {"error": "Missing 'code' or 'day' query parameter."})
                 return
             if day_param_str not in ['1', '2', '3']:
                 self._send_response(400, {"error": "Invalid 'day' parameter. Must be 1, 2, or 3."})
@@ -1464,17 +1464,17 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             with data_lock:
                 # Find the target student by note
                 for s_config in students_data_store:
-                    if s_config.get('note') == student_note_param:
+                    if s_config.get('code') == student_code_param: # Changed to find by code
                         target_student_config = s_config
                         break
 
                 if not target_student_config:
-                    self._send_response(404, {"error": f"Student configuration with note '{student_note_param}' not found."})
+                    self._send_response(404, {"error": f"Student configuration with code '{student_code_param}' not found."})
                     return
 
                 student_main_class_name = target_student_config.get('class')
                 if not student_main_class_name:
-                    self._send_response(500, {"error": f"Student with note '{student_note_param}' has no class assigned."})
+                    self._send_response(500, {"error": f"Student with code '{student_code_param}' has no class assigned."})
                     return
 
                 # Determine the field to check in classes.sql based on the day
@@ -1490,7 +1490,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                         if content.strip():
                             student_personal_counts_set = {c.strip() for c in content.split(',') if c.strip()}
                 except Exception:
-                    print(f"Warning: Could not parse counts_classes_str for student {student_note_param}: {target_student_personal_counts_str}")
+                    print(f"Warning: Could not parse counts_classes_str for student with code {student_code_param}: {target_student_personal_counts_str}")
 
                 # Iterate through ALL classes in class_data_store to find which ones student_main_class_name is supposed to count today
                 for class_being_evaluated in class_data_store:
@@ -1504,7 +1504,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                         # Find other students also counting this class_to_display_name
                         also_counted_by_notes = []
                         for other_student_config in students_data_store:
-                            if other_student_config.get('note') == student_note_param: # Skip the target student
+                            if other_student_config.get('code') == student_code_param: # Skip the target student
                                 continue
                             other_student_counts_classes_str = other_student_config.get('counts_classes_str', '[]')
                             try:
@@ -1522,10 +1522,13 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                             "also_counted_by_notes": sorted(list(set(also_counted_by_notes)))
                         })
                 
-                # Sort the final payload by class name for consistent display
-                response_payload.sort(key=lambda x: x['class_name'])
+                # Prepare the final response object
+                final_api_response = {
+                    "student_note": target_student_config.get('note', ''), # Include student's note
+                    "counting_details": sorted(response_payload, key=lambda x: x['class_name'])
+                }
 
-            self._send_response(200, response_payload)
+            self._send_response(200, final_api_response)
             return
 
         # API Endpoint: /api/counts?class=ClassName
@@ -2366,25 +2369,27 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 self._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
                 return
 
-            student_note = data.get('student_note')
+            student_code_to_update = data.get('student_code') # Changed from student_note
             class_to_update = data.get('class_name')
             is_counting = data.get('is_counting') # boolean
 
-            if not student_note or not class_to_update or is_counting is None:
-                self._send_response(400, {"error": "Missing student_note, class_name, or is_counting status."})
+            if not student_code_to_update or not class_to_update or is_counting is None:
+                self._send_response(400, {"error": "Missing student_code, class_name, or is_counting status."})
                 return
 
             success = False
             message = "Failed to update student's counting classes."
             status_code = 500
+            student_note_for_message = "Unknown" # For user-friendly messages
 
             with data_lock:
-                target_student_config = next((s for s in students_data_store if s.get('note') == student_note), None)
+                target_student_config = next((s for s in students_data_store if s.get('code') == student_code_to_update), None)
 
                 if not target_student_config:
-                    message = f"Student configuration with note '{student_note}' not found."
+                    message = f"Student configuration with code '{student_code_to_update}' not found."
                     status_code = 404
                 else:
+                    student_note_for_message = target_student_config.get('note', student_code_to_update)
                     counts_str = target_student_config.get('counts_classes_str', '[]')
                     current_counts_set = set()
                     if counts_str.startswith('[') and counts_str.endswith(']'):
@@ -2406,12 +2411,12 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                     if save_students_data_to_sql():
                         success = True
                         action = "added to" if is_counting else "removed from"
-                        message = f"Class '{class_to_update}' {action} student '{student_note}'s counting list."
+                        message = f"Class '{class_to_update}' {action} student '{student_note_for_message}'s counting list."
                         status_code = 200
                     else:
                         # Attempt to revert in-memory change if save fails (though original counts_str was overwritten)
                         # For simplicity, we'll just report the error. A more robust undo would store original_counts_str.
-                        message = f"Failed to save updated counting list for student '{student_note}' to file."
+                        message = f"Failed to save updated counting list for student '{student_note_for_message}' to file."
                         status_code = 500
             self._send_response(status_code, {"success": success, "message": message} if success else {"error": message})
             return
