@@ -86,6 +86,15 @@ GOOGLE_REDIRECT_URI = f'http://{HOST}:{PORT}/oauth2callback' # Must match one in
 # --- Secure Login Configuration (Using hashlib.pbkdf2_hmac) ---
 
 # Parameters for PBKDF2
+import random # For generating random codes
+import string # For character sets for random codes
+
+# --- Student Code Generation ---
+def generate_random_code(length=15):
+    """Generates a random alphanumeric code of a given length."""
+    characters = string.ascii_letters + string.digits
+    return ''.join(random.choice(characters) for i in range(length))
+
 HASH_ALGORITHM = 'sha256'
 # Iterations: Higher is more secure but slower. Start high (e.g., 260000+)
 # Adjust based on your server performance and security needs.
@@ -226,6 +235,7 @@ data_store = collections.defaultdict(lambda: collections.defaultdict(lambda: col
 data_lock = threading.RLock()
 server_config = {} # To store data from config.json
 class_data_store = [] # To store data from classes.sql as a list of dicts
+students_data_store = [] # To store data from students.sql
 
 def get_current_user_info(handler_instance): # Returns username_key, role
     """
@@ -387,7 +397,29 @@ def parse_classes_sql_line(line):
     else:
         # Ignore comments and empty lines silently
         if line.strip() and not line.strip().startswith('--') and not line.strip().upper().startswith('CREATE TABLE'):
-             print(f"Warning: Could not parse classes line format: {line.strip()}")
+            print(f"Warning: Could not parse classes line format: {line.strip()}")
+        return None
+
+# --- Parsing for students.sql ---
+def parse_students_sql_line(line):
+    """Parses a single INSERT statement line for the students table."""
+    # Regex for: INSERT INTO students (class, note, classes) VALUES ('9.A', 'note', '[1.A, 1.B, 1.C]');
+    match = re.match(
+        r"INSERT INTO students\s*\(\s*class\s*,\s*note\s*,\s*classes\s*\)\s*VALUES\s*\(\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*\);",
+        line.strip(),
+        re.IGNORECASE
+    )
+    if match:
+        class_name, note, classes_str = match.groups()
+        return {
+            "class": class_name,
+            "note": note,
+            "classes_str": classes_str # Keep as string, parse later or on demand
+        }
+    else:
+        # Ignore comments and empty lines silently
+        if line.strip() and not line.strip().startswith('--') and not line.strip().upper().startswith('CREATE TABLE'):
+             print(f"Warning: Could not parse students line format: {line.strip()}")
         return None
 
 # --- Parsing for logins.sql --- <--- NEW
@@ -555,6 +587,41 @@ def load_class_data_from_sql():
 
     print("Class data loading complete.")
 
+# --- Loading for students.sql ---
+def load_students_data_from_sql():
+    """Loads data from students.sql into the in-memory students_data_store."""
+    global students_data_store
+    students_sql_file_path = DATA_DIR / 'students.sql'
+    print(f"Attempting to load student data from: {students_sql_file_path}")
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    temp_students_store = []
+    file_exists = students_sql_file_path.exists()
+    students_loaded_count = 0
+
+    if file_exists:
+        try:
+            with open(students_sql_file_path, 'r', encoding='utf-8') as f:
+                for line_num, line in enumerate(f, 1):
+                    parsed = parse_students_sql_line(line)
+                    if parsed:
+                        # Add a generated code to each student record
+                        parsed['code'] = generate_random_code()
+                        temp_students_store.append(parsed)
+                        students_loaded_count += 1
+            print(f"Loaded {students_loaded_count} student configuration(s) from {students_sql_file_path}.")
+        except Exception as e:
+            print(f"!!! ERROR reading or parsing {students_sql_file_path}: {e}. Student data store might be empty or incomplete.")
+            temp_students_store.clear()
+    else:
+        print(f"Warning: {students_sql_file_path} not found. No student configurations loaded.")
+
+    # Update the global data store under lock
+    with data_lock: # Reusing data_lock for simplicity
+        students_data_store = temp_students_store
+
+    print("Student data loading complete.")
+
 # --- Loading for logins.sql --- <--- NEW
 def load_user_data_from_sql():
     """Loads user data from logins.sql into the in-memory user_password_store."""
@@ -685,6 +752,44 @@ def save_class_data_to_sql():
             return True
         except Exception as e:
             print(f"!!! UNEXPECTED ERROR during save_class_data_to_sql:")
+            print(traceback.format_exc())
+            return False
+
+# --- Saving for students.sql ---
+def save_students_data_to_sql():
+    """Saves the current in-memory students_data_store back to students.sql.
+       The 'code' field is not saved as it's generated on load.
+       Returns True on success, False on failure.
+    """
+    global students_data_store
+    students_sql_file_path = DATA_DIR / 'students.sql'
+    print(f"Attempting to save student data to: {students_sql_file_path}")
+    with data_lock: # Reusing data_lock
+        try:
+            sql_lines = []
+            # Optional: Add a timestamp comment
+            # sql_lines.append(f"-- Student data saved on {datetime.datetime.now().isoformat()} --")
+            # sql_lines.append("")
+
+            for student_item in students_data_store:
+                # Basic escaping
+                safe_class_name = student_item['class'].replace("'", "''")
+                safe_note = student_item['note'].replace("'", "''")
+                # classes_str should already be in the correct format like '[1.A, 1.B]'
+                # No extra escaping needed for classes_str if it doesn't contain single quotes itself.
+                insert_statement = (
+                    f"INSERT INTO students (class, note, classes) VALUES "
+                    f"('{safe_class_name}', '{safe_note}', '{student_item['classes_str']}');"
+                )
+                sql_lines.append(insert_statement)
+
+            with open(students_sql_file_path, 'w', encoding='utf-8') as f:
+                f.write("\n".join(sql_lines))
+                f.write("\n")
+            print(f"Student data successfully saved to {students_sql_file_path}")
+            return True
+        except Exception as e:
+            print(f"!!! UNEXPECTED ERROR during save_students_data_to_sql:")
             print(traceback.format_exc())
             return False
 
@@ -1286,6 +1391,29 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 # Send a copy to avoid issues if it's modified elsewhere during serialization
                 response_data = list(class_data_store) 
             self._send_response(200, response_data)
+            return
+
+        elif path == '/api/students':
+            if not self.is_logged_in():
+                self._send_response(401, {"error": "Authentication required"})
+                return
+            # RBAC: Allow admin/teacher to view student configurations
+            if user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
+                self._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
+                return
+
+            response_payload = []
+            with data_lock: # Ensure thread-safe read
+                for student in students_data_store:
+                    # Parse the classes_str into a list for the frontend
+                    try:
+                        # The string is like '[1.A, 1.B]', json.loads can parse this.
+                        counting_classes_list = json.loads(student['classes_str'].replace("'", "\""))
+                    except json.JSONDecodeError:
+                        print(f"Warning: Could not parse classes_str for student {student['class']}: {student['classes_str']}")
+                        counting_classes_list = [] # Default to empty list on error
+                    response_payload.append({**student, "counting_classes": counting_classes_list})
+            self._send_response(200, response_payload)
             return
 
         # API Endpoint: /api/counts?class=ClassName
@@ -2031,7 +2159,45 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 self._send_response(status_code, {"error": message})
             return
 
-        # --- Handle /change_password ---
+        # --- Handle /api/students/remove ---
+        elif path == '/api/students/remove':
+            if not self.is_logged_in(): # Should be caught by earlier checks
+                self._send_response(401, {"error": "Authentication required"})
+                return
+            # RBAC Check
+            if current_user_role != ADMIN_ROLE: # Only admins can remove student configs
+                self._send_response(403, {"error": "Forbidden: Administrator access required."})
+                return
+
+            student_class_to_remove = data.get('class') # Identify student by their 'class' field
+            if not student_class_to_remove:
+                self._send_response(400, {"error": "Missing 'class' of student to remove"})
+                return
+
+            success = False
+            message = "Failed to remove student configuration."
+            status_code = 500
+
+            with data_lock:
+                original_len = len(students_data_store)
+                # Filter out the student to remove
+                students_data_store[:] = [s for s in students_data_store if s['class'] != student_class_to_remove]
+                
+                if len(students_data_store) < original_len: # If something was removed
+                    if save_students_data_to_sql():
+                        success = True
+                        message = f"Student configuration for class '{student_class_to_remove}' removed successfully."
+                        status_code = 200
+                    else:
+                        message = f"Student configuration for '{student_class_to_remove}' removed from memory, but FAILED to save to file."
+                        status_code = 500 # Internal Server Error
+                else:
+                    message = f"Student configuration for class '{student_class_to_remove}' not found."
+                    status_code = 404 # Not Found
+            self._send_response(status_code, {"success": success, "message": message} if success else {"error": message})
+            return
+
+        # --- Handle /api/auth/change ---
         elif path == '/api/auth/change':
             # user_key_for_rbac (user's actual key in user_password_store) is already available
             if not user_key_for_rbac: # Should be caught by is_logged_in earlier
@@ -2257,6 +2423,7 @@ if __name__ == "__main__":
     load_main_config_from_json() # Load server configuration
     load_user_data_from_sql()
     load_class_data_from_sql() # Load class data
+    load_students_data_from_sql() # Load student data
     # --- End Load Data ---
 
     # Server setup using ThreadingMixIn for basic concurrency
@@ -2271,6 +2438,7 @@ if __name__ == "__main__":
     print(f"Using counts data file: {SQL_FILE_PATH}")
     print(f"Using logins data file: {LOGINS_SQL_FILE_PATH}") # <--- NEW
     print(f"Using classes data file: {CLASSES_SQL_FILE_PATH}")
+    print(f"Using students data file: {DATA_DIR / 'students.sql'}")
     print(f"Using Google client secrets file: {CLIENT_SECRETS_FILE}")
     print(f"Using hashlib.pbkdf2_hmac with {ITERATIONS} iterations.")
     print(f"\nAccess the application via: http://{HOST}:{PORT}/")
