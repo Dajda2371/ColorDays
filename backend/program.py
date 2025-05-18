@@ -1920,6 +1920,57 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 self._send_response(status_code, {"error": message})
             return
 
+        # --- Handle /api/classes/update_iscountedby ---
+        elif path == '/api/classes/update_iscountedby':
+            # RBAC Check
+            if current_user_role != ADMIN_ROLE:
+                self._send_response(403, {"error": "Forbidden: Administrator access required."})
+                return
+
+            class_name_to_update = data.get('class')
+            day_identifier = data.get('dayIdentifier') # '1', '2', or '3'
+            new_value = data.get('value')
+
+            if not all([class_name_to_update, day_identifier, new_value is not None]):
+                self._send_response(400, {"error": "Missing class, dayIdentifier, or value"})
+                return
+
+            if day_identifier not in ['1', '2', '3']:
+                self._send_response(400, {"error": "Invalid dayIdentifier. Must be '1', '2', or '3'."})
+                return
+            
+            # Map dayIdentifier to the actual field name
+            field_to_update = f"iscountedby{day_identifier}"
+
+            success = False
+            message = "Failed to update class counting assignment."
+            status_code = 500
+
+            with data_lock:
+                class_found = False
+                for cls_item in class_data_store:
+                    if cls_item['class'] == class_name_to_update:
+                        cls_item[field_to_update] = new_value
+                        class_found = True
+                        break
+                
+                if not class_found:
+                    message = f"Class '{class_name_to_update}' not found."
+                    status_code = 404
+                else:
+                    if save_class_data_to_sql():
+                        success = True
+                        message = f"Assignment for class '{class_name_to_update}' on day {day_identifier} updated to '{new_value}' and saved."
+                        status_code = 200
+                    else:
+                        message = f"Assignment for class '{class_name_to_update}' updated in memory, but FAILED to save to file."
+                        status_code = 500
+            if success:
+                self._send_response(status_code, {"success": True, "message": message})
+            else:
+                self._send_response(status_code, {"error": message})
+            return
+
         # --- Handle /change_password ---
         elif path == '/api/auth/change':
             # user_key_for_rbac (user's actual key in user_password_store) is already available

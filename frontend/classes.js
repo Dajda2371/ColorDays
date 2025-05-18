@@ -127,6 +127,48 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             select.value = '_NULL_'; // Default to N/A if current value is invalid/not in list
         }
+
+        // Add event listener to save changes
+        select.addEventListener('change', function() {
+            const changedClass = this.dataset.class;
+            const changedDayIdentifier = this.dataset.day;
+            const newValue = this.value;
+
+            // console.log(`Change detected: Class ${changedClass}, Day ${changedDayIdentifier}, New Value: ${newValue}`);
+
+            fetch('/api/classes/update_iscountedby', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    class: changedClass,
+                    dayIdentifier: changedDayIdentifier, // '1', '2', or '3'
+                    value: newValue
+                }),
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => { throw new Error(err.error || `HTTP error! status: ${response.status}`) });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    console.log(data.message);
+                    // Optionally, provide user feedback (e.g., a small temporary "Saved!" message)
+                } else {
+                    // This case should ideally be caught by the !response.ok check above
+                    console.error('Failed to save:', data.error || 'Unknown error');
+                    alert(`Error saving change: ${data.error || 'Unknown error'}`);
+                }
+            })
+            .catch(error => {
+                console.error('Error updating class counting value:', error);
+                alert(`Error updating: ${error.message}`);
+            });
+        });
+
         return select;
     }
 });
