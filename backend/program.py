@@ -1441,6 +1441,83 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             self._send_response(200, response_payload)
             return
 
+        elif path == '/api/student/counting-details': # GET endpoint
+            if not self.is_logged_in():
+                self._send_response(401, {"error": "Authentication required"})
+                return
+            # RBAC: Allow admin/teacher
+            if user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
+                self._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
+                return
+
+            student_note_param = query.get('note', [None])[0]
+            if not student_note_param:
+                self._send_response(400, {"error": "Missing 'note' query parameter for the student."})
+                return
+
+            target_student_config = None
+            with data_lock:
+                # Find the target student by note
+                for s_config in students_data_store:
+                    if s_config.get('note') == student_note_param:
+                        target_student_config = s_config
+                        break
+
+                if not target_student_config:
+                    self._send_response(404, {"error": f"Student configuration with note '{student_note_param}' not found."})
+                    return
+
+                # Parse the classes the target student is counting
+                target_student_counting_classes_str = target_student_config.get('counts_classes_str', '[]')
+                current_student_counts_set = set()
+                try:
+                    if target_student_counting_classes_str.startswith('[') and target_student_counting_classes_str.endswith(']'):
+                        content = target_student_counting_classes_str[1:-1]
+                        if content.strip():
+                            current_student_counts_set = {c.strip() for c in content.split(',') if c.strip()}
+                except Exception:
+                    print(f"Warning: Could not parse counts_classes_str for student {student_note_param}: {target_student_counting_classes_str}")
+                    # current_student_counts_set remains empty
+
+                response_payload = []
+                # Iterate through ALL classes from class_data_store
+                for class_item in class_data_store:
+                    class_name_from_store = class_item['class']
+                    is_counted_by_current = class_name_from_store in current_student_counts_set
+
+                    # Find other students counting this class_name_from_store
+                    also_counted_by_notes = []
+                    for other_student in students_data_store:
+                        if other_student.get('note') == student_note_param: # Skip the current student
+                            continue
+                        other_student_classes_str = other_student.get('counts_classes_str', '[]')
+                        try:
+                            if other_student_classes_str.startswith('[') and other_student_classes_str.endswith(']'):
+                                other_content = other_student_classes_str[1:-1]
+                                if other_content.strip():
+                                    other_student_counts_this_class = class_name_from_store in {c.strip() for c in other_content.split(',') if c.strip()}
+                                    if other_student_counts_this_class:
+                                        also_counted_by_notes.append(other_student.get('note', 'Unknown Note'))
+                        except Exception:
+                            print(f"Warning: Could not parse counts_classes_str for other student {other_student.get('note')}: {other_student_classes_str}")
+
+                    response_payload.append({
+                        "class_name": class_name_from_store,
+                        "is_counted_by_current_student": is_counted_by_current,
+                        # "day_statuses": { # If you still want to show class's own T/F status
+                        #     "monday": class_item.get('counts1', 'N/A'),
+                        #     "tuesday": class_item.get('counts2', 'N/A'),
+                        #     "wednesday": class_item.get('counts3', 'N/A')
+                        # },
+                        "also_counted_by_notes": sorted(list(set(also_counted_by_notes))) # Unique notes, sorted
+                    })
+                
+                # Sort the final payload by class name for consistent display
+                response_payload.sort(key=lambda x: x['class_name'])
+
+            self._send_response(200, response_payload)
+            return
+
         # API Endpoint: /api/counts?class=ClassName
         elif path == '/api/counts':
             if not self.is_logged_in():
@@ -2265,6 +2342,66 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                     else:
                         students_data_store.pop() # Revert in-memory change if save fails
                         message = f"Failed to save new student configuration for '{student_class}' to file."
+                        status_code = 500
+            self._send_response(status_code, {"success": success, "message": message} if success else {"error": message})
+            return
+        
+        # --- Handle /api/student/update-counting-class ---
+        elif path == '/api/student/update-counting-class': # POST endpoint
+            if not self.is_logged_in():
+                self._send_response(401, {"error": "Authentication required"})
+                return
+            # RBAC Check - Only Admins/Teachers can modify student counting assignments
+            if current_user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
+                self._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
+                return
+
+            student_note = data.get('student_note')
+            class_to_update = data.get('class_name')
+            is_counting = data.get('is_counting') # boolean
+
+            if not student_note or not class_to_update or is_counting is None:
+                self._send_response(400, {"error": "Missing student_note, class_name, or is_counting status."})
+                return
+
+            success = False
+            message = "Failed to update student's counting classes."
+            status_code = 500
+
+            with data_lock:
+                target_student_config = next((s for s in students_data_store if s.get('note') == student_note), None)
+
+                if not target_student_config:
+                    message = f"Student configuration with note '{student_note}' not found."
+                    status_code = 404
+                else:
+                    counts_str = target_student_config.get('counts_classes_str', '[]')
+                    current_counts_set = set()
+                    if counts_str.startswith('[') and counts_str.endswith(']'):
+                        content = counts_str[1:-1]
+                        if content.strip():
+                            current_counts_set = {c.strip() for c in content.split(',') if c.strip()}
+                    
+                    if is_counting:
+                        current_counts_set.add(class_to_update)
+                    else:
+                        current_counts_set.discard(class_to_update) # Use discard to not raise error if not present
+                    
+                    # Reconstruct the string, sorted for consistency
+                    sorted_list_of_classes = sorted(list(current_counts_set))
+                    new_counts_classes_str = f"[{', '.join(sorted_list_of_classes)}]" if sorted_list_of_classes else "[]"
+                    
+                    target_student_config['counts_classes_str'] = new_counts_classes_str
+
+                    if save_students_data_to_sql():
+                        success = True
+                        action = "added to" if is_counting else "removed from"
+                        message = f"Class '{class_to_update}' {action} student '{student_note}'s counting list."
+                        status_code = 200
+                    else:
+                        # Attempt to revert in-memory change if save fails (though original counts_str was overwritten)
+                        # For simplicity, we'll just report the error. A more robust undo would store original_counts_str.
+                        message = f"Failed to save updated counting list for student '{student_note}' to file."
                         status_code = 500
             self._send_response(status_code, {"success": success, "message": message} if success else {"error": message})
             return
