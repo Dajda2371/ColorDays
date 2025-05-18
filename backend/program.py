@@ -224,6 +224,7 @@ SQL_COOKIE_NAME = "SQLAuthUser" # For SQL users
 # --- In-Memory Data Store and Lock ---
 data_store = collections.defaultdict(lambda: collections.defaultdict(lambda: collections.defaultdict(int)))
 data_lock = threading.RLock()
+server_config = {} # To store data from config.json
 class_data_store = [] # To store data from classes.sql as a list of dicts
 
 def get_current_user_info(handler_instance): # Returns username_key, role
@@ -689,6 +690,30 @@ def save_class_data_to_sql():
 
 # --- Add this function near save_data_to_sql ---
 
+# --- Loading for config.json ---
+def load_main_config_from_json():
+    """Loads configuration from config.json into the in-memory server_config."""
+    global server_config
+    config_file_path = DATA_DIR / 'config.json'
+    print(f"Attempting to load server configuration from: {config_file_path}")
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    temp_config = {}
+    if config_file_path.is_file():
+        try:
+            with open(config_file_path, 'r', encoding='utf-8') as f:
+                temp_config = json.load(f)
+            print(f"Server configuration loaded from {config_file_path}.")
+        except json.JSONDecodeError:
+            print(f"!!! ERROR: Invalid JSON format in {config_file_path}. Server configuration might be incomplete or default.")
+        except Exception as e:
+            print(f"!!! ERROR reading {config_file_path}: {e}. Server configuration might be incomplete or default.")
+    else:
+        print(f"Warning: {config_file_path} not found. Using default server configuration.")
+
+    server_config = temp_config # Update the global variable
+    print("Server configuration loading complete.")
+
 # --- Lock for user data modifications ---
 # It's better practice to have a separate lock for user data
 # if it might be modified concurrently with counts data,
@@ -746,6 +771,7 @@ def save_main_config_to_json(new_oauth_data):
     """
     Reads the existing config.json, updates OAuth specific keys,
     and writes the entire config back.
+    Also updates the in-memory server_config.
     Returns True on success, False on failure.
     """
     config_file_path = DATA_DIR / 'config.json'
@@ -758,9 +784,13 @@ def save_main_config_to_json(new_oauth_data):
                 with open(config_file_path, 'r', encoding='utf-8') as f:
                     current_config = json.load(f)
             
-            # Update only the OAuth related keys from the new_oauth_data
+            # Update keys from the provided data (assuming it's the full config or a partial update)
+            # A more robust approach would merge keys carefully. For now, assume new_oauth_data has relevant keys.
+            current_config.update(new_oauth_data) # Update with all keys from new_oauth_data
+
+            # Ensure specific keys are handled if needed, e.g., oauth_eneabled as string
             current_config['oauth_eneabled'] = new_oauth_data.get('oauth_eneabled', current_config.get('oauth_eneabled', 'false'))
-            current_config['allowed_oauth_domains'] = new_oauth_data.get('allowed_oauth_domains', current_config.get('allowed_oauth_domains', []))
+            # allowed_oauth_domains and can_students_count_their_own_class will be updated by .update()
 
             with open(config_file_path, 'w', encoding='utf-8') as f:
                 json.dump(current_config, f, indent=4) # Pretty print with indent
@@ -768,6 +798,7 @@ def save_main_config_to_json(new_oauth_data):
             print(f"OAuth settings successfully updated in {config_file_path}")
             return True
         except Exception as e:
+            # Note: If saving fails, the in-memory server_config might be inconsistent with the file.
             print(f"!!! UNEXPECTED ERROR during save_main_config_to_json:")
             print(traceback.format_exc())
             return False
@@ -2194,6 +2225,7 @@ if __name__ == "__main__":
     # Load counts data first
     load_data_from_sql()
     # Load user login data <--- NEW
+    load_main_config_from_json() # Load server configuration
     load_user_data_from_sql()
     load_class_data_from_sql() # Load class data
     # --- End Load Data ---
