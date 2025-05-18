@@ -22,6 +22,11 @@ document.addEventListener('DOMContentLoaded', function() {
             return response.json();
         })
         .then(classes => {
+            // Prepare lists of classes that count for each day
+            const mondayCountingClasses = classes.filter(c => c.counts1 === 'T').map(c => c.class);
+            const tuesdayCountingClasses = classes.filter(c => c.counts2 === 'T').map(c => c.class);
+            const wednesdayCountingClasses = classes.filter(c => c.counts3 === 'T').map(c => c.class);
+
             if (!classes || classes.length === 0) {
                 const noClassesMsgP = document.createElement('p');
                 noClassesMsgP.textContent = 'No classes available to display.';
@@ -59,20 +64,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 cellClass.textContent = cls.class;
 
                 const cellIsCountedBy1 = row.insertCell();
-                cellIsCountedBy1.textContent = cls.iscountedby1 === '_NULL_' ? 'N/A' : cls.iscountedby1;
+                cellIsCountedBy1.appendChild(createCountingDropdown(mondayCountingClasses, cls.iscountedby1, cls.class, '1'));
 
                 const cellIsCountedBy2 = row.insertCell();
-                cellIsCountedBy2.textContent = cls.iscountedby2 === '_NULL_' ? 'N/A' : cls.iscountedby2;
+                cellIsCountedBy2.appendChild(createCountingDropdown(tuesdayCountingClasses, cls.iscountedby2, cls.class, '2'));
 
                 const cellIsCountedBy3 = row.insertCell();
-                cellIsCountedBy3.textContent = cls.iscountedby3 === '_NULL_' ? 'N/A' : cls.iscountedby3;
-
-                // Style N/A cells if desired
-                [cellIsCountedBy1, cellIsCountedBy2, cellIsCountedBy3].forEach(cell => {
-                    if (cell.textContent === 'N/A') {
-                        cell.style.color = '#777'; // Lighter text for N/A
-                    }
-                });
+                cellIsCountedBy3.appendChild(createCountingDropdown(wednesdayCountingClasses, cls.iscountedby3, cls.class, '3'));
             });
         })
         .catch(error => {
@@ -97,5 +95,38 @@ document.addEventListener('DOMContentLoaded', function() {
         link.className = 'button class-button'; // Use 'button' or a custom class for styling
         // You can add more specific styling via style.css for '.class-button'
         return link;
+    }
+
+    function createCountingDropdown(availableClasses, selectedValue, classIdentifier, dayIdentifier) {
+        const select = document.createElement('select');
+        select.dataset.class = classIdentifier; // e.g., '1.A'
+        select.dataset.day = dayIdentifier;     // e.g., '1' for Monday, '2' for Tuesday
+        // Add a class for potential styling
+        select.classList.add('counting-dropdown');
+
+        // N/A Option
+        const naOption = document.createElement('option');
+        naOption.value = '_NULL_';
+        naOption.textContent = 'N/A';
+        select.appendChild(naOption);
+
+        // Options for counting classes
+        availableClasses.forEach(countingClass => {
+            const option = document.createElement('option');
+            option.value = countingClass;
+            option.textContent = countingClass;
+            select.appendChild(option);
+        });
+
+        // Set the selected value
+        // If selectedValue is not among the options (e.g. old data or not a counting class),
+        // it will default to the first option (N/A) or remain unselected based on browser.
+        // Explicitly setting to _NULL_ if it's not a valid class option ensures N/A is picked.
+        if (availableClasses.includes(selectedValue) || selectedValue === '_NULL_') {
+            select.value = selectedValue;
+        } else {
+            select.value = '_NULL_'; // Default to N/A if current value is invalid/not in list
+        }
+        return select;
     }
 });
