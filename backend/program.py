@@ -2280,8 +2280,8 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 self._send_response(401, {"error": "Authentication required"})
                 return
             # RBAC Check
-            if current_user_role != ADMIN_ROLE: # Only admins can remove student configs
-                self._send_response(403, {"error": "Forbidden: Administrator access required."})
+            if current_user_role not in [ADMIN_ROLE, TEACHER_ROLE]: # Allow Admins and Teachers
+                self._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
                 return
 
             student_code_to_remove = data.get('code') # Identify student by their 'code'
@@ -2318,8 +2318,8 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             if not self.is_logged_in():
                 self._send_response(401, {"error": "Authentication required"})
                 return
-            # RBAC Check - Only Admins can add student configurations
-            if current_user_role != ADMIN_ROLE:
+            # RBAC Check - Allow Admins and Teachers to add student configurations
+            if current_user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
                 self._send_response(403, {"error": "Forbidden: Administrator access required."})
                 return
 
