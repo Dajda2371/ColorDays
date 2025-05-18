@@ -599,6 +599,7 @@ def load_students_data_from_sql():
     temp_students_store = []
     file_exists = students_sql_file_path.exists()
     students_loaded_count = 0
+    codes_were_generated = False # Flag to track if we generated any codes
 
     if file_exists:
         try:
@@ -610,6 +611,7 @@ def load_students_data_from_sql():
                         # Otherwise, use the code from the file.
                         if not parsed.get('code') or parsed['code'] == "''" or parsed['code'] == "": # Check for empty string or literal ''
                             parsed['code'] = generate_random_code()
+                            codes_were_generated = True # Mark that a code was generated
                         # If the SQL has an empty string for code, like VALUES ('', ...), the regex captures it as an empty string.
                         # The above check handles this.
                         temp_students_store.append(parsed)
@@ -624,6 +626,12 @@ def load_students_data_from_sql():
     # Update the global data store under lock
     with data_lock: # Reusing data_lock for simplicity
         students_data_store = temp_students_store
+
+    # If we generated any codes for students with initially empty code fields, save the data back.
+    if codes_were_generated:
+        print("Generated new codes for some students during load. Saving student data...")
+        if not save_students_data_to_sql(): # This function already handles locking
+            print("!!! CRITICAL: Failed to save student data to file after generating new codes.")
 
     print("Student data loading complete.")
 
