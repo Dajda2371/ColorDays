@@ -1525,6 +1525,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 # Prepare the final response object
                 final_api_response = {
                     "student_note": target_student_config.get('note', ''), # Include student's note
+                    "student_class": target_student_config.get('class', ''), # Include student's main class
                     "counting_details": sorted(response_payload, key=lambda x: x['class_name'])
                 }
 

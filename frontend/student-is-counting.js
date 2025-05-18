@@ -43,9 +43,21 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(apiResponse => {
             currentStudentNoteForDisplay = apiResponse.student_note || studentCode; // Use note if available, else code
             fetchedClassDetails = apiResponse.counting_details; // Store for later use
+            const studentClass = apiResponse.student_class; // Get the student's main class
+
             // Update titles with the fetched note
             pageTitleElement.textContent = `Student: ${currentStudentNoteForDisplay}`;
             subTitleElement.textContent = `Manage Class Counted by ${currentStudentNoteForDisplay} for ${dayNames[day]}`;
+            
+            // Update the "Back to Students" link
+            const backLink = document.getElementById('backToStudentsLink');
+            if (backLink && studentClass) {
+                let newHref = `students.html?class=${encodeURIComponent(studentClass)}`;
+                if (day) { // 'day' is already available from urlParams.get('day')
+                    newHref += `&day=${encodeURIComponent(day)}`;
+                }
+                backLink.href = newHref;
+            }
             renderCountingDetailsTable(fetchedClassDetails);
         })
         .catch(error => {
