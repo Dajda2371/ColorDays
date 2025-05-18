@@ -73,14 +73,14 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             editButton.href = editHref;
             editButton.textContent = 'Edit Classes';
-            editButton.className = 'button'; // Add a class for styling if needed
+            editButton.className = 'button class-button'; // Apply class-button style
             actionsCell.appendChild(editButton);
 
             actionsCell.appendChild(document.createTextNode(' ')); // For spacing
 
             const removeButton = document.createElement('button');
             removeButton.textContent = 'Remove';
-            removeButton.className = 'button-danger'; // Add a class for styling if needed
+            removeButton.className = 'button class-button button-danger'; // Apply class-button and keep button-danger
             removeButton.addEventListener('click', () => removeStudent(student.code, student.note, student.class)); // Pass code, note, and class for confirmation
             actionsCell.appendChild(removeButton);
         });
