@@ -1415,33 +1415,60 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             if not self.is_logged_in():
                 self._send_response(401, {"error": "Authentication required"})
                 return
-            # RBAC: Allow admin/teacher to view student configurations
-            if user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
-                self._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
-                return
-
+            
+            student_auth_cookie = cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME)
+            is_student_user_session = student_auth_cookie is not None
+            
             response_payload = []
             with data_lock: # Ensure thread-safe read
-                for student in students_data_store:
-                    # Parse the classes_str into a list for the frontend
-                    try:
-                        s = student.get('counts_classes_str', '[]') # Default to '[]' if missing
-                        if s.startswith('[') and s.endswith(']'):
-                            # Remove brackets
-                            s_content = s[1:-1]
-                            if not s_content.strip(): # Handles "[]" or "[ ]"
-                                counting_classes_list = []
+                if is_student_user_session:
+                    student_code_from_cookie = student_auth_cookie.value
+                    found_student_data_item = None
+                    for s_data_item in students_data_store:
+                        if s_data_item.get('code') == student_code_from_cookie:
+                            found_student_data_item = s_data_item
+                            break
+                    
+                    if found_student_data_item:
+                        # Parse counts_classes_str for the single student
+                        counting_classes_list = []
+                        try:
+                            s_str = found_student_data_item.get('counts_classes_str', '[]')
+                            if s_str.startswith('[') and s_str.endswith(']'):
+                                s_content = s_str[1:-1]
+                                if s_content.strip():
+                                    counting_classes_list = [item.strip() for item in s_content.split(',')]
                             else:
-                                # Split by comma, then strip whitespace from each item
-                                counting_classes_list = [item.strip() for item in s_content.split(',')]
-                        else:
-                            # If it's not in the expected format, treat as error or empty
-                            print(f"Warning: counts_classes_str for student {student['class']} is not in expected list format: {s}")
-                            counting_classes_list = []
-                    except Exception as e: # Catch any unexpected error during string parsing
-                        print(f"Error parsing counts_classes_str for student {student['class']}: '{student.get('counts_classes_str')}'. Error: {e}")
-                        counting_classes_list = [] # Default to empty list on error
-                    response_payload.append({**student, "counting_classes": counting_classes_list})
+                                print(f"Warning: counts_classes_str for student {found_student_data_item.get('class')} is not in expected list format: {s_str}")
+                        except Exception as e:
+                            print(f"Error parsing counts_classes_str for student {found_student_data_item.get('class')}: '{found_student_data_item.get('counts_classes_str')}'. Error: {e}")
+                        
+                        # Return a list containing only the single student's data
+                        response_payload.append({**found_student_data_item, "counting_classes": counting_classes_list})
+                    else:
+                        print(f"Warning: Student auth cookie for code '{student_code_from_cookie}' present, but no matching student found in store.")
+                        # response_payload remains empty, frontend will likely fallback or show no classes.
+                
+                else: # Not a student session, check for admin/teacher role
+                    if user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
+                        self._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
+                        return
+                    
+                    # Admin/Teacher: return all students
+                    for student_data_item in students_data_store:
+                        counting_classes_list = []
+                        try:
+                            s_str = student_data_item.get('counts_classes_str', '[]')
+                            if s_str.startswith('[') and s_str.endswith(']'):
+                                s_content = s_str[1:-1]
+                                if s_content.strip():
+                                    counting_classes_list = [item.strip() for item in s_content.split(',')]
+                            else:
+                                print(f"Warning: counts_classes_str for student {student_data_item.get('class')} is not in expected list format: {s_str}")
+                        except Exception as e:
+                            print(f"Error parsing counts_classes_str for student {student_data_item.get('class')}: '{student_data_item.get('counts_classes_str')}'. Error: {e}")
+                        response_payload.append({**student_data_item, "counting_classes": counting_classes_list})
+            
             self._send_response(200, response_payload)
             return
 

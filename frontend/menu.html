@@ -142,29 +142,62 @@
 
         // --- Function to fetch and display classes ---
         async function loadAndDisplayClasses() {
+            const studentCode = getCookie("SQLAuthUserStudent");
+            let classesToDisplay = [];
+            let errorMessage = null;
+
             try {
-                const response = await fetch('/api/classes', {
-                    credentials: 'include' // Important if your API endpoint is protected
-                });
+                if (studentCode) {
+                    console.log("Student session detected. Fetching specific classes for student code:", studentCode);
+                    const studentsResponse = await fetch('/api/students', { credentials: 'include' });
+                    if (!studentsResponse.ok) {
+                        const errorData = await studentsResponse.json().catch(() => ({ error: "Failed to fetch student data" }));
+                        throw new Error(errorData.error || `HTTP error! status: ${studentsResponse.status}`);
+                    }
+                    const allStudents = await studentsResponse.json();
+                    const currentStudent = allStudents.find(s => s.code === studentCode);
 
-                if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({ error: "Failed to fetch classes" }));
-                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                    if (currentStudent && currentStudent.counting_classes) {
+                        // The `counting_classes` array from /api/students contains the class names.
+                        // We need to format them into objects like /api/classes does for consistency,
+                        // or simply use the names directly if the structure is just { class: "ClassName" }.
+                        // For simplicity, we'll assume counting_classes is an array of strings.
+                        classesToDisplay = currentStudent.counting_classes.map(className => ({ class: className }));
+                        console.log("Displaying classes for student:", classesToDisplay);
+                    } else {
+                        console.warn("Current student data not found or no counting_classes. Student code:", studentCode);
+                        errorMessage = "Could not load your assigned classes. Showing all available classes.";
+                        // Fallback to fetching all classes if student-specific data is missing
+                        const allClassesResponse = await fetch('/api/classes', { credentials: 'include' });
+                        if (!allClassesResponse.ok) {
+                            const errorData = await allClassesResponse.json().catch(() => ({ error: "Failed to fetch all classes" }));
+                            throw new Error(errorData.error || `HTTP error! status: ${allClassesResponse.status}`);
+                        }
+                        classesToDisplay = await allClassesResponse.json();
+                    }
+                } else {
+                    // Not a student, or student cookie not found, load all classes
+                    console.log("No student session. Fetching all classes.");
+                    const response = await fetch('/api/classes', { credentials: 'include' });
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({ error: "Failed to fetch classes" }));
+                        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                    }
+                    classesToDisplay = await response.json();
                 }
-
-                const classes = await response.json();
-                dynamicClassList.innerHTML = ''; // Clear any existing static items
-
-                classes.forEach(cls => {
-                    const listItem = document.createElement('li');
-                    listItem.innerHTML = `<a href="index.html?class=${encodeURIComponent(cls.class)}">${cls.class}</a>`;
-                    dynamicClassList.appendChild(listItem);
-                });
-
             } catch (error) {
                 console.error('Error loading classes:', error);
-                dynamicClassList.innerHTML = `<li>Error loading classes: ${error.message}. Please try again later or contact support.</li>`;
+                errorMessage = `Error loading classes: ${error.message}. Please try again later or contact support.`;
             }
+
+            dynamicClassList.innerHTML = ''; // Clear any existing items
+            if (errorMessage) dynamicClassList.innerHTML = `<li>${errorMessage}</li>`;
+
+            classesToDisplay.forEach(cls => { // cls should be an object like { class: "ClassName" }
+                const listItem = document.createElement('li');
+                listItem.innerHTML = `<a href="index.html?class=${encodeURIComponent(cls.class)}">${cls.class}</a>`;
+                dynamicClassList.appendChild(listItem);
+            })
         }
 
         // --- Function to display logged-in username ---
