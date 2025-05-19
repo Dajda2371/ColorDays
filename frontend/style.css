@@ -15,10 +15,26 @@ body {
   }
   
   button {
+    /* Incorporating styles from .class-button */
+    display: inline-block; 
+    padding: 8px 15px; /* Updated from 10px 20px */
     margin: 5px;
-    padding: 10px 20px;
+    border: 1px solid #ccc;
+    background-color: #f0f0f0; 
+    color: #333; 
+    text-decoration: none; 
+    border-radius: 4px; 
+    transition: background-color 0.2s, color 0.2s; 
+    
+    /* Retained from original button style or good defaults */
     font-size: 16px;
     cursor: pointer;
+  }
+
+button:hover {
+  background-color: #007bff; /* From .class-button:hover */
+  color: white; /* From .class-button:hover */
+  border-color: #0056b3; /* From .class-button:hover */
   }
 
 /* Styles for the dynamically added class buttons */
@@ -38,4 +54,73 @@ body {
   background-color: #007bff; /* Blue background on hover */
   color: white; /* White text on hover */
   border-color: #0056b3;
+}
+
+/* === Login Page Styles === */
+
+#login-sections-container {
+    display: flex;
+    justify-content: center; /* Center the two section blocks horizontally */
+    gap: 30px; /* Space between the teacher and student sections */
+    margin-top: 2rem; /* Space below the main H1 heading */
+    margin-bottom: 1rem; /* Space above the error message div */
+    flex-wrap: wrap; /* Allow sections to wrap on smaller screens */
+}
+
+/* Styling for each login section (Teacher, Student) */
+#login-sections-container section {
+    background-color: #f9f9f9; /* Light background for each section box */
+    padding: 25px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    width: 320px; /* Define a width for each login box */
+    box-sizing: border-box; /* Include padding and border in the element's total width and height */
+    text-align: left; /* Align text like labels to the left within the section */
+}
+
+/* Headings within login sections (e.g., "Login as Teacher") */
+#login-sections-container h2 {
+    text-align: center; /* Center the heading within its section */
+    margin-top: 0; /* Remove default top margin */
+    margin-bottom: 1.5rem; /* Space below the heading */
+    font-size: 1.5em; /* Slightly larger font for section titles */
+}
+
+/* Spacing for divs containing label/input pairs within forms */
+#login-sections-container form div {
+    margin-bottom: 1rem;
+}
+
+#login-sections-container label {
+    display: block; /* Make labels take their own line */
+    margin-bottom: 0.5rem; /* Space below the label, above the input */
+    font-weight: bold;
+}
+
+#login-sections-container input[type="text"],
+#login-sections-container input[type="password"] {
+    width: 100%; /* Make input fields take full width of their container */
+    padding: 10px; /* Padding inside input fields */
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+/* Buttons within the login sections (form submit buttons and Google login button) */
+#login-sections-container section button {
+    width: 100%; /* Make buttons take full width */
+    /* General button styles (padding, font-size, cursor) from above will apply */
+    /* Override general button margin for this specific context */
+    margin-top: 10px; /* Add some top margin */
+    margin-left: 0;
+    margin-right: 0;
+    /* margin-bottom will inherit from the general button style (5px) */
+}
+
+#error-message {
+    color: red;
+    margin-top: 1rem; /* Space above the error message */
+    min-height: 1em; /* Reserve space so layout doesn't jump when message appears */
+    font-weight: bold;
+    /* text-align: center; is inherited from body style */
 }
