@@ -227,6 +227,7 @@ VALID_SESSION_VALUE = "user_is_logged_in_secret_value" # Replace with a secure, 
 CHANGE_PASSWORD_COOKIE_NAME = "ChangePasswordVerificationNotNeeded" # For the change password flow
 GOOGLE_COOKIE_NAME = "GoogleAuthUser" # For Google OAuth users
 SQL_COOKIE_NAME = "SQLAuthUser" # For SQL users
+SQL_AUTH_USER_STUDENT_COOKIE_NAME = "SQLAuthUserStudent" # For SQL Student users
 # --- End Session Configuration ---
 
 
@@ -1396,9 +1397,12 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 return
         
             # RBAC Check
-            # _user_key, current_user_role = get_current_user_info(self) # user_role is already available from the top of do_GET
-            if user_role not in [ADMIN_ROLE, TEACHER_ROLE]: # Allow both Admin and Teacher
-                self._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
+            # user_role is already available from the top of do_GET
+            # Check if it's a student session via the specific student cookie
+            is_student_session = cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME) is not None
+
+            if not (user_role in [ADMIN_ROLE, TEACHER_ROLE] or is_student_session):
+                self._send_response(403, {"error": "Forbidden: Access to this resource is restricted for your account type."})
                 return
             
             with data_lock: # Ensure thread-safe read
@@ -1411,33 +1415,60 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             if not self.is_logged_in():
                 self._send_response(401, {"error": "Authentication required"})
                 return
-            # RBAC: Allow admin/teacher to view student configurations
-            if user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
-                self._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
-                return
-
+            
+            student_auth_cookie = cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME)
+            is_student_user_session = student_auth_cookie is not None
+            
             response_payload = []
             with data_lock: # Ensure thread-safe read
-                for student in students_data_store:
-                    # Parse the classes_str into a list for the frontend
-                    try:
-                        s = student.get('counts_classes_str', '[]') # Default to '[]' if missing
-                        if s.startswith('[') and s.endswith(']'):
-                            # Remove brackets
-                            s_content = s[1:-1]
-                            if not s_content.strip(): # Handles "[]" or "[ ]"
-                                counting_classes_list = []
+                if is_student_user_session:
+                    student_code_from_cookie = student_auth_cookie.value
+                    found_student_data_item = None
+                    for s_data_item in students_data_store:
+                        if s_data_item.get('code') == student_code_from_cookie:
+                            found_student_data_item = s_data_item
+                            break
+                    
+                    if found_student_data_item:
+                        # Parse counts_classes_str for the single student
+                        counting_classes_list = []
+                        try:
+                            s_str = found_student_data_item.get('counts_classes_str', '[]')
+                            if s_str.startswith('[') and s_str.endswith(']'):
+                                s_content = s_str[1:-1]
+                                if s_content.strip():
+                                    counting_classes_list = [item.strip() for item in s_content.split(',')]
                             else:
-                                # Split by comma, then strip whitespace from each item
-                                counting_classes_list = [item.strip() for item in s_content.split(',')]
-                        else:
-                            # If it's not in the expected format, treat as error or empty
-                            print(f"Warning: counts_classes_str for student {student['class']} is not in expected list format: {s}")
-                            counting_classes_list = []
-                    except Exception as e: # Catch any unexpected error during string parsing
-                        print(f"Error parsing counts_classes_str for student {student['class']}: '{student.get('counts_classes_str')}'. Error: {e}")
-                        counting_classes_list = [] # Default to empty list on error
-                    response_payload.append({**student, "counting_classes": counting_classes_list})
+                                print(f"Warning: counts_classes_str for student {found_student_data_item.get('class')} is not in expected list format: {s_str}")
+                        except Exception as e:
+                            print(f"Error parsing counts_classes_str for student {found_student_data_item.get('class')}: '{found_student_data_item.get('counts_classes_str')}'. Error: {e}")
+                        
+                        # Return a list containing only the single student's data
+                        response_payload.append({**found_student_data_item, "counting_classes": counting_classes_list})
+                    else:
+                        print(f"Warning: Student auth cookie for code '{student_code_from_cookie}' present, but no matching student found in store.")
+                        # response_payload remains empty, frontend will likely fallback or show no classes.
+                
+                else: # Not a student session, check for admin/teacher role
+                    if user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
+                        self._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
+                        return
+                    
+                    # Admin/Teacher: return all students
+                    for student_data_item in students_data_store:
+                        counting_classes_list = []
+                        try:
+                            s_str = student_data_item.get('counts_classes_str', '[]')
+                            if s_str.startswith('[') and s_str.endswith(']'):
+                                s_content = s_str[1:-1]
+                                if s_content.strip():
+                                    counting_classes_list = [item.strip() for item in s_content.split(',')]
+                            else:
+                                print(f"Warning: counts_classes_str for student {student_data_item.get('class')} is not in expected list format: {s_str}")
+                        except Exception as e:
+                            print(f"Error parsing counts_classes_str for student {student_data_item.get('class')}: '{student_data_item.get('counts_classes_str')}'. Error: {e}")
+                        response_payload.append({**student_data_item, "counting_classes": counting_classes_list})
+            
             self._send_response(200, response_payload)
             return
 
@@ -1539,8 +1570,11 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 self._send_response(401, {"error": "Authentication required"})
                 return
 
-            # RBAC Check: Allow teachers and admins
-            if user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
+            # RBAC Check: Allow teachers, admins, and students
+            # is_student_session is already available from the top of do_GET if needed,
+            # but cookies variable is directly accessible here.
+            is_student_session_for_counts = cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME) is not None
+            if not (user_role in [ADMIN_ROLE, TEACHER_ROLE] or is_student_session_for_counts):
                 self._send_response(403, {"error": "Forbidden: Access denied for your role."})
                 return
 
@@ -1714,6 +1748,19 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             return
         # --- End Password Change Check for Pages ---
+
+        # --- NEW: Student Access Restriction for specific pages ---
+        if path == '/classes.html' or path == '/config.html':
+            # Check if the user is generally logged in and if it's a student session
+            if self.is_logged_in(): 
+                cookies = self.get_cookies()
+                # Check if the student-specific auth cookie is present
+                if cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME):
+                    print(f"Access denied for student to {path}. Student session identified.")
+                    self._send_response(403, {"error": "Forbidden: Access to this page is restricted for your account type."})
+                    return
+        # --- END Student Access Restriction ---
+
         try:
             # Default to menu.html if root path is requested
             # Check for login.html request specifically
@@ -1888,6 +1935,60 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 self._send_response(500, {"error": f"Server error during login"})
             return # Stop processing after handling /login
 
+        # --- STUDENT LOGIN Endpoint ---
+        elif path == '/login/student':
+            if not post_body_bytes:
+                self._send_response(400, {"error": "Missing request body for student login"})
+                return
+            try:
+                credentials = json.loads(post_body_bytes)
+                student_code = credentials.get('code')
+                print(f"DEBUG: Student login attempt with code: '{student_code}'")
+
+                if not student_code:
+                    self._send_response(400, {"error": "Missing student code"})
+                    return
+
+                found_student = None
+                with data_lock: # Access students_data_store safely
+                    for student_item in students_data_store:
+                        if student_item.get('code') == student_code:
+                            found_student = student_item
+                            break
+                
+                if found_student:
+                    student_note = found_student.get('note', 'Student') # Fallback note
+                    student_actual_code = found_student.get('code') # This is the validated code
+
+                    session_cookie_headers = create_cookies(SESSION_COOKIE_NAME, VALID_SESSION_VALUE, path='/')
+                    user_cookie_headers = create_cookies(USERNAME_COOKIE_NAME, student_note, path='/', httponly=False) # httponly=False for JS access
+                    student_auth_cookie_headers = create_cookies(SQL_AUTH_USER_STUDENT_COOKIE_NAME, student_actual_code, path='/', httponly=False) # httponly=False
+
+                    all_cookie_headers = session_cookie_headers + user_cookie_headers + student_auth_cookie_headers
+
+                    self.send_response(200)
+                    self.send_header('Content-type', 'application/json')
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+                    self.send_header('Access-Control-Allow-Headers', 'Content-Type, Cookie')
+                    self.send_header('Access-Control-Allow-Credentials', 'true')
+
+                    for header_name, header_value in all_cookie_headers:
+                        self.send_header(header_name, header_value)
+                    
+                    self.end_headers()
+                    response_payload = {"success": True, "message": "Student login successful", "note": student_note, "class": found_student.get('class')}
+                    self.wfile.write(json.dumps(response_payload).encode('utf-8'))
+                    print(f"Student login successful for code: {student_actual_code} (Note: {student_note}). Cookies sent.")
+                else:
+                    self._send_response(401, {"error": "Invalid student code"})
+
+            except json.JSONDecodeError:
+                self._send_response(400, {"error": "Invalid JSON format in request body"})
+            except Exception as e:
+                print(f"Error during student login processing: {e}\n{traceback.format_exc()}")
+                self._send_response(500, {"error": "Server error during student login"})
+            return
         # --- LOGOUT Endpoint ---
         elif path == '/logout':
             # Prepare an expired cookie to clear the browser's cookie
@@ -1900,7 +2001,8 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             change_pw_clear_headers = create_cookie_clear_headers(CHANGE_PASSWORD_COOKIE_NAME, path='/') # Clear this too
             sql_user_clear_headers = create_cookie_clear_headers(SQL_COOKIE_NAME, path='/') # Clear SQL user cookie if used
             google_auth_clear_headers = create_cookie_clear_headers(GOOGLE_COOKIE_NAME, path='/') # Clear Google auth cookie if used
-            all_clear_headers = session_clear_headers + user_clear_headers + change_pw_clear_headers + sql_user_clear_headers + google_auth_clear_headers
+            sql_student_auth_clear_headers = create_cookie_clear_headers(SQL_AUTH_USER_STUDENT_COOKIE_NAME, path='/') # Clear student auth cookie
+            all_clear_headers = session_clear_headers + user_clear_headers + change_pw_clear_headers + sql_user_clear_headers + google_auth_clear_headers + sql_student_auth_clear_headers
             # --- End using new function ---
 
             # --- Send response headers MANUALLY ---
