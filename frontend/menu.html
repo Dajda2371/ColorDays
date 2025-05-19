@@ -89,8 +89,8 @@
 
   <!-- Container for Header Buttons -->
   <div id="headerButtons">
-    <button id="configButton" class="header-button" onclick="window.location.href='classes.html'">Classes</button>
-    <!-- Config Button (Links to config.html) -->
+    <!-- Classes Button (Links to classes.html) -->
+    <button id="classesButton" class="header-button" onclick="window.location.href='classes.html'">Classes</button>
     <button id="configButton" class="header-button" onclick="window.location.href='config.html'">Config</button>
     <!-- Change Password Button -->
     <button id="changePasswordBtn" class="header-button" onclick="window.location.href='change-password.html'">Change Password</button>
@@ -107,7 +107,9 @@
 
     <script>
         const dynamicClassList = document.getElementById('dynamicClassList');
-        const logoutButton = document.getElementById('logoutButton'); // Get the logout button
+        const logoutButton = document.getElementById('logoutButton');
+        const classesButton = document.getElementById('classesButton'); // Get the Classes button
+        const configButton = document.getElementById('configButton'); // Get the Config button
         // No need to get configButton unless you add specific JS logic for it
 
         // --- Logout Functionality (Keep this as is) ---
@@ -191,6 +193,21 @@
           return null; // Cookie not found
         }
 
+        // --- Function to manage visibility of Admin/Teacher buttons for students ---
+        function manageStudentButtonVisibility() {
+            console.log("--- manageStudentButtonVisibility ---");
+            const studentAuthCookie = getCookie("SQLAuthUserStudent");
+            const isStudent = studentAuthCookie !== null;
+            console.log(`SQLAuthUserStudent cookie exists: ${isStudent}`);
+
+            if (isStudent) {
+                console.log("Student session detected. Hiding Classes and Config buttons.");
+                if (classesButton) classesButton.style.display = 'none';
+                if (configButton) configButton.style.display = 'none';
+            }
+            console.log("--- End manageStudentButtonVisibility ---");
+        }
+
         // --- Function to manage visibility of Change Password button based on SQLAuthUser cookie ---
         function manageChangePasswordButtonVisibility() {
           console.log("--- manageChangePasswordButtonVisibility ---");
@@ -225,6 +242,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             loadAndDisplayClasses();
             displayLoggedInUser(); // Also display the username
+            manageStudentButtonVisibility(); // Hide buttons if student
             manageChangePasswordButtonVisibility(); // Update Change Password button visibility
         });
     </script>

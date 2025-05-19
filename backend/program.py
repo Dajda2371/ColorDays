@@ -1397,9 +1397,12 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 return
         
             # RBAC Check
-            # _user_key, current_user_role = get_current_user_info(self) # user_role is already available from the top of do_GET
-            if user_role not in [ADMIN_ROLE, TEACHER_ROLE]: # Allow both Admin and Teacher
-                self._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
+            # user_role is already available from the top of do_GET
+            # Check if it's a student session via the specific student cookie
+            is_student_session = cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME) is not None
+
+            if not (user_role in [ADMIN_ROLE, TEACHER_ROLE] or is_student_session):
+                self._send_response(403, {"error": "Forbidden: Access to this resource is restricted for your account type."})
                 return
             
             with data_lock: # Ensure thread-safe read
@@ -1540,8 +1543,11 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 self._send_response(401, {"error": "Authentication required"})
                 return
 
-            # RBAC Check: Allow teachers and admins
-            if user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
+            # RBAC Check: Allow teachers, admins, and students
+            # is_student_session is already available from the top of do_GET if needed,
+            # but cookies variable is directly accessible here.
+            is_student_session_for_counts = cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME) is not None
+            if not (user_role in [ADMIN_ROLE, TEACHER_ROLE] or is_student_session_for_counts):
                 self._send_response(403, {"error": "Forbidden: Access denied for your role."})
                 return
 
@@ -1715,6 +1721,19 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             return
         # --- End Password Change Check for Pages ---
+
+        # --- NEW: Student Access Restriction for specific pages ---
+        if path == '/classes.html' or path == '/config.html':
+            # Check if the user is generally logged in and if it's a student session
+            if self.is_logged_in(): 
+                cookies = self.get_cookies()
+                # Check if the student-specific auth cookie is present
+                if cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME):
+                    print(f"Access denied for student to {path}. Student session identified.")
+                    self._send_response(403, {"error": "Forbidden: Access to this page is restricted for your account type."})
+                    return
+        # --- END Student Access Restriction ---
+
         try:
             # Default to menu.html if root path is requested
             # Check for login.html request specifically
