@@ -227,6 +227,7 @@ VALID_SESSION_VALUE = "user_is_logged_in_secret_value" # Replace with a secure, 
 CHANGE_PASSWORD_COOKIE_NAME = "ChangePasswordVerificationNotNeeded" # For the change password flow
 GOOGLE_COOKIE_NAME = "GoogleAuthUser" # For Google OAuth users
 SQL_COOKIE_NAME = "SQLAuthUser" # For SQL users
+SQL_AUTH_USER_STUDENT_COOKIE_NAME = "SQLAuthUserStudent" # For SQL Student users
 # --- End Session Configuration ---
 
 
@@ -1888,6 +1889,60 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 self._send_response(500, {"error": f"Server error during login"})
             return # Stop processing after handling /login
 
+        # --- STUDENT LOGIN Endpoint ---
+        elif path == '/login/student':
+            if not post_body_bytes:
+                self._send_response(400, {"error": "Missing request body for student login"})
+                return
+            try:
+                credentials = json.loads(post_body_bytes)
+                student_code = credentials.get('code')
+                print(f"DEBUG: Student login attempt with code: '{student_code}'")
+
+                if not student_code:
+                    self._send_response(400, {"error": "Missing student code"})
+                    return
+
+                found_student = None
+                with data_lock: # Access students_data_store safely
+                    for student_item in students_data_store:
+                        if student_item.get('code') == student_code:
+                            found_student = student_item
+                            break
+                
+                if found_student:
+                    student_note = found_student.get('note', 'Student') # Fallback note
+                    student_actual_code = found_student.get('code') # This is the validated code
+
+                    session_cookie_headers = create_cookies(SESSION_COOKIE_NAME, VALID_SESSION_VALUE, path='/')
+                    user_cookie_headers = create_cookies(USERNAME_COOKIE_NAME, student_note, path='/', httponly=False) # httponly=False for JS access
+                    student_auth_cookie_headers = create_cookies(SQL_AUTH_USER_STUDENT_COOKIE_NAME, student_actual_code, path='/', httponly=False) # httponly=False
+
+                    all_cookie_headers = session_cookie_headers + user_cookie_headers + student_auth_cookie_headers
+
+                    self.send_response(200)
+                    self.send_header('Content-type', 'application/json')
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+                    self.send_header('Access-Control-Allow-Headers', 'Content-Type, Cookie')
+                    self.send_header('Access-Control-Allow-Credentials', 'true')
+
+                    for header_name, header_value in all_cookie_headers:
+                        self.send_header(header_name, header_value)
+                    
+                    self.end_headers()
+                    response_payload = {"success": True, "message": "Student login successful", "note": student_note, "class": found_student.get('class')}
+                    self.wfile.write(json.dumps(response_payload).encode('utf-8'))
+                    print(f"Student login successful for code: {student_actual_code} (Note: {student_note}). Cookies sent.")
+                else:
+                    self._send_response(401, {"error": "Invalid student code"})
+
+            except json.JSONDecodeError:
+                self._send_response(400, {"error": "Invalid JSON format in request body"})
+            except Exception as e:
+                print(f"Error during student login processing: {e}\n{traceback.format_exc()}")
+                self._send_response(500, {"error": "Server error during student login"})
+            return
         # --- LOGOUT Endpoint ---
         elif path == '/logout':
             # Prepare an expired cookie to clear the browser's cookie
@@ -1900,7 +1955,8 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             change_pw_clear_headers = create_cookie_clear_headers(CHANGE_PASSWORD_COOKIE_NAME, path='/') # Clear this too
             sql_user_clear_headers = create_cookie_clear_headers(SQL_COOKIE_NAME, path='/') # Clear SQL user cookie if used
             google_auth_clear_headers = create_cookie_clear_headers(GOOGLE_COOKIE_NAME, path='/') # Clear Google auth cookie if used
-            all_clear_headers = session_clear_headers + user_clear_headers + change_pw_clear_headers + sql_user_clear_headers + google_auth_clear_headers
+            sql_student_auth_clear_headers = create_cookie_clear_headers(SQL_AUTH_USER_STUDENT_COOKIE_NAME, path='/') # Clear student auth cookie
+            all_clear_headers = session_clear_headers + user_clear_headers + change_pw_clear_headers + sql_user_clear_headers + google_auth_clear_headers + sql_student_auth_clear_headers
             # --- End using new function ---
 
             # --- Send response headers MANUALLY ---
