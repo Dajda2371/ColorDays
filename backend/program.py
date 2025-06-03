@@ -940,6 +940,64 @@ def save_main_config_to_json(new_oauth_data):
 
 # --- End function to save main config.json ---
 
+# --- Student Authorization Helper ---
+def is_student_allowed(student_code_from_cookie, requested_class_name, requested_day_identifier):
+    """
+    Checks if a student is allowed to access/modify data for a specific class and day.
+    Args:
+        student_code_from_cookie (str): The student's unique code from their auth cookie.
+        requested_class_name (str): The class name from the API request.
+        requested_day_identifier (str): The day identifier ('monday', 'tuesday', 'wednesday') from the API request.
+    Returns:
+        bool: True if allowed, False otherwise.
+    """
+    global students_data_store, class_data_store # Access global stores
+
+    # 1. Find the student's record
+    current_student_data = None
+    for s_data in students_data_store:
+        if s_data.get('code') == student_code_from_cookie:
+            current_student_data = s_data
+            break
+    
+    if not current_student_data:
+        print(f"Security Check Failed: Student code '{student_code_from_cookie}' not found in students_data_store.")
+        return False
+
+    student_main_class = current_student_data.get('class')
+    if not student_main_class:
+        print(f"Security Check Failed: Student '{student_code_from_cookie}' has no main class assigned.")
+        return False
+
+    # 2. Parse student's personal counting list (from students.sql, e.g., '[1.A, 1.B]')
+    student_personal_counting_list_str = current_student_data.get('counts_classes_str', '[]')
+    student_personal_counting_set = set()
+    if student_personal_counting_list_str.startswith('[') and student_personal_counting_list_str.endswith(']'):
+        content = student_personal_counting_list_str[1:-1]
+        if content.strip(): # Ensure content is not just whitespace
+            student_personal_counting_set = {c.strip() for c in content.split(',') if c.strip()}
+
+    # 3. Map requested_day_identifier to the 'iscountedbyX' flag from classes.sql
+    day_map_to_iscountedby_flag = {"monday": "iscountedby1", "tuesday": "iscountedby2", "wednesday": "iscountedby3"}
+    iscountedby_flag_for_day = day_map_to_iscountedby_flag.get(requested_day_identifier.lower())
+
+    if not iscountedby_flag_for_day: # Should not happen if frontend sends valid days
+        print(f"Security Check Failed: Invalid day identifier '{requested_day_identifier}' for student '{student_code_from_cookie}'.")
+        return False
+
+    # 4. Day Check: Is the student's main class (e.g., 9.A) responsible for counting ANY class on this day?
+    if not any(cls_data.get(iscountedby_flag_for_day) == student_main_class for cls_data in class_data_store):
+        print(f"Security Check Failed: Student '{student_code_from_cookie}' (main class: {student_main_class}) is not assigned to supervise counting on day '{requested_day_identifier}'.")
+        return False
+
+    # 5. Class Check: Is the requested_class_name in the student's personal list of classes they are assigned to count?
+    if requested_class_name not in student_personal_counting_set:
+        print(f"Security Check Failed: Student '{student_code_from_cookie}' is not assigned to count class '{requested_class_name}'. Allowed: {student_personal_counting_set}")
+        return False
+
+    print(f"Security Check Passed: Student '{student_code_from_cookie}' ALLOWED for class '{requested_class_name}' on day '{requested_day_identifier}'.")
+    return True
+
 # --- Module-level Handler Functions for Increment/Decrement ---
 
 def handle_increment_module(handler_instance, data, request_path):
@@ -961,6 +1019,17 @@ def handle_increment_module(handler_instance, data, request_path):
     if day_identifier.lower() not in SQL_DAY_FILE_PATHS:
         handler_instance._send_response(400, {"error": f"Invalid day. Must be one of {list(SQL_DAY_FILE_PATHS.keys())}"})
         return
+
+    # --- Student Authorization Check ---
+    cookies = handler_instance.get_cookies()
+    student_auth_cookie = cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME)
+    if student_auth_cookie:
+        student_code = student_auth_cookie.value
+        if not is_student_allowed(student_code, class_name, day_identifier.lower()):
+            handler_instance._send_response(403, {"error": "Forbidden: You are not authorized to modify counts for this class/day."})
+            return
+    # --- End Student Authorization Check ---
+
 
     success = False
     message = "Increment failed"
@@ -1031,6 +1100,16 @@ def handle_decrement_module(handler_instance, data, request_path):
     if day_identifier.lower() not in SQL_DAY_FILE_PATHS:
         handler_instance._send_response(400, {"error": f"Invalid day. Must be one of {list(SQL_DAY_FILE_PATHS.keys())}"})
         return
+
+    # --- Student Authorization Check ---
+    cookies = handler_instance.get_cookies()
+    student_auth_cookie = cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME)
+    if student_auth_cookie:
+        student_code = student_auth_cookie.value
+        if not is_student_allowed(student_code, class_name, day_identifier.lower()):
+            handler_instance._send_response(403, {"error": "Forbidden: You are not authorized to modify counts for this class/day."})
+            return
+    # --- End Student Authorization Check ---
 
     success = False
     message = "Decrement failed"
@@ -1633,6 +1712,16 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             except ValueError as e:
                 self._send_response(400, {"error": str(e)})
                 return
+
+            # --- Student Authorization Check for /api/counts ---
+            # cookies variable is already available from the top of do_GET
+            student_auth_cookie_for_counts = cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME)
+            if student_auth_cookie_for_counts:
+                student_code = student_auth_cookie_for_counts.value
+                if not is_student_allowed(student_code, class_name, day_identifier.lower()):
+                    self._send_response(403, {"error": "Forbidden: You are not authorized to view counts for this class/day."})
+                    return
+            # --- End Student Authorization Check ---
 
             response_data = []
             try:
