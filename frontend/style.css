@@ -56,6 +56,13 @@ button:hover {
   border-color: #0056b3;
 }
 
+/* Hover style for class name links in menu.html */
+.classList a:hover {
+  background-color: #007bff; /* Blue background on hover */
+  color: white; /* White text on hover */
+  border-color: #0056b3; /* Darker blue border on hover */
+}
+
 /* === Login Page Styles === */
 
 #login-sections-container {
