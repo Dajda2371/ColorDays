@@ -64,14 +64,19 @@ import collections # For defaultdict
 import traceback # For detailed error printing
 from http.cookies import SimpleCookie # <-- Added for login cookies
 import hashlib # <-- Use built-in hashlib
-import hmac # <-- Use built-in hmac for secure comparison
+import hmac # <-- Use built-in hmac for secure comparison # Already imported
 import binascii # <-- For converting bytes to hex and back
+import datetime # <-- Import datetime to get the current year
 
 # --- Configuration ---
 BACKEND_DIR = Path(__file__).parent.resolve()
 FRONTEND_DIR = (BACKEND_DIR.parent / 'frontend').resolve()
 DATA_DIR = (BACKEND_DIR / 'data').resolve()
-# SQL_FILE_PATH = DATA_DIR / 'tables.sql' # Path to the SQL data file - DEPRECATED for day-specific files
+
+# --- Dynamic Data Directory based on Year ---
+CURRENT_YEAR_DIR = DATA_DIR / str(datetime.datetime.now().year)
+
+# Update file paths to point to the year-specific directory
 CLASSES_SQL_FILE_PATH = DATA_DIR / 'classes.sql' # Path to the classes data file
 LOGINS_SQL_FILE_PATH = DATA_DIR / 'logins.sql' # Path to the SQL logins file <--- NEW
 HOST = 'localhost' # Or '0.0.0.0' to be accessible on your network
@@ -79,9 +84,10 @@ PORT = 8000 # Choose a port
 SUPPORTED_CLASSES = [] # Will be populated from classes.sql
 SQL_DAY_FILE_PATHS = {
     "monday": DATA_DIR / 'tables-monday.sql',
-    "tuesday": DATA_DIR / 'tables-tuesday.sql',
-    "wednesday": DATA_DIR / 'tables-wednesday.sql',
+    "tuesday": DATA_DIR / 'tables-tuesday.sql', # These will be updated below
+    "wednesday": DATA_DIR / 'tables-wednesday.sql', # These will be updated below
 }
+STUDENTS_SQL_FILE_PATH = DATA_DIR / 'students.sql' # This will be updated below
 
 # --- Google OAuth Configuration ---
 CLIENT_SECRETS_FILE = DATA_DIR / 'client_secret.json' # Path to your client_secret.json
@@ -350,6 +356,13 @@ def create_cookie_clear_headers(name, path='/'):
     return [('Set-Cookie', header_value)] # Return as a list of tuples
 
 
+# --- Ensure the current year's data directory exists ---
+def ensure_year_data_directory_exists():
+    """Creates the /data/<current year> directory if it doesn't exist."""
+    print(f"Ensuring year data directory exists: {CURRENT_YEAR_DIR}")
+    CURRENT_YEAR_DIR.mkdir(parents=True, exist_ok=True)
+    print("Year data directory check complete.")
+
 # --- Helper to get day-specific file path ---
 def get_sql_file_path_for_day(day_identifier):
     day_identifier = day_identifier.lower()
@@ -357,6 +370,15 @@ def get_sql_file_path_for_day(day_identifier):
         raise ValueError(f"Invalid day identifier: {day_identifier}. Must be one of {list(SQL_DAY_FILE_PATHS.keys())}")
     return SQL_DAY_FILE_PATHS[day_identifier]
 
+# --- Update file paths to use the current year directory ---
+def update_data_file_paths():
+    """Updates global file paths to point to the current year's directory."""
+    global SQL_DAY_FILE_PATHS, CLASSES_SQL_FILE_PATH, STUDENTS_SQL_FILE_PATH
+    for day in SQL_DAY_FILE_PATHS:
+        SQL_DAY_FILE_PATHS[day] = CURRENT_YEAR_DIR / f'tables-{day}.sql'
+    CLASSES_SQL_FILE_PATH = CURRENT_YEAR_DIR / 'classes.sql'
+    STUDENTS_SQL_FILE_PATH = CURRENT_YEAR_DIR / 'students.sql'
+    print(f"Data file paths updated to use directory: {CURRENT_YEAR_DIR}")
 # --- SQL File Handling Functions ---
 
 # --- Parsing for tables.sql ---
@@ -517,10 +539,10 @@ def load_counts_from_file(file_path):
     Returns the loaded/initialized data for that file.
     """
     print(f"Attempting to load counts data from: {file_path}")
-    # Ensure data directory exists
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-
+    # ensure_year_data_directory_exists() # This is now called at startup
+    
     temp_data = collections.defaultdict(lambda: collections.defaultdict(lambda: collections.defaultdict(int)))
+    # No need to check DATA_DIR, check CURRENT_YEAR_DIR implicitly via file_path.exists()
     file_existed_initially = file_path.exists()
 
     with data_lock:
@@ -570,7 +592,7 @@ def load_counts_from_file(file_path):
 def load_class_data_from_sql():
     """Loads data from classes.sql into the in-memory class_data_store."""
     global class_data_store
-    print(f"Attempting to load class data from: {CLASSES_SQL_FILE_PATH}")
+    print(f"Attempting to load class data from: {CLASSES_SQL_FILE_PATH}") # This path is now year-specific
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     temp_class_store = []
@@ -609,7 +631,7 @@ def load_class_data_from_sql():
 def load_students_data_from_sql():
     """Loads data from students.sql into the in-memory students_data_store."""
     global students_data_store # Ensure it's global
-    students_sql_file_path = DATA_DIR / 'students.sql'
+    students_sql_file_path = STUDENTS_SQL_FILE_PATH # Use the year-specific path
     print(f"Attempting to load student data from: {students_sql_file_path}")
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -701,7 +723,7 @@ def load_user_data_from_sql():
 def save_counts_to_file(file_path, day_data_to_save):
     """
     Saves the provided day-specific count data to the specified SQL file.
-    `day_data_to_save` should be in the format: {class_name: {type: {points: count}}}
+    `day_data_to_save` should be in the format: {class_name: {type: {points: count}}} # Already correct
     Returns True on success, False on failure.
     """
     print(f"Attempting to save counts data to: {file_path}")
@@ -747,7 +769,7 @@ def save_counts_to_file(file_path, day_data_to_save):
 # --- Saving for classes.sql ---
 def save_class_data_to_sql():
     """Saves the current in-memory class_data_store back to classes.sql. Returns True on success, False on failure."""
-    global class_data_store
+    global class_data_store # Already correct
     print(f"Attempting to save class data to: {CLASSES_SQL_FILE_PATH}")
     with data_lock: # Reusing data_lock
         try:
@@ -791,7 +813,7 @@ def save_students_data_to_sql():
        Returns True on success, False on failure.
     """
     global students_data_store
-    students_sql_file_path = DATA_DIR / 'students.sql'
+    students_sql_file_path = STUDENTS_SQL_FILE_PATH # Use the year-specific path
     print(f"Attempting to save student data to: {students_sql_file_path}")
     with data_lock: # Reusing data_lock
         try:
@@ -2884,10 +2906,12 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 if __name__ == "__main__":
     print("--- Starting Color Days Server ---")
 
+    # --- Update file paths to the current year's directory ---
+    update_data_file_paths()
+    ensure_year_data_directory_exists() # Ensure the directory exists before loading/saving
+
     # --- Load Configuration and User/Class Data ---
     load_main_config_from_json() # Load server configuration
-    load_user_data_from_sql()
-    load_class_data_from_sql() # Load class data (this populates SUPPORTED_CLASSES)
     load_students_data_from_sql() # Load student data
 
     # Initialize day-specific count files if they don't exist
@@ -2896,6 +2920,8 @@ if __name__ == "__main__":
     # for day_key in SQL_DAY_FILE_PATHS.keys():
     #     print(f"Pre-checking/initializing counts file for {day_key}...")
     #     load_counts_from_file(get_sql_file_path_for_day(day_key))
+    load_user_data_from_sql() # Load user data (logins)
+    load_class_data_from_sql() # Load class data (this populates SUPPORTED_CLASSES)
 
     # Server setup using ThreadingMixIn for basic concurrency
     class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
@@ -2906,12 +2932,13 @@ if __name__ == "__main__":
 
     print(f"\nServing HTTP on {HOST}:{PORT}...")
     print(f"Frontend root: {FRONTEND_DIR}")
+    print(f"Using data directory: {CURRENT_YEAR_DIR}")
     print("Day-specific count files:")
     for day, filepath in SQL_DAY_FILE_PATHS.items():
-        print(f"  {day.capitalize()}: {filepath}")
+        print(f"  {day.capitalize()}: {filepath.name}") # Print just the filename here for brevity
     print(f"Using logins data file: {LOGINS_SQL_FILE_PATH}") # <--- NEW
     print(f"Using classes data file: {CLASSES_SQL_FILE_PATH}")
-    print(f"Using students data file: {DATA_DIR / 'students.sql'}")
+    print(f"Using students data file: {STUDENTS_SQL_FILE_PATH}") # Use the updated global variable
     print(f"Using Google client secrets file: {CLIENT_SECRETS_FILE}")
     print(f"Using hashlib.pbkdf2_hmac with {ITERATIONS} iterations.")
     print(f"\nAccess the application via: http://{HOST}:{PORT}/")
