@@ -257,7 +257,7 @@
                             ul.className = 'classList';
                             classesStudentCounts.sort().forEach(className => { // Sort the class names
                                 const listItem = document.createElement('li');
-                                listItem.innerHTML = `<a href="index.html?class=${encodeURIComponent(className)}">${className}</a>`;
+                                listItem.innerHTML = `<a href="index.html?class=${encodeURIComponent(className)}&day=${day.name.toLowerCase()}">${className}</a>`;
                                 ul.appendChild(listItem);
                             });
                             daySectionDiv.appendChild(ul);
@@ -283,7 +283,7 @@
                     // Display ALL classes from allClasses
                     allClasses.sort((a, b) => a.class.localeCompare(b.class)).forEach(cls => {
                         const listItem = document.createElement('li');
-                        listItem.innerHTML = `<a href="index.html?class=${encodeURIComponent(cls.class)}">${cls.class}</a>`;
+                        listItem.innerHTML = `<a href="index.html?class=${encodeURIComponent(cls.class)}&day=${day.name.toLowerCase()}">${cls.class}</a>`;
                         ul.appendChild(listItem);
                     });
                     daySectionDiv.appendChild(ul);
