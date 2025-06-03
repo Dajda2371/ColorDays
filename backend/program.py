@@ -71,12 +71,17 @@ import binascii # <-- For converting bytes to hex and back
 BACKEND_DIR = Path(__file__).parent.resolve()
 FRONTEND_DIR = (BACKEND_DIR.parent / 'frontend').resolve()
 DATA_DIR = (BACKEND_DIR / 'data').resolve()
-SQL_FILE_PATH = DATA_DIR / 'tables.sql' # Path to the SQL data file
+# SQL_FILE_PATH = DATA_DIR / 'tables.sql' # Path to the SQL data file - DEPRECATED for day-specific files
 CLASSES_SQL_FILE_PATH = DATA_DIR / 'classes.sql' # Path to the classes data file
 LOGINS_SQL_FILE_PATH = DATA_DIR / 'logins.sql' # Path to the SQL logins file <--- NEW
 HOST = 'localhost' # Or '0.0.0.0' to be accessible on your network
 PORT = 8000 # Choose a port
-SUPPORTED_CLASSES = [] # Must match menu.html and initial tables.sql
+SUPPORTED_CLASSES = [] # Will be populated from classes.sql
+SQL_DAY_FILE_PATHS = {
+    "monday": DATA_DIR / 'tables-monday.sql',
+    "tuesday": DATA_DIR / 'tables-tuesday.sql',
+    "wednesday": DATA_DIR / 'tables-wednesday.sql',
+}
 
 # --- Google OAuth Configuration ---
 CLIENT_SECRETS_FILE = DATA_DIR / 'client_secret.json' # Path to your client_secret.json
@@ -86,6 +91,15 @@ GOOGLE_REDIRECT_URI = f'http://{HOST}:{PORT}/oauth2callback' # Must match one in
 # --- Secure Login Configuration (Using hashlib.pbkdf2_hmac) ---
 
 # Parameters for PBKDF2
+import random # For generating random codes
+import string # For character sets for random codes
+
+# --- Student Code Generation ---
+def generate_random_code(length=15):
+    """Generates a random alphanumeric code of a given length."""
+    characters = string.ascii_letters + string.digits
+    return ''.join(random.choice(characters) for i in range(length))
+
 HASH_ALGORITHM = 'sha256'
 # Iterations: Higher is more secure but slower. Start high (e.g., 260000+)
 # Adjust based on your server performance and security needs.
@@ -218,13 +232,16 @@ VALID_SESSION_VALUE = "user_is_logged_in_secret_value" # Replace with a secure, 
 CHANGE_PASSWORD_COOKIE_NAME = "ChangePasswordVerificationNotNeeded" # For the change password flow
 GOOGLE_COOKIE_NAME = "GoogleAuthUser" # For Google OAuth users
 SQL_COOKIE_NAME = "SQLAuthUser" # For SQL users
+SQL_AUTH_USER_STUDENT_COOKIE_NAME = "SQLAuthUserStudent" # For SQL Student users
 # --- End Session Configuration ---
 
 
 # --- In-Memory Data Store and Lock ---
-data_store = collections.defaultdict(lambda: collections.defaultdict(lambda: collections.defaultdict(int)))
+# data_store = collections.defaultdict(lambda: collections.defaultdict(lambda: collections.defaultdict(int))) # Global store less relevant for day-specific counts
 data_lock = threading.RLock()
+server_config = {} # To store data from config.json
 class_data_store = [] # To store data from classes.sql as a list of dicts
+students_data_store = [] # To store data from students.sql
 
 def get_current_user_info(handler_instance): # Returns username_key, role
     """
@@ -333,6 +350,13 @@ def create_cookie_clear_headers(name, path='/'):
     return [('Set-Cookie', header_value)] # Return as a list of tuples
 
 
+# --- Helper to get day-specific file path ---
+def get_sql_file_path_for_day(day_identifier):
+    day_identifier = day_identifier.lower()
+    if day_identifier not in SQL_DAY_FILE_PATHS:
+        raise ValueError(f"Invalid day identifier: {day_identifier}. Must be one of {list(SQL_DAY_FILE_PATHS.keys())}")
+    return SQL_DAY_FILE_PATHS[day_identifier]
+
 # --- SQL File Handling Functions ---
 
 # --- Parsing for tables.sql ---
@@ -361,20 +385,55 @@ def parse_sql_line(line):
 # --- Parsing for classes.sql ---
 def parse_classes_sql_line(line):
     """Parses a single INSERT statement line for the classes table."""
-    # Regex for: INSERT INTO classes (class, teacher, counts1, couts2, couts3) VALUES ('1.A', 'name', 'F', 'F', 'F');
-    # Note the typo 'couts2' and 'couts3' in the SQL file.
+    # Regex for: INSERT INTO classes (class, teacher, counts1, counts2, counts3) VALUES ('1.A', 'name', 'F', 'F', 'F');
+    # Updated to include iscountedby1, iscountedby2, iscountedby3
     match = re.match(
-        r"INSERT INTO classes\s*\(\s*class\s*,\s*teacher\s*,\s*counts1\s*,\s*couts2\s*,\s*couts3\s*\)\s*VALUES\s*\(\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([TF])'\s*,\s*'([TF])'\s*,\s*'([TF])'\s*\);",
+        r"INSERT INTO classes\s*\("
+        r"\s*class\s*,\s*teacher\s*,\s*counts1\s*,\s*counts2\s*,\s*counts3\s*,"
+        r"\s*iscountedby1\s*,\s*iscountedby2\s*,\s*iscountedby3\s*"  # New columns
+        r"\)\s*VALUES\s*\("
+        r"\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([TF])'\s*,\s*'([TF])'\s*,\s*'([TF])'\s*,"  # class, teacher, counts1-3
+        r"\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*"  # iscountedby1-3
+        r"\);",
         line.strip(),
         re.IGNORECASE
     )
     if match:
-        class_name, teacher, counts1, couts2, couts3 = match.groups()
-        return {"class": class_name, "teacher": teacher, "counts1": counts1, "couts2": couts2, "couts3": couts3}
+        class_name, teacher, counts1, counts2, counts3, iscountedby1, iscountedby2, iscountedby3 = match.groups()
+        return {
+            "class": class_name, "teacher": teacher,
+            "counts1": counts1, "counts2": counts2, "counts3": counts3,
+            "iscountedby1": iscountedby1,
+            "iscountedby2": iscountedby2,
+            "iscountedby3": iscountedby3
+        }
     else:
         # Ignore comments and empty lines silently
         if line.strip() and not line.strip().startswith('--') and not line.strip().upper().startswith('CREATE TABLE'):
-             print(f"Warning: Could not parse classes line format: {line.strip()}")
+            print(f"Warning: Could not parse classes line format: {line.strip()}")
+        return None
+
+# --- Parsing for students.sql ---
+def parse_students_sql_line(line):
+    """Parses a single INSERT statement line for the students table."""
+    # Updated Regex for: INSERT INTO students (code, class, note, counts_classes) VALUES ('somecode', '9.A', 'note', '[1.A, 1.B, 1.C]');
+    match = re.match(
+        r"INSERT INTO students\s*\(\s*code\s*,\s*class\s*,\s*note\s*,\s*counts_classes\s*\)\s*VALUES\s*\(\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*\);",
+        line.strip(),
+        re.IGNORECASE
+    )
+    if match:
+        code, class_name, note, counts_classes_str = match.groups()
+        return {
+            "code": code, # Store the code from the file
+            "class": class_name,
+            "note": note,
+            "counts_classes_str": counts_classes_str # Renamed field
+        }
+    else:
+        # Ignore comments and empty lines silently
+        if line.strip() and not line.strip().startswith('--') and not line.strip().upper().startswith('CREATE TABLE'):
+             print(f"Warning: Could not parse students line format: {line.strip()}")
         return None
 
 # --- Parsing for logins.sql --- <--- NEW
@@ -450,65 +509,62 @@ def parse_logins_sql_line(line):
         return None
 
 # --- Loading for tables.sql ---
-def load_data_from_sql():
-    """Loads data from tables.sql into the in-memory data_store."""
-    global data_store
-    print(f"Attempting to load counts data from: {SQL_FILE_PATH}")
+def load_counts_from_file(file_path):
+    """
+    Loads data from a specific counts SQL file.
+    If the file doesn't exist or a class from SUPPORTED_CLASSES is missing,
+    it initializes default zero counts for those classes and saves the file.
+    Returns the loaded/initialized data for that file.
+    """
+    print(f"Attempting to load counts data from: {file_path}")
     # Ensure data directory exists
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Use a temporary structure to load into, then swap atomically (within lock)
     temp_data = collections.defaultdict(lambda: collections.defaultdict(lambda: collections.defaultdict(int)))
-    found_classes = set()
-    file_exists = SQL_FILE_PATH.exists()
+    file_existed_initially = file_path.exists()
 
-    if file_exists:
-        try:
-            with open(SQL_FILE_PATH, 'r', encoding='utf-8') as f:
-                for line_num, line in enumerate(f, 1):
-                    parsed = parse_sql_line(line)
-                    if parsed:
-                        class_name, type_val, points, count = parsed
-                        # Basic validation of parsed data
-                        if 0 <= points <= 6 and type_val in ['student', 'teacher']:
-                             temp_data[class_name][type_val][points] = count
-                             found_classes.add(class_name)
-                        else:
-                             print(f"Warning: Invalid data values skipped in counts line {line_num}: {line.strip()}")
-
-            print(f"Loaded counts data for classes found in file: {', '.join(sorted(list(found_classes)))}")
-
-        except Exception as e:
-            print(f"!!! ERROR reading or parsing {SQL_FILE_PATH}: {e}. Counts data store might be empty or incomplete.")
-            # Optionally clear temp_data if error is severe
-            # temp_data.clear()
-            # found_classes.clear()
-
-    else:
-         print(f"Warning: {SQL_FILE_PATH} not found. Will initialize default counts data.")
-
-    # Ensure all SUPPORTED_CLASSES have default entries if missing
-    needs_save = False
-    for class_name in SUPPORTED_CLASSES:
-        if class_name not in temp_data: # Check against temp_data, not found_classes
-             print(f"Initializing default zero counts data for missing class: {class_name}")
-             needs_save = True # Need to save the defaults we're adding
-             for type_val in ['student', 'teacher']:
-                 for points_val in range(7): # 0 to 6
-                     temp_data[class_name][type_val][points_val] = 0 # Default to 0
-
-    # Update the global data store under lock
     with data_lock:
-        data_store = temp_data
+        if file_existed_initially:
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    for line_num, line in enumerate(f, 1):
+                        parsed = parse_sql_line(line)
+                        if parsed:
+                            class_name, type_val, points, count = parsed
+                            if 0 <= points <= 6 and type_val in ['student', 'teacher']:
+                                temp_data[class_name][type_val][points] = count
+                            else:
+                                print(f"Warning: Invalid data in {file_path} line {line_num}: {line.strip()}")
+                print(f"Loaded counts from {file_path}.")
+            except Exception as e:
+                print(f"!!! ERROR reading or parsing {file_path}: {e}. Data might be incomplete.")
+        else:
+            print(f"Warning: {file_path} not found. Will initialize with defaults.")
 
-    # If we added defaults or the file didn't exist, save the current state
-    if needs_save or not file_exists:
-        print("Saving initial/default counts data state to tables.sql...")
-        # This call will acquire the RLock again, which is allowed
-        if not save_data_to_sql():
-             print("!!! CRITICAL: Failed to save initial counts data. File might be missing or unwritable.")
+        # Ensure all SUPPORTED_CLASSES have default entries if missing from this file's data
+        # This is crucial for creating the file with all classes if it's new.
+        made_changes_to_temp_data = False
+        if not SUPPORTED_CLASSES:
+            print("Warning: SUPPORTED_CLASSES list is empty. Cannot initialize defaults for counts files.")
+        else:
+            for class_name_supported in SUPPORTED_CLASSES:
+                if class_name_supported not in temp_data:
+                    print(f"Initializing default zero counts in {file_path} for missing class: {class_name_supported}")
+                    made_changes_to_temp_data = True
+                    for type_val_supported in ['student', 'teacher']:
+                        for points_val_supported in range(7): # 0 to 6
+                            temp_data[class_name_supported][type_val_supported][points_val_supported] = 0
 
-    print("Counts data loading/initialization complete.")
+        # If the file didn't exist initially, or if we added default data for supported classes, save it.
+        if not file_existed_initially or made_changes_to_temp_data:
+            print(f"Saving initial/default counts data to {file_path}...")
+            if not save_counts_to_file(file_path, temp_data): # Pass the full temp_data
+                 print(f"!!! CRITICAL: Failed to save initial/default counts data to {file_path}.")
+            else:
+                 print(f"Successfully saved initial/default counts to {file_path}.")
+
+    print(f"Counts data loading/initialization complete for {file_path}.")
+    return temp_data
 
 # --- Loading for classes.sql ---
 def load_class_data_from_sql():
@@ -539,8 +595,62 @@ def load_class_data_from_sql():
     # Update the global data store under lock
     with data_lock: # Reusing data_lock for simplicity
         class_data_store = temp_class_store
+        # Populate SUPPORTED_CLASSES after loading class data
+        global SUPPORTED_CLASSES
+        SUPPORTED_CLASSES = sorted([cls['class'] for cls in class_data_store])
+        if SUPPORTED_CLASSES:
+            print(f"SUPPORTED_CLASSES populated: {SUPPORTED_CLASSES}")
+        else:
+            print("Warning: No classes loaded, SUPPORTED_CLASSES is empty.")
 
     print("Class data loading complete.")
+
+# --- Loading for students.sql ---
+def load_students_data_from_sql():
+    """Loads data from students.sql into the in-memory students_data_store."""
+    global students_data_store # Ensure it's global
+    students_sql_file_path = DATA_DIR / 'students.sql'
+    print(f"Attempting to load student data from: {students_sql_file_path}")
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    temp_students_store = []
+    file_exists = students_sql_file_path.exists()
+    students_loaded_count = 0
+    codes_were_generated = False # Flag to track if we generated any codes
+
+    if file_exists:
+        try:
+            with open(students_sql_file_path, 'r', encoding='utf-8') as f:
+                for line_num, line in enumerate(f, 1):
+                    parsed = parse_students_sql_line(line)
+                    if parsed:
+                        # If code from file is empty or placeholder, generate a new one.
+                        # Otherwise, use the code from the file.
+                        if not parsed.get('code') or parsed['code'] == "''" or parsed['code'] == "": # Check for empty string or literal ''
+                            parsed['code'] = generate_random_code()
+                            codes_were_generated = True # Mark that a code was generated
+                        # If the SQL has an empty string for code, like VALUES ('', ...), the regex captures it as an empty string.
+                        # The above check handles this.
+                        temp_students_store.append(parsed)
+                        students_loaded_count += 1
+            print(f"Loaded {students_loaded_count} student configuration(s) from {students_sql_file_path}.")
+        except Exception as e:
+            print(f"!!! ERROR reading or parsing {students_sql_file_path}: {e}. Student data store might be empty or incomplete.")
+            temp_students_store.clear()
+    else:
+        print(f"Warning: {students_sql_file_path} not found. No student configurations loaded.")
+
+    # Update the global data store under lock
+    with data_lock: # Reusing data_lock for simplicity
+        students_data_store = temp_students_store
+
+    # If we generated any codes for students with initially empty code fields, save the data back.
+    if codes_were_generated:
+        print("Generated new codes for some students during load. Saving student data...")
+        if not save_students_data_to_sql(): # This function already handles locking
+            print("!!! CRITICAL: Failed to save student data to file after generating new codes.")
+
+    print("Student data loading complete.")
 
 # --- Loading for logins.sql --- <--- NEW
 def load_user_data_from_sql():
@@ -588,50 +698,49 @@ def load_user_data_from_sql():
 
 
 # --- Saving for tables.sql ---
-def save_data_to_sql():
-    """Saves the current in-memory data_store back to tables.sql. Returns True on success, False on failure."""
-    global data_store
-    print(f"Attempting to save counts data to: {SQL_FILE_PATH}")
+def save_counts_to_file(file_path, day_data_to_save):
+    """
+    Saves the provided day-specific count data to the specified SQL file.
+    `day_data_to_save` should be in the format: {class_name: {type: {points: count}}}
+    Returns True on success, False on failure.
+    """
+    print(f"Attempting to save counts data to: {file_path}")
     # Acquire lock. RLock allows acquiring again if the thread already holds it.
     with data_lock:
         try:
             sql_lines = []
             sql_lines.append(f"-- Data saved on {datetime.datetime.now().isoformat()} --")
-            sql_lines.append("-- This file is used as the primary data storage for counts. --")
+            sql_lines.append(f"-- This file stores counts for: {file_path.name} --")
             sql_lines.append("")
 
-            # Iterate through the in-memory store and generate INSERT statements
+            # Iterate through the provided data_to_save and generate INSERT statements
             # Sort for consistent file output
-            for class_name in sorted(data_store.keys()):
-                 # Consider only saving SUPPORTED_CLASSES if desired, but saving all is safer
-                 for type_val in sorted(data_store[class_name].keys()):
-                     for points_val in sorted(data_store[class_name][type_val].keys()):
-                         count_val = data_store[class_name][type_val][points_val]
-                         safe_class_name = class_name.replace("'", "''") # Basic escaping
-                         insert_statement = f"INSERT INTO counts (class_name, type, points, count) VALUES ('{safe_class_name}', '{type_val}', {points_val}, {count_val});"
-                         sql_lines.append(insert_statement)
-
-            # --- Enhanced Debugging Around File Write ---
-            print(f"DEBUG: About to open {SQL_FILE_PATH} for writing ('w' mode)...")
+            for class_name in sorted(day_data_to_save.keys()):
+                for type_val in sorted(day_data_to_save[class_name].keys()):
+                    for points_val in sorted(day_data_to_save[class_name][type_val].keys()):
+                        count_val = day_data_to_save[class_name][type_val][points_val]
+                        # Only write INSERT statements for counts greater than 0
+                        if count_val > 0:
+                            safe_class_name = class_name.replace("'", "''") # Basic escaping
+                            insert_statement = f"INSERT INTO counts (class_name, type, points, count) VALUES ('{safe_class_name}', '{type_val}', {points_val}, {count_val});"
+                            sql_lines.append(insert_statement)
             # Write the file (overwrite existing)
-            with open(SQL_FILE_PATH, 'w', encoding='utf-8') as f:
-                print(f"DEBUG: File {SQL_FILE_PATH} opened successfully.")
+            with open(file_path, 'w', encoding='utf-8') as f:
                 f.write("\n".join(sql_lines))
                 f.write("\n") # Add a final newline
-                print(f"DEBUG: Data written to file buffer.")
             # 'with open' automatically closes the file here, flushing the buffer.
-            print(f"Counts data successfully saved to {SQL_FILE_PATH}") # Success message
+            print(f"Counts data successfully saved to {file_path}") # Success message
             return True
 
         except PermissionError as e: # Catch specific permission error first
-            print(f"!!! PERMISSION ERROR writing to {SQL_FILE_PATH}: {e}")
-            print("!!! Please check write permissions for the script/server on the 'data' directory and 'tables.sql' file.")
+            print(f"!!! PERMISSION ERROR writing to {file_path}: {e}")
+            print(f"!!! Please check write permissions for the script/server on the 'data' directory and '{file_path.name}' file.")
             return False
         except IOError as e: # Catch other IO errors
-            print(f"!!! IO ERROR writing to {SQL_FILE_PATH}: {e}")
+            print(f"!!! IO ERROR writing to {file_path}: {e}")
             return False
         except Exception as e: # Catch any other unexpected error
-            print(f"!!! UNEXPECTED ERROR during save_data_to_sql:")
+            print(f"!!! UNEXPECTED ERROR during save_counts_to_file for {file_path}:")
             print(traceback.format_exc()) # Print full traceback
             return False
         
@@ -653,9 +762,15 @@ def save_class_data_to_sql():
                 # Basic escaping for class name and teacher (should be sufficient if they don't contain quotes)
                 safe_class_name = class_item['class'].replace("'", "''")
                 safe_teacher = class_item['teacher'].replace("'", "''")
+                # Get new fields, defaulting to '_NULL_' if somehow missing (though parser/add should ensure they exist)
+                safe_iscountedby1 = str(class_item.get('iscountedby1', '_NULL_')).replace("'", "''")
+                safe_iscountedby2 = str(class_item.get('iscountedby2', '_NULL_')).replace("'", "''")
+                safe_iscountedby3 = str(class_item.get('iscountedby3', '_NULL_')).replace("'", "''")
+
                 insert_statement = (
-                    f"INSERT INTO classes (class, teacher, counts1, couts2, couts3) VALUES "
-                    f"('{safe_class_name}', '{safe_teacher}', '{class_item['counts1']}', '{class_item['couts2']}', '{class_item['couts3']}');"
+                    f"INSERT INTO classes (class, teacher, counts1, counts2, counts3, iscountedby1, iscountedby2, iscountedby3) VALUES "
+                    f"('{safe_class_name}', '{safe_teacher}', '{class_item['counts1']}', '{class_item['counts2']}', '{class_item['counts3']}', "
+                    f"'{safe_iscountedby1}', '{safe_iscountedby2}', '{safe_iscountedby3}');"
                 )
                 sql_lines.append(insert_statement)
 
@@ -669,7 +784,70 @@ def save_class_data_to_sql():
             print(traceback.format_exc())
             return False
 
+# --- Saving for students.sql ---
+def save_students_data_to_sql():
+    """Saves the current in-memory students_data_store back to students.sql.
+       The 'code' field (either from file or generated if was empty) is now saved.
+       Returns True on success, False on failure.
+    """
+    global students_data_store
+    students_sql_file_path = DATA_DIR / 'students.sql'
+    print(f"Attempting to save student data to: {students_sql_file_path}")
+    with data_lock: # Reusing data_lock
+        try:
+            sql_lines = []
+            # Optional: Add a timestamp comment
+            # sql_lines.append(f"-- Student data saved on {datetime.datetime.now().isoformat()} --")
+            # sql_lines.append("")
+
+            for student_item in students_data_store:
+                # Basic escaping
+                safe_code = student_item.get('code', generate_random_code()).replace("'", "''") # Ensure code exists and is escaped
+                safe_class_name = student_item['class'].replace("'", "''")
+                safe_note = student_item['note'].replace("'", "''")
+                # counts_classes_str should already be in the correct format like '[1.A, 1.B]'
+                counts_classes_value = student_item.get('counts_classes_str', '[]') # Default to empty list string
+                insert_statement = (
+                    f"INSERT INTO students (code, class, note, counts_classes) VALUES "
+                    f"('{safe_code}', '{safe_class_name}', '{safe_note}', '{counts_classes_value}');"
+                )
+                sql_lines.append(insert_statement)
+
+            with open(students_sql_file_path, 'w', encoding='utf-8') as f:
+                f.write("\n".join(sql_lines))
+                f.write("\n")
+            print(f"Student data successfully saved to {students_sql_file_path}")
+            return True
+        except Exception as e:
+            print(f"!!! UNEXPECTED ERROR during save_students_data_to_sql:")
+            print(traceback.format_exc())
+            return False
+
 # --- Add this function near save_data_to_sql ---
+
+# --- Loading for config.json ---
+def load_main_config_from_json():
+    """Loads configuration from config.json into the in-memory server_config."""
+    global server_config
+    config_file_path = DATA_DIR / 'config.json'
+    print(f"Attempting to load server configuration from: {config_file_path}")
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    temp_config = {}
+    if config_file_path.is_file():
+        try:
+            with open(config_file_path, 'r', encoding='utf-8') as f:
+                temp_config = json.load(f)
+            print(f"Server configuration loaded from {config_file_path}.")
+        except json.JSONDecodeError:
+            print(f"!!! ERROR: Invalid JSON format in {config_file_path}. Server configuration might be incomplete or default.")
+        except Exception as e:
+            print(f"!!! ERROR reading {config_file_path}: {e}. Server configuration might be incomplete or default.")
+    else:
+        print(f"Warning: {config_file_path} not found. Using default server configuration.")
+
+    server_config = temp_config # Update the global variable
+    print("Server configuration loading complete.")
 
 # --- Lock for user data modifications ---
 # It's better practice to have a separate lock for user data
@@ -728,6 +906,7 @@ def save_main_config_to_json(new_oauth_data):
     """
     Reads the existing config.json, updates OAuth specific keys,
     and writes the entire config back.
+    Also updates the in-memory server_config.
     Returns True on success, False on failure.
     """
     config_file_path = DATA_DIR / 'config.json'
@@ -740,9 +919,13 @@ def save_main_config_to_json(new_oauth_data):
                 with open(config_file_path, 'r', encoding='utf-8') as f:
                     current_config = json.load(f)
             
-            # Update only the OAuth related keys from the new_oauth_data
+            # Update keys from the provided data (assuming it's the full config or a partial update)
+            # A more robust approach would merge keys carefully. For now, assume new_oauth_data has relevant keys.
+            current_config.update(new_oauth_data) # Update with all keys from new_oauth_data
+
+            # Ensure specific keys are handled if needed, e.g., oauth_eneabled as string
             current_config['oauth_eneabled'] = new_oauth_data.get('oauth_eneabled', current_config.get('oauth_eneabled', 'false'))
-            current_config['allowed_oauth_domains'] = new_oauth_data.get('allowed_oauth_domains', current_config.get('allowed_oauth_domains', []))
+            # allowed_oauth_domains and can_students_count_their_own_class will be updated by .update()
 
             with open(config_file_path, 'w', encoding='utf-8') as f:
                 json.dump(current_config, f, indent=4) # Pretty print with indent
@@ -750,11 +933,70 @@ def save_main_config_to_json(new_oauth_data):
             print(f"OAuth settings successfully updated in {config_file_path}")
             return True
         except Exception as e:
+            # Note: If saving fails, the in-memory server_config might be inconsistent with the file.
             print(f"!!! UNEXPECTED ERROR during save_main_config_to_json:")
             print(traceback.format_exc())
             return False
 
 # --- End function to save main config.json ---
+
+# --- Student Authorization Helper ---
+def is_student_allowed(student_code_from_cookie, requested_class_name, requested_day_identifier):
+    """
+    Checks if a student is allowed to access/modify data for a specific class and day.
+    Args:
+        student_code_from_cookie (str): The student's unique code from their auth cookie.
+        requested_class_name (str): The class name from the API request.
+        requested_day_identifier (str): The day identifier ('monday', 'tuesday', 'wednesday') from the API request.
+    Returns:
+        bool: True if allowed, False otherwise.
+    """
+    global students_data_store, class_data_store # Access global stores
+
+    # 1. Find the student's record
+    current_student_data = None
+    for s_data in students_data_store:
+        if s_data.get('code') == student_code_from_cookie:
+            current_student_data = s_data
+            break
+    
+    if not current_student_data:
+        print(f"Security Check Failed: Student code '{student_code_from_cookie}' not found in students_data_store.")
+        return False
+
+    student_main_class = current_student_data.get('class')
+    if not student_main_class:
+        print(f"Security Check Failed: Student '{student_code_from_cookie}' has no main class assigned.")
+        return False
+
+    # 2. Parse student's personal counting list (from students.sql, e.g., '[1.A, 1.B]')
+    student_personal_counting_list_str = current_student_data.get('counts_classes_str', '[]')
+    student_personal_counting_set = set()
+    if student_personal_counting_list_str.startswith('[') and student_personal_counting_list_str.endswith(']'):
+        content = student_personal_counting_list_str[1:-1]
+        if content.strip(): # Ensure content is not just whitespace
+            student_personal_counting_set = {c.strip() for c in content.split(',') if c.strip()}
+
+    # 3. Map requested_day_identifier to the 'iscountedbyX' flag from classes.sql
+    day_map_to_iscountedby_flag = {"monday": "iscountedby1", "tuesday": "iscountedby2", "wednesday": "iscountedby3"}
+    iscountedby_flag_for_day = day_map_to_iscountedby_flag.get(requested_day_identifier.lower())
+
+    if not iscountedby_flag_for_day: # Should not happen if frontend sends valid days
+        print(f"Security Check Failed: Invalid day identifier '{requested_day_identifier}' for student '{student_code_from_cookie}'.")
+        return False
+
+    # 4. Day Check: Is the student's main class (e.g., 9.A) responsible for counting ANY class on this day?
+    if not any(cls_data.get(iscountedby_flag_for_day) == student_main_class for cls_data in class_data_store):
+        print(f"Security Check Failed: Student '{student_code_from_cookie}' (main class: {student_main_class}) is not assigned to supervise counting on day '{requested_day_identifier}'.")
+        return False
+
+    # 5. Class Check: Is the requested_class_name in the student's personal list of classes they are assigned to count?
+    if requested_class_name not in student_personal_counting_set:
+        print(f"Security Check Failed: Student '{student_code_from_cookie}' is not assigned to count class '{requested_class_name}'. Allowed: {student_personal_counting_set}")
+        return False
+
+    print(f"Security Check Passed: Student '{student_code_from_cookie}' ALLOWED for class '{requested_class_name}' on day '{requested_day_identifier}'.")
+    return True
 
 # --- Module-level Handler Functions for Increment/Decrement ---
 
@@ -762,10 +1004,11 @@ def handle_increment_module(handler_instance, data, request_path):
     class_name = data.get('className')
     type_val = data.get('type')
     points_val = data.get('points')
+    day_identifier = data.get('day') # Get the day identifier
 
     # Basic validation
-    if not all([class_name, type_val, points_val is not None]):
-        handler_instance._send_response(400, {"error": "Missing data: className, type, or points"})
+    if not all([class_name, type_val, points_val is not None, day_identifier]):
+        handler_instance._send_response(400, {"error": "Missing data: className, type, points, or day"})
         return
     if type_val not in ['student', 'teacher']:
         handler_instance._send_response(400, {"error": "Invalid type"})
@@ -773,34 +1016,64 @@ def handle_increment_module(handler_instance, data, request_path):
     if not isinstance(points_val, int) or not (0 <= points_val <= 6):
         handler_instance._send_response(400, {"error": "Invalid points value"})
         return
+    if day_identifier.lower() not in SQL_DAY_FILE_PATHS:
+        handler_instance._send_response(400, {"error": f"Invalid day. Must be one of {list(SQL_DAY_FILE_PATHS.keys())}"})
+        return
+
+    # --- Student Authorization Check ---
+    cookies = handler_instance.get_cookies()
+    student_auth_cookie = cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME)
+    if student_auth_cookie:
+        student_code = student_auth_cookie.value
+        if not is_student_allowed(student_code, class_name, day_identifier.lower()):
+            handler_instance._send_response(403, {"error": "Forbidden: You are not authorized to modify counts for this class/day."})
+            return
+    # --- End Student Authorization Check ---
+
 
     success = False
     message = "Increment failed"
     status_code = 500
-    save_needed = False
 
-    with data_lock:
+    try: # Outer try for the entire operation
+        target_file_path = get_sql_file_path_for_day(day_identifier)
+        # Load data for the specific day, this also initializes the file with defaults if needed
+        day_specific_data = load_counts_from_file(target_file_path)
+
+        # Perform increment on the loaded day-specific data
+        # Ensure class_name exists in day_specific_data (load_counts_from_file should handle this via SUPPORTED_CLASSES)
+        if class_name not in day_specific_data: # Should not happen if load_counts_from_file works correctly
+            day_specific_data[class_name] = collections.defaultdict(lambda: collections.defaultdict(int))
+            for t in ['student', 'teacher']:
+                for p in range(7): day_specific_data[class_name][t][p] = 0
+
+        current_count = day_specific_data[class_name][type_val][points_val]
+        day_specific_data[class_name][type_val][points_val] = current_count + 1
+
+        print(f"DEBUG: Change detected (increment for {day_identifier}), attempting save to {target_file_path}...")
         try:
-            current_count = data_store.get(class_name, {}).get(type_val, {}).get(points_val, 0)
-            data_store[class_name][type_val][points_val] = current_count + 1
-            save_needed = True
-
-            if save_needed:
-                print(f"DEBUG: Change detected (increment), attempting save...")
-                if save_data_to_sql():
-                    success = True
-                    message = "Count incremented"
-                    status_code = 200
-                else:
-                    success = False
-                    message = "Count incremented in memory, but CRITICAL error saving to file."
-                    status_code = 500
+            if save_counts_to_file(target_file_path, day_specific_data):
+                success = True
+                message = f"Count incremented for {day_identifier}"
+                status_code = 200
+            else:
+                success = False
+                message = f"Count incremented for {day_identifier}, but CRITICAL error saving to file."
+                status_code = 500
         except Exception as e:
             print(f"!!! UNEXPECTED ERROR during POST {request_path} operation (within lock):") # Use request_path
             print(traceback.format_exc())
             success = False
             message = "An internal error occurred during the increment operation."
-            status_code = 500
+            status_code = 500 # Ensure status_code is set for the error
+    except ValueError as ve: # Catch specific error from get_sql_file_path_for_day
+        message = str(ve)
+        status_code = 400 # Bad request
+    except Exception as e_outer: # Catch other errors from load_counts_from_file or other logic
+        print(f"!!! UNEXPECTED ERROR during POST {request_path} (outer try): {e_outer}")
+        print(traceback.format_exc())
+        message = "An internal error occurred during the increment operation."
+        status_code = 500 # Ensure status_code is set for the error
 
     if status_code == 200:
         handler_instance._send_response(status_code, {"success": success, "message": message})
@@ -812,10 +1085,11 @@ def handle_decrement_module(handler_instance, data, request_path):
     class_name = data.get('className')
     type_val = data.get('type')
     points_val = data.get('points')
+    day_identifier = data.get('day') # Get the day identifier
 
     # Basic validation
-    if not all([class_name, type_val, points_val is not None]):
-        handler_instance._send_response(400, {"error": "Missing data: className, type, or points"})
+    if not all([class_name, type_val, points_val is not None, day_identifier]):
+        handler_instance._send_response(400, {"error": "Missing data: className, type, points, or day"})
         return
     if type_val not in ['student', 'teacher']:
         handler_instance._send_response(400, {"error": "Invalid type"})
@@ -823,40 +1097,59 @@ def handle_decrement_module(handler_instance, data, request_path):
     if not isinstance(points_val, int) or not (0 <= points_val <= 6):
         handler_instance._send_response(400, {"error": "Invalid points value"})
         return
+    if day_identifier.lower() not in SQL_DAY_FILE_PATHS:
+        handler_instance._send_response(400, {"error": f"Invalid day. Must be one of {list(SQL_DAY_FILE_PATHS.keys())}"})
+        return
+
+    # --- Student Authorization Check ---
+    cookies = handler_instance.get_cookies()
+    student_auth_cookie = cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME)
+    if student_auth_cookie:
+        student_code = student_auth_cookie.value
+        if not is_student_allowed(student_code, class_name, day_identifier.lower()):
+            handler_instance._send_response(403, {"error": "Forbidden: You are not authorized to modify counts for this class/day."})
+            return
+    # --- End Student Authorization Check ---
 
     success = False
     message = "Decrement failed"
     status_code = 500
-    save_needed = False
 
-    with data_lock:
-        try:
-            current_count = data_store.get(class_name, {}).get(type_val, {}).get(points_val, 0)
-            if current_count > 0:
-                data_store[class_name][type_val][points_val] = current_count - 1
-                save_needed = True
+    try: # Outer try for the entire operation
+        target_file_path = get_sql_file_path_for_day(day_identifier)
+        day_specific_data = load_counts_from_file(target_file_path)
+
+        if class_name not in day_specific_data: # Should not happen
+            day_specific_data[class_name] = collections.defaultdict(lambda: collections.defaultdict(int))
+            # Initialize if somehow missing, though load_counts_from_file should handle this
+            for t_init in ['student', 'teacher']:
+                for p_init in range(7): day_specific_data[class_name][t_init][p_init] = 0
+
+        current_count = day_specific_data[class_name][type_val][points_val]
+        if current_count > 0:
+            day_specific_data[class_name][type_val][points_val] = current_count - 1
+            
+            print(f"DEBUG: Change detected (decrement for {day_identifier}), attempting save to {target_file_path}...")
+            if save_counts_to_file(target_file_path, day_specific_data):
+                success = True
+                message = f"Count decremented for {day_identifier}"
+                status_code = 200
             else:
                 success = False
-                message = "Count already zero"
-                status_code = 400
-                save_needed = False
-
-            if save_needed:
-                print(f"DEBUG: Change detected (decrement), attempting save...")
-                if save_data_to_sql():
-                    success = True
-                    message = "Count decremented"
-                    status_code = 200
-                else:
-                    success = False
-                    message = "Count decremented in memory, but CRITICAL error saving to file."
-                    status_code = 500
-        except Exception as e:
-            print(f"!!! UNEXPECTED ERROR during POST {request_path} operation (within lock):") # Use request_path
-            print(traceback.format_exc())
+                message = f"Count decremented for {day_identifier}, but CRITICAL error saving to file."
+                status_code = 500
+        else:
             success = False
-            message = "An internal error occurred during the decrement operation."
-            status_code = 500
+            message = "Count already zero"
+            status_code = 400 # Bad request, can't decrement zero
+    except ValueError as ve: # Catch specific error from get_sql_file_path_for_day
+        message = str(ve)
+        status_code = 400 # Bad request
+    except Exception as e: # Catch-all for other errors (load_counts_from_file, save_counts_to_file, etc.)
+        print(f"!!! UNEXPECTED ERROR during POST {request_path} operation: {e}")
+        print(traceback.format_exc())
+        message = "An internal error occurred during the decrement operation."
+        status_code = 500 # Ensure status_code is set for the error
 
     if status_code == 200:
         handler_instance._send_response(status_code, {"success": success, "message": message})
@@ -867,7 +1160,6 @@ def handle_decrement_module(handler_instance, data, request_path):
 # --- HTTP Request Handler ---
 class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
-    # (Helper methods: get_cookies, is_logged_in, _send_response remain the same)
     def get_cookies(self):
         cookies = SimpleCookie()
         cookie_header = self.headers.get('Cookie')
@@ -1156,7 +1448,6 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 # --- Inside the ColorDaysHandler class ---
 
     def do_GET(self):
-        global data_store
         global user_password_store # Add access to user store
         parsed_path = urllib.parse.urlparse(self.path)
         path = parsed_path.path
@@ -1228,15 +1519,170 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 return
         
             # RBAC Check
-            # _user_key, current_user_role = get_current_user_info(self) # user_role is already available from the top of do_GET
-            if user_role not in [ADMIN_ROLE, TEACHER_ROLE]: # Allow both Admin and Teacher
-                self._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
+            # user_role is already available from the top of do_GET
+            # Check if it's a student session via the specific student cookie
+            is_student_session = cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME) is not None
+
+            if not (user_role in [ADMIN_ROLE, TEACHER_ROLE] or is_student_session):
+                self._send_response(403, {"error": "Forbidden: Access to this resource is restricted for your account type."})
                 return
             
             with data_lock: # Ensure thread-safe read
                 # Send a copy to avoid issues if it's modified elsewhere during serialization
                 response_data = list(class_data_store) 
             self._send_response(200, response_data)
+            return
+
+        elif path == '/api/students':
+            if not self.is_logged_in():
+                self._send_response(401, {"error": "Authentication required"})
+                return
+            
+            student_auth_cookie = cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME)
+            is_student_user_session = student_auth_cookie is not None
+            
+            response_payload = []
+            with data_lock: # Ensure thread-safe read
+                if is_student_user_session:
+                    student_code_from_cookie = student_auth_cookie.value
+                    found_student_data_item = None
+                    for s_data_item in students_data_store:
+                        if s_data_item.get('code') == student_code_from_cookie:
+                            found_student_data_item = s_data_item
+                            break
+                    
+                    if found_student_data_item:
+                        # Parse counts_classes_str for the single student
+                        counting_classes_list = []
+                        try:
+                            s_str = found_student_data_item.get('counts_classes_str', '[]')
+                            if s_str.startswith('[') and s_str.endswith(']'):
+                                s_content = s_str[1:-1]
+                                if s_content.strip():
+                                    counting_classes_list = [item.strip() for item in s_content.split(',')]
+                            else:
+                                print(f"Warning: counts_classes_str for student {found_student_data_item.get('class')} is not in expected list format: {s_str}")
+                        except Exception as e:
+                            print(f"Error parsing counts_classes_str for student {found_student_data_item.get('class')}: '{found_student_data_item.get('counts_classes_str')}'. Error: {e}")
+                        
+                        # Return a list containing only the single student's data
+                        response_payload.append({**found_student_data_item, "counting_classes": counting_classes_list})
+                    else:
+                        print(f"Warning: Student auth cookie for code '{student_code_from_cookie}' present, but no matching student found in store.")
+                        # response_payload remains empty, frontend will likely fallback or show no classes.
+                
+                else: # Not a student session, check for admin/teacher role
+                    if user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
+                        self._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
+                        return
+                    
+                    # Admin/Teacher: return all students
+                    for student_data_item in students_data_store:
+                        counting_classes_list = []
+                        try:
+                            s_str = student_data_item.get('counts_classes_str', '[]')
+                            if s_str.startswith('[') and s_str.endswith(']'):
+                                s_content = s_str[1:-1]
+                                if s_content.strip():
+                                    counting_classes_list = [item.strip() for item in s_content.split(',')]
+                            else:
+                                print(f"Warning: counts_classes_str for student {student_data_item.get('class')} is not in expected list format: {s_str}")
+                        except Exception as e:
+                            print(f"Error parsing counts_classes_str for student {student_data_item.get('class')}: '{student_data_item.get('counts_classes_str')}'. Error: {e}")
+                        response_payload.append({**student_data_item, "counting_classes": counting_classes_list})
+            
+            self._send_response(200, response_payload)
+            return
+
+        elif path == '/api/student/counting-details': # GET endpoint
+            if not self.is_logged_in():
+                self._send_response(401, {"error": "Authentication required"})
+                return
+            # RBAC: Allow admin/teacher
+            if user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
+                self._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
+                return
+
+            student_code_param = query.get('code', [None])[0] # Changed from note to code
+            day_param_str = query.get('day', [None])[0]
+
+            if not student_code_param or not day_param_str:
+                self._send_response(400, {"error": "Missing 'code' or 'day' query parameter."})
+                return
+            if day_param_str not in ['1', '2', '3']:
+                self._send_response(400, {"error": "Invalid 'day' parameter. Must be 1, 2, or 3."})
+                return
+            
+            target_student_config = None
+            with data_lock:
+                # Find the target student by note
+                for s_config in students_data_store:
+                    if s_config.get('code') == student_code_param: # Changed to find by code
+                        target_student_config = s_config
+                        break
+
+                if not target_student_config:
+                    self._send_response(404, {"error": f"Student configuration with code '{student_code_param}' not found."})
+                    return
+
+                student_main_class_name = target_student_config.get('class')
+                if not student_main_class_name:
+                    self._send_response(500, {"error": f"Student with code '{student_code_param}' has no class assigned."})
+                    return
+
+                # Determine the field to check in classes.sql based on the day
+                is_counted_by_field = f"iscountedby{day_param_str}"
+                response_payload = []
+
+                # Get the set of classes the current student (by note) is personally configured to count
+                target_student_personal_counts_str = target_student_config.get('counts_classes_str', '[]')
+                student_personal_counts_set = set()
+                try:
+                    if target_student_personal_counts_str.startswith('[') and target_student_personal_counts_str.endswith(']'):
+                        content = target_student_personal_counts_str[1:-1]
+                        if content.strip():
+                            student_personal_counts_set = {c.strip() for c in content.split(',') if c.strip()}
+                except Exception:
+                    print(f"Warning: Could not parse counts_classes_str for student with code {student_code_param}: {target_student_personal_counts_str}")
+
+                # Iterate through ALL classes in class_data_store to find which ones student_main_class_name is supposed to count today
+                for class_being_evaluated in class_data_store:
+                    # Check if student_main_class_name is responsible for counting class_being_evaluated on this day
+                    if class_being_evaluated.get(is_counted_by_field) == student_main_class_name:
+                        class_to_display_name = class_being_evaluated['class']
+
+                        # Check if the target_student (by note) has this class_to_display_name in their personal list
+                        student_is_counting_this_class = class_to_display_name in student_personal_counts_set
+
+                        # Find other students also counting this class_to_display_name
+                        also_counted_by_notes = []
+                        for other_student_config in students_data_store:
+                            if other_student_config.get('code') == student_code_param: # Skip the target student
+                                continue
+                            other_student_counts_classes_str = other_student_config.get('counts_classes_str', '[]')
+                            try:
+                                if other_student_counts_classes_str.startswith('[') and other_student_counts_classes_str.endswith(']'):
+                                    other_content = other_student_counts_classes_str[1:-1]
+                                    if other_content.strip():
+                                        if class_to_display_name in {c.strip() for c in other_content.split(',') if c.strip()}:
+                                            also_counted_by_notes.append(other_student_config.get('note', 'Unknown Note'))
+                            except Exception:
+                                print(f"Warning: Could not parse counts_classes_str for other student {other_student_config.get('note')}: {other_student_counts_classes_str}")
+                        
+                        response_payload.append({
+                            "class_name": class_to_display_name,
+                            "is_counted_by_current_student": student_is_counting_this_class,
+                            "also_counted_by_notes": sorted(list(set(also_counted_by_notes)))
+                        })
+                
+                # Prepare the final response object
+                final_api_response = {
+                    "student_note": target_student_config.get('note', ''), # Include student's note
+                    "student_class": target_student_config.get('class', ''), # Include student's main class
+                    "counting_details": sorted(response_payload, key=lambda x: x['class_name'])
+                }
+
+            self._send_response(200, final_api_response)
             return
 
         # API Endpoint: /api/counts?class=ClassName
@@ -1246,36 +1692,61 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 self._send_response(401, {"error": "Authentication required"})
                 return
 
-            # RBAC Check: Allow teachers and admins
-            if user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
+            # RBAC Check: Allow teachers, admins, and students
+            # is_student_session is already available from the top of do_GET if needed,
+            # but cookies variable is directly accessible here.
+            is_student_session_for_counts = cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME) is not None
+            if not (user_role in [ADMIN_ROLE, TEACHER_ROLE] or is_student_session_for_counts):
                 self._send_response(403, {"error": "Forbidden: Access denied for your role."})
                 return
 
             class_name = query.get('class', [None])[0]
-            if not class_name:
-                self._send_response(400, {"error": "Missing 'class' query parameter"})
+            day_identifier = query.get('day', [None])[0] # Get day for loading counts
+
+            if not class_name or not day_identifier:
+                self._send_response(400, {"error": "Missing 'class' or 'day' query parameter"})
+                return
+            
+            try:
+                target_file_path = get_sql_file_path_for_day(day_identifier)
+            except ValueError as e:
+                self._send_response(400, {"error": str(e)})
                 return
 
+            # --- Student Authorization Check for /api/counts ---
+            # cookies variable is already available from the top of do_GET
+            student_auth_cookie_for_counts = cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME)
+            if student_auth_cookie_for_counts:
+                student_code = student_auth_cookie_for_counts.value
+                if not is_student_allowed(student_code, class_name, day_identifier.lower()):
+                    self._send_response(403, {"error": "Forbidden: You are not authorized to view counts for this class/day."})
+                    return
+            # --- End Student Authorization Check ---
+
             response_data = []
-            # Acquire lock briefly to ensure consistent read
-            with data_lock:
-                if class_name in data_store:
-                    class_data = data_store[class_name]
+            try:
+                # Load data for the specific day. This also initializes the file if needed.
+                day_specific_loaded_data = load_counts_from_file(target_file_path)
+
+                if class_name in day_specific_loaded_data:
+                    class_day_data = day_specific_loaded_data[class_name]
                     # Format data for JSON response, ensuring all points 0-6 exist
                     for type_val in ['student', 'teacher']:
                         for points_val in range(7):
-                            count = class_data.get(type_val, {}).get(points_val, 0)
+                            count = class_day_data.get(type_val, {}).get(points_val, 0)
                             response_data.append({"type": type_val, "points": points_val, "count": count})
                     response_data.sort(key=lambda x: (x['type'], x['points']))
                 else:
-                    # Class not found in memory, return default structure with zeros
-                    print(f"Warning: Class '{class_name}' requested via API but not found in memory. Returning zeros.")
+                    # Class not found in this day's file, return default structure with zeros
+                    print(f"Warning: Class '{class_name}' requested via API for day '{day_identifier}' but not found in {target_file_path}. Returning zeros.")
                     for type_val in ['student', 'teacher']:
                         for points_val in range(7):
                              response_data.append({"type": type_val, "points": points_val, "count": 0})
-
-            self._send_response(200, response_data)
-            return # Make sure to return after handling
+                self._send_response(200, response_data)
+            except Exception as e:
+                print(f"Error processing /api/counts for day {day_identifier}: {e}\n{traceback.format_exc()}")
+                self._send_response(500, {"error": "Server error fetching counts."})
+            return
 
         # --- Google OAuth Endpoints (Moved to do_GET) ---
         elif path == '/login/google':
@@ -1421,6 +1892,19 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             return
         # --- End Password Change Check for Pages ---
+
+        # --- NEW: Student Access Restriction for specific pages ---
+        if path == '/classes.html' or path == '/config.html':
+            # Check if the user is generally logged in and if it's a student session
+            if self.is_logged_in(): 
+                cookies = self.get_cookies()
+                # Check if the student-specific auth cookie is present
+                if cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME):
+                    print(f"Access denied for student to {path}. Student session identified.")
+                    self._send_response(403, {"error": "Forbidden: Access to this page is restricted for your account type."})
+                    return
+        # --- END Student Access Restriction ---
+
         try:
             # Default to menu.html if root path is requested
             # Check for login.html request specifically
@@ -1494,7 +1978,6 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
     # Handle POST requests (/login, /api/increment, /api/decrement)
     def do_POST(self):
-        global data_store
         global user_password_store # Already accessed here
         parsed_path = urllib.parse.urlparse(self.path)
         path = parsed_path.path
@@ -1595,6 +2078,60 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 self._send_response(500, {"error": f"Server error during login"})
             return # Stop processing after handling /login
 
+        # --- STUDENT LOGIN Endpoint ---
+        elif path == '/login/student':
+            if not post_body_bytes:
+                self._send_response(400, {"error": "Missing request body for student login"})
+                return
+            try:
+                credentials = json.loads(post_body_bytes)
+                student_code = credentials.get('code')
+                print(f"DEBUG: Student login attempt with code: '{student_code}'")
+
+                if not student_code:
+                    self._send_response(400, {"error": "Missing student code"})
+                    return
+
+                found_student = None
+                with data_lock: # Access students_data_store safely
+                    for student_item in students_data_store:
+                        if student_item.get('code') == student_code:
+                            found_student = student_item
+                            break
+                
+                if found_student:
+                    student_note = found_student.get('note', 'Student') # Fallback note
+                    student_actual_code = found_student.get('code') # This is the validated code
+
+                    session_cookie_headers = create_cookies(SESSION_COOKIE_NAME, VALID_SESSION_VALUE, path='/')
+                    user_cookie_headers = create_cookies(USERNAME_COOKIE_NAME, student_note, path='/', httponly=False) # httponly=False for JS access
+                    student_auth_cookie_headers = create_cookies(SQL_AUTH_USER_STUDENT_COOKIE_NAME, student_actual_code, path='/', httponly=False) # httponly=False
+
+                    all_cookie_headers = session_cookie_headers + user_cookie_headers + student_auth_cookie_headers
+
+                    self.send_response(200)
+                    self.send_header('Content-type', 'application/json')
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+                    self.send_header('Access-Control-Allow-Headers', 'Content-Type, Cookie')
+                    self.send_header('Access-Control-Allow-Credentials', 'true')
+
+                    for header_name, header_value in all_cookie_headers:
+                        self.send_header(header_name, header_value)
+                    
+                    self.end_headers()
+                    response_payload = {"success": True, "message": "Student login successful", "note": student_note, "class": found_student.get('class')}
+                    self.wfile.write(json.dumps(response_payload).encode('utf-8'))
+                    print(f"Student login successful for code: {student_actual_code} (Note: {student_note}). Cookies sent.")
+                else:
+                    self._send_response(401, {"error": "Invalid student code"})
+
+            except json.JSONDecodeError:
+                self._send_response(400, {"error": "Invalid JSON format in request body"})
+            except Exception as e:
+                print(f"Error during student login processing: {e}\n{traceback.format_exc()}")
+                self._send_response(500, {"error": "Server error during student login"})
+            return
         # --- LOGOUT Endpoint ---
         elif path == '/logout':
             # Prepare an expired cookie to clear the browser's cookie
@@ -1607,7 +2144,8 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             change_pw_clear_headers = create_cookie_clear_headers(CHANGE_PASSWORD_COOKIE_NAME, path='/') # Clear this too
             sql_user_clear_headers = create_cookie_clear_headers(SQL_COOKIE_NAME, path='/') # Clear SQL user cookie if used
             google_auth_clear_headers = create_cookie_clear_headers(GOOGLE_COOKIE_NAME, path='/') # Clear Google auth cookie if used
-            all_clear_headers = session_clear_headers + user_clear_headers + change_pw_clear_headers + sql_user_clear_headers + google_auth_clear_headers
+            sql_student_auth_clear_headers = create_cookie_clear_headers(SQL_AUTH_USER_STUDENT_COOKIE_NAME, path='/') # Clear student auth cookie
+            all_clear_headers = session_clear_headers + user_clear_headers + change_pw_clear_headers + sql_user_clear_headers + google_auth_clear_headers + sql_student_auth_clear_headers
             # --- End using new function ---
 
             # --- Send response headers MANUALLY ---
@@ -1764,8 +2302,12 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             class_name = data.get('class')
             teacher = data.get('teacher')
             counts1 = data.get('counts1', 'F') # Default to 'F' if not provided
-            counts2 = data.get('couts2', 'F')  # Use 'couts2' to match SQL and JS
-            counts3 = data.get('couts3', 'F')  # Use 'couts3' to match SQL and JS
+            counts2 = data.get('counts2', 'F')  # Use 'counts2' to match SQL and JS
+            counts3 = data.get('counts3', 'F')  # Use 'counts3' to match SQL and JS
+            # Get new fields, defaulting to _NULL_
+            iscountedby1 = data.get('iscountedby1', '_NULL_')
+            iscountedby2 = data.get('iscountedby2', '_NULL_')
+            iscountedby3 = data.get('iscountedby3', '_NULL_')
 
             if not class_name or not teacher:
                 self._send_response(400, {"error": "Missing class name or teacher"})
@@ -1785,7 +2327,9 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 else:
                     new_class = {
                         "class": class_name, "teacher": teacher,
-                        "counts1": counts1, "couts2": counts2, "couts3": counts3
+                        "counts1": counts1, "counts2": counts2, "counts3": counts3,
+                        "iscountedby1": iscountedby1, "iscountedby2": iscountedby2,
+                        "iscountedby3": iscountedby3
                     }
                     class_data_store.append(new_class)
                     # Sort the class_data_store alphabetically by class name
@@ -1853,7 +2397,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 return
 
             class_name = data.get('class')
-            count_field = data.get('countField') # e.g., "counts1", "couts2", "couts3"
+            count_field = data.get('countField') # e.g., "counts1", "counts2", "counts3"
             new_value = data.get('value')       # 'T' or 'F'
 
             if not all([class_name, count_field, new_value is not None]): # new_value can be 'F'
@@ -1861,7 +2405,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 return
             
             # Ensure count_field matches the keys used in your data (including the typo)
-            valid_count_fields = ["counts1", "couts2", "couts3"]
+            valid_count_fields = ["counts1", "counts2", "counts3"]
             if count_field not in valid_count_fields:
                 self._send_response(400, {"error": f"Invalid countField. Must be one of {valid_count_fields}"})
                 return
@@ -1896,7 +2440,232 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 self._send_response(status_code, {"error": message})
             return
 
-        # --- Handle /change_password ---
+        # --- Handle /api/classes/update_iscountedby ---
+        elif path == '/api/classes/update_iscountedby':
+            # RBAC Check
+            if current_user_role not in [ADMIN_ROLE, TEACHER_ROLE]: # Allow Admins and Teachers
+                self._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
+                return
+
+            class_name_to_update = data.get('class')
+            day_identifier = data.get('dayIdentifier') # '1', '2', or '3'
+            new_value = data.get('value')
+
+            if not all([class_name_to_update, day_identifier, new_value is not None]):
+                self._send_response(400, {"error": "Missing class, dayIdentifier, or value"})
+                return
+
+            if day_identifier not in ['1', '2', '3']:
+                self._send_response(400, {"error": "Invalid dayIdentifier. Must be '1', '2', or '3'."})
+                return
+            
+            # Map dayIdentifier to the actual field name
+            field_to_update = f"iscountedby{day_identifier}"
+
+            # --- Server-side check for can_students_count_their_own_class ---
+            # Read config.json directly for this check on every request
+            allow_self_count_str = 'true' # Default to true (allow self-count)
+            config_file_path = DATA_DIR / 'config.json'
+            try:
+                if config_file_path.is_file():
+                    with open(config_file_path, 'r', encoding='utf-8') as f:
+                        current_config_on_disk = json.load(f)
+                    allow_self_count_str = current_config_on_disk.get('can_students_count_their_own_class', 'true')
+                    print(f"DEBUG: Read 'can_students_count_their_own_class' from disk: {allow_self_count_str}")
+                else:
+                    print(f"Warning: {config_file_path} not found during iscountedby update. Defaulting 'can_students_count_their_own_class' to 'true'.")
+            except json.JSONDecodeError:
+                print(f"!!! ERROR: Invalid JSON in {config_file_path} during iscountedby update. Defaulting 'can_students_count_their_own_class' to 'true'.")
+            except Exception as e:
+                print(f"!!! ERROR reading {config_file_path} during iscountedby update: {e}. Defaulting 'can_students_count_their_own_class' to 'true'.")
+            
+            allow_self_count = allow_self_count_str.lower() == 'true'
+            # --- End of direct config file read ---
+
+            # Old way using in-memory server_config:
+            # allow_self_count_str = server_config.get('can_students_count_their_own_class', 'true') # Default to true if missing
+            # allow_self_count = allow_self_count_str.lower() == 'true'
+
+            if not allow_self_count and new_value == class_name_to_update:
+                self._send_response(400, {"error": f"Configuration prevents class '{class_name_to_update}' from counting itself."})
+                return
+            # --- End server-side check ---
+
+            success = False
+            message = "Failed to update class counting assignment."
+            status_code = 500
+
+            with data_lock:
+                class_found = False
+                for cls_item in class_data_store:
+                    if cls_item['class'] == class_name_to_update:
+                        cls_item[field_to_update] = new_value
+                        class_found = True
+                        break
+                
+                if not class_found:
+                    message = f"Class '{class_name_to_update}' not found."
+                    status_code = 404
+                else:
+                    if save_class_data_to_sql():
+                        success = True
+                        message = f"Assignment for class '{class_name_to_update}' on day {day_identifier} updated to '{new_value}' and saved."
+                        status_code = 200
+                    else:
+                        message = f"Assignment for class '{class_name_to_update}' updated in memory, but FAILED to save to file."
+                        status_code = 500
+            if success:
+                self._send_response(status_code, {"success": True, "message": message})
+            else:
+                self._send_response(status_code, {"error": message})
+            return
+
+        # --- Handle /api/students/remove ---
+        elif path == '/api/students/remove':
+            if not self.is_logged_in(): # Should be caught by earlier checks
+                self._send_response(401, {"error": "Authentication required"})
+                return
+            # RBAC Check
+            if current_user_role not in [ADMIN_ROLE, TEACHER_ROLE]: # Allow Admins and Teachers
+                self._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
+                return
+
+            student_code_to_remove = data.get('code') # Identify student by their 'code'
+            if not student_code_to_remove:
+                self._send_response(400, {"error": "Missing 'code' of student configuration to remove"})
+                return
+
+            success = False
+            message = "Failed to remove student configuration."
+            status_code = 500
+
+            with data_lock:
+                original_len = len(students_data_store)
+                # Filter out the student to remove
+                students_data_store[:] = [s_config for s_config in students_data_store if s_config.get('code') != student_code_to_remove]
+                
+                if len(students_data_store) < original_len: # If something was removed
+                    if save_students_data_to_sql():
+                        success = True
+                        # We don't easily have the note/class here without finding it first, so a generic message is fine
+                        message = f"Student configuration with code '{student_code_to_remove}' removed successfully."
+                        status_code = 200
+                    else:
+                        message = f"Student configuration with code '{student_code_to_remove}' removed from memory, but FAILED to save to file."
+                        status_code = 500 # Internal Server Error
+                else:
+                    message = f"Student configuration with code '{student_code_to_remove}' not found."
+                    status_code = 404 # Not Found
+            self._send_response(status_code, {"success": success, "message": message} if success else {"error": message})
+            return
+
+        # --- Handle /api/students/add ---
+        elif path == '/api/students/add':
+            if not self.is_logged_in():
+                self._send_response(401, {"error": "Authentication required"})
+                return
+            # RBAC Check - Allow Admins and Teachers to add student configurations
+            if current_user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
+                self._send_response(403, {"error": "Forbidden: Administrator access required."})
+                return
+
+            student_class = data.get('class')
+            note = data.get('note', '') # Default to empty string if note is not provided
+
+            if not student_class:
+                self._send_response(400, {"error": "Missing 'class' for the new student configuration."})
+                return
+
+            success = False
+            message = "Failed to add student configuration."
+            status_code = 500
+
+            with data_lock:
+                # Removed the check for existing student configuration by class.
+                # Now multiple configurations can exist for the same class,
+                # distinguished by their notes or codes.
+                new_student_config = {
+                    "code": generate_random_code(), # Server generates the code
+                    "class": student_class,
+                    "note": note,
+                    "counts_classes_str": "[]" # New students start with no classes to count
+                }
+                students_data_store.append(new_student_config)
+                students_data_store.sort(key=lambda x: (x['class'], x.get('note', ''))) # Keep sorted by class, then note
+
+                if save_students_data_to_sql():
+                    success = True
+                    message = f"Student configuration for class '{student_class}' (Note: '{note}') added successfully."
+                    status_code = 201 # Created
+                else:
+                    students_data_store.pop() # Revert in-memory change if save fails
+                    message = f"Failed to save new student configuration for '{student_class}' (Note: '{note}') to file."
+                    status_code = 500
+            self._send_response(status_code, {"success": success, "message": message} if success else {"error": message})
+            return
+        
+        # --- Handle /api/student/update-counting-class ---
+        elif path == '/api/student/update-counting-class': # POST endpoint
+            if not self.is_logged_in():
+                self._send_response(401, {"error": "Authentication required"})
+                return
+            # RBAC Check - Only Admins/Teachers can modify student counting assignments
+            if current_user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
+                self._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
+                return
+
+            student_code_to_update = data.get('student_code') # Changed from student_note
+            class_to_update = data.get('class_name')
+            is_counting = data.get('is_counting') # boolean
+
+            if not student_code_to_update or not class_to_update or is_counting is None:
+                self._send_response(400, {"error": "Missing student_code, class_name, or is_counting status."})
+                return
+
+            success = False
+            message = "Failed to update student's counting classes."
+            status_code = 500
+            student_note_for_message = "Unknown" # For user-friendly messages
+
+            with data_lock:
+                target_student_config = next((s for s in students_data_store if s.get('code') == student_code_to_update), None)
+
+                if not target_student_config:
+                    message = f"Student configuration with code '{student_code_to_update}' not found."
+                    status_code = 404
+                else:
+                    student_note_for_message = target_student_config.get('note', student_code_to_update)
+                    counts_str = target_student_config.get('counts_classes_str', '[]')
+                    current_counts_set = set()
+                    if counts_str.startswith('[') and counts_str.endswith(']'):
+                        content = counts_str[1:-1]
+                        if content.strip():
+                            current_counts_set = {c.strip() for c in content.split(',') if c.strip()}
+                    
+                    if is_counting:
+                        current_counts_set.add(class_to_update)
+                    else:
+                        current_counts_set.discard(class_to_update) # Use discard to not raise error if not present
+                    
+                    # Reconstruct the string, sorted for consistency
+                    sorted_list_of_classes = sorted(list(current_counts_set))
+                    new_counts_classes_str = f"[{', '.join(sorted_list_of_classes)}]" if sorted_list_of_classes else "[]"
+                    
+                    target_student_config['counts_classes_str'] = new_counts_classes_str
+
+                    if save_students_data_to_sql():
+                        success = True
+                        action = "added to" if is_counting else "removed from"
+                        message = f"Class '{class_to_update}' {action} student '{student_note_for_message}'s counting list."
+                        status_code = 200
+                    else:
+                        # Attempt to revert in-memory change if save fails (though original counts_str was overwritten)
+                        # For simplicity, we'll just report the error. A more robust undo would store original_counts_str.
+                        message = f"Failed to save updated counting list for student '{student_note_for_message}' to file."
+                        status_code = 500
+            self._send_response(status_code, {"success": success, "message": message} if success else {"error": message})
+            return
+        # --- Handle /api/auth/change ---
         elif path == '/api/auth/change':
             # user_key_for_rbac (user's actual key in user_password_store) is already available
             if not user_key_for_rbac: # Should be caught by is_logged_in earlier
@@ -2115,13 +2884,18 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 if __name__ == "__main__":
     print("--- Starting Color Days Server ---")
 
-    # --- Load Data ---
-    # Load counts data first
-    load_data_from_sql()
-    # Load user login data <--- NEW
+    # --- Load Configuration and User/Class Data ---
+    load_main_config_from_json() # Load server configuration
     load_user_data_from_sql()
-    load_class_data_from_sql() # Load class data
-    # --- End Load Data ---
+    load_class_data_from_sql() # Load class data (this populates SUPPORTED_CLASSES)
+    load_students_data_from_sql() # Load student data
+
+    # Initialize day-specific count files if they don't exist
+    # This happens on-demand now when load_counts_from_file is first called for a day.
+    # Optionally, you could pre-initialize them here:
+    # for day_key in SQL_DAY_FILE_PATHS.keys():
+    #     print(f"Pre-checking/initializing counts file for {day_key}...")
+    #     load_counts_from_file(get_sql_file_path_for_day(day_key))
 
     # Server setup using ThreadingMixIn for basic concurrency
     class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
@@ -2132,9 +2906,12 @@ if __name__ == "__main__":
 
     print(f"\nServing HTTP on {HOST}:{PORT}...")
     print(f"Frontend root: {FRONTEND_DIR}")
-    print(f"Using counts data file: {SQL_FILE_PATH}")
+    print("Day-specific count files:")
+    for day, filepath in SQL_DAY_FILE_PATHS.items():
+        print(f"  {day.capitalize()}: {filepath}")
     print(f"Using logins data file: {LOGINS_SQL_FILE_PATH}") # <--- NEW
     print(f"Using classes data file: {CLASSES_SQL_FILE_PATH}")
+    print(f"Using students data file: {DATA_DIR / 'students.sql'}")
     print(f"Using Google client secrets file: {CLIENT_SECRETS_FILE}")
     print(f"Using hashlib.pbkdf2_hmac with {ITERATIONS} iterations.")
     print(f"\nAccess the application via: http://{HOST}:{PORT}/")

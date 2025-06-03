@@ -187,8 +187,8 @@ function renderClasses() {
       <td>${cls.teacher}</td>
       <td>
         <input type="checkbox" ${cls.counts1 === 'T' ? 'checked' : ''} onchange="updateClassCount('${cls.class}', 'counts1', this.checked)" />
-        <input type="checkbox" ${cls.couts2 === 'T' ? 'checked' : ''} onchange="updateClassCount('${cls.class}', 'couts2', this.checked)" /> 
-        <input type="checkbox" ${cls.couts3 === 'T' ? 'checked' : ''} onchange="updateClassCount('${cls.class}', 'couts3', this.checked)" />
+        <input type="checkbox" ${cls.counts2 === 'T' ? 'checked' : ''} onchange="updateClassCount('${cls.class}', 'counts2', this.checked)" /> 
+        <input type="checkbox" ${cls.counts3 === 'T' ? 'checked' : ''} onchange="updateClassCount('${cls.class}', 'counts3', this.checked)" />
       </td>
       <td>
         <button onclick="promptRemoveClass('${cls.class}')">Remove</button>
@@ -227,8 +227,8 @@ async function addClass() {
     class: className.trim(),
     teacher: teacher.trim(),
     counts1: 'F',
-    couts2: 'F', // Ensure key matches backend/SQL ('couts2')
-    couts3: 'F'  // Ensure key matches backend/SQL ('couts3')
+    counts2: 'F', // Ensure key matches backend/SQL ('counts2')
+    counts3: 'F'  // Ensure key matches backend/SQL ('counts3')
   };
 
   try {

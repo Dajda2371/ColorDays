@@ -1,12 +1,14 @@
 // --- Global variable to store the current class name ---
 let currentClassName = null;
+let currentDayIdentifier = null; // Added to store the day
 
 // --- Wait for the DOM to be fully loaded ---
 document.addEventListener('DOMContentLoaded', () => {
     const urlParams = new URLSearchParams(window.location.search);
     currentClassName = urlParams.get('class'); // Store class name globally
+    currentDayIdentifier = urlParams.get('day'); // Store day globally
 
-    if (!currentClassName) {
+    if (!currentClassName || !currentDayIdentifier) {
         alert("No class selected. Redirecting to the menu.");
         window.location.href = 'menu.html'; // Redirect if no class
         return; // Stop further execution
@@ -15,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Update the heading with the class name
     const classNameElement = document.getElementById('className');
     if (classNameElement) {
-        classNameElement.textContent = `Class: ${decodeURIComponent(currentClassName)}`;
+        classNameElement.textContent = `Class: ${decodeURIComponent(currentClassName)} - Day: ${currentDayIdentifier.charAt(0).toUpperCase() + currentDayIdentifier.slice(1)}`;
     } else {
         console.error("Element with ID 'className' not found.");
     }
@@ -29,15 +31,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // --- Fetch data from the backend ---
 async function fetchData() {
-    if (!currentClassName) {
-        console.error("Cannot fetch data, className is not set.");
+    if (!currentClassName || !currentDayIdentifier) {
+        console.error("Cannot fetch data, className or dayIdentifier is not set.");
         return;
     }
 
-    console.log(`Fetching data for class: ${currentClassName}`);
+    console.log(`Fetching data for class: ${currentClassName}, day: ${currentDayIdentifier}`);
     try {
-        // Construct the correct API URL
-        const apiUrl = `/api/counts?class=${encodeURIComponent(currentClassName)}`;
+        // Construct the correct API URL including the day
+        const apiUrl = `/api/counts?class=${encodeURIComponent(currentClassName)}&day=${encodeURIComponent(currentDayIdentifier)}`;
         const response = await fetch(apiUrl);
 
         if (!response.ok) {
@@ -189,8 +191,8 @@ function createButtons() {
 
 // --- Handle increment/decrement button clicks ---
 async function handleCountChange(action, type, points) {
-    if (!currentClassName) {
-        console.error("Cannot change count, className is not set.");
+    if (!currentClassName || !currentDayIdentifier) {
+        console.error("Cannot change count, className or dayIdentifier is not set.");
         alert("Error: Class context lost. Please refresh or go back to menu.");
         return;
     }
@@ -199,7 +201,8 @@ async function handleCountChange(action, type, points) {
     const payload = {
         className: currentClassName,
         type: type,
-        points: points
+        points: points,
+        day: currentDayIdentifier // Include the day identifier in the payload
     };
 
     console.log(`Sending ${action} request to ${apiUrl} with payload:`, payload);
@@ -209,6 +212,7 @@ async function handleCountChange(action, type, points) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                // 'Credentials': 'include' // Often handled by browser for same-origin, or add if needed
             },
             body: JSON.stringify(payload),
         });
