@@ -716,13 +716,14 @@ def save_counts_to_file(file_path, day_data_to_save):
             # Iterate through the provided data_to_save and generate INSERT statements
             # Sort for consistent file output
             for class_name in sorted(day_data_to_save.keys()):
-                 for type_val in sorted(day_data_to_save[class_name].keys()):
-                     for points_val in sorted(day_data_to_save[class_name][type_val].keys()):
-                         count_val = day_data_to_save[class_name][type_val][points_val]
-                         safe_class_name = class_name.replace("'", "''") # Basic escaping
-                         insert_statement = f"INSERT INTO counts (class_name, type, points, count) VALUES ('{safe_class_name}', '{type_val}', {points_val}, {count_val});"
-                         sql_lines.append(insert_statement)
-
+                for type_val in sorted(day_data_to_save[class_name].keys()):
+                    for points_val in sorted(day_data_to_save[class_name][type_val].keys()):
+                        count_val = day_data_to_save[class_name][type_val][points_val]
+                        # Only write INSERT statements for counts greater than 0
+                        if count_val > 0:
+                            safe_class_name = class_name.replace("'", "''") # Basic escaping
+                            insert_statement = f"INSERT INTO counts (class_name, type, points, count) VALUES ('{safe_class_name}', '{type_val}', {points_val}, {count_val});"
+                            sql_lines.append(insert_statement)
             # Write the file (overwrite existing)
             with open(file_path, 'w', encoding='utf-8') as f:
                 f.write("\n".join(sql_lines))
