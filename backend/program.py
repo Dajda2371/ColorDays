@@ -71,12 +71,17 @@ import binascii # <-- For converting bytes to hex and back
 BACKEND_DIR = Path(__file__).parent.resolve()
 FRONTEND_DIR = (BACKEND_DIR.parent / 'frontend').resolve()
 DATA_DIR = (BACKEND_DIR / 'data').resolve()
-SQL_FILE_PATH = DATA_DIR / 'tables.sql' # Path to the SQL data file
+# SQL_FILE_PATH = DATA_DIR / 'tables.sql' # Path to the SQL data file - DEPRECATED for day-specific files
 CLASSES_SQL_FILE_PATH = DATA_DIR / 'classes.sql' # Path to the classes data file
 LOGINS_SQL_FILE_PATH = DATA_DIR / 'logins.sql' # Path to the SQL logins file <--- NEW
 HOST = 'localhost' # Or '0.0.0.0' to be accessible on your network
 PORT = 8000 # Choose a port
-SUPPORTED_CLASSES = [] # Must match menu.html and initial tables.sql
+SUPPORTED_CLASSES = [] # Will be populated from classes.sql
+SQL_DAY_FILE_PATHS = {
+    "monday": DATA_DIR / 'tables-monday.sql',
+    "tuesday": DATA_DIR / 'tables-tuesday.sql',
+    "wednesday": DATA_DIR / 'tables-wednesday.sql',
+}
 
 # --- Google OAuth Configuration ---
 CLIENT_SECRETS_FILE = DATA_DIR / 'client_secret.json' # Path to your client_secret.json
@@ -232,7 +237,7 @@ SQL_AUTH_USER_STUDENT_COOKIE_NAME = "SQLAuthUserStudent" # For SQL Student users
 
 
 # --- In-Memory Data Store and Lock ---
-data_store = collections.defaultdict(lambda: collections.defaultdict(lambda: collections.defaultdict(int)))
+# data_store = collections.defaultdict(lambda: collections.defaultdict(lambda: collections.defaultdict(int))) # Global store less relevant for day-specific counts
 data_lock = threading.RLock()
 server_config = {} # To store data from config.json
 class_data_store = [] # To store data from classes.sql as a list of dicts
@@ -344,6 +349,13 @@ def create_cookie_clear_headers(name, path='/'):
     header_value = cookie[name].output(header='').strip()
     return [('Set-Cookie', header_value)] # Return as a list of tuples
 
+
+# --- Helper to get day-specific file path ---
+def get_sql_file_path_for_day(day_identifier):
+    day_identifier = day_identifier.lower()
+    if day_identifier not in SQL_DAY_FILE_PATHS:
+        raise ValueError(f"Invalid day identifier: {day_identifier}. Must be one of {list(SQL_DAY_FILE_PATHS.keys())}")
+    return SQL_DAY_FILE_PATHS[day_identifier]
 
 # --- SQL File Handling Functions ---
 
@@ -497,65 +509,62 @@ def parse_logins_sql_line(line):
         return None
 
 # --- Loading for tables.sql ---
-def load_data_from_sql():
-    """Loads data from tables.sql into the in-memory data_store."""
-    global data_store
-    print(f"Attempting to load counts data from: {SQL_FILE_PATH}")
+def load_counts_from_file(file_path):
+    """
+    Loads data from a specific counts SQL file.
+    If the file doesn't exist or a class from SUPPORTED_CLASSES is missing,
+    it initializes default zero counts for those classes and saves the file.
+    Returns the loaded/initialized data for that file.
+    """
+    print(f"Attempting to load counts data from: {file_path}")
     # Ensure data directory exists
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Use a temporary structure to load into, then swap atomically (within lock)
     temp_data = collections.defaultdict(lambda: collections.defaultdict(lambda: collections.defaultdict(int)))
-    found_classes = set()
-    file_exists = SQL_FILE_PATH.exists()
+    file_existed_initially = file_path.exists()
 
-    if file_exists:
-        try:
-            with open(SQL_FILE_PATH, 'r', encoding='utf-8') as f:
-                for line_num, line in enumerate(f, 1):
-                    parsed = parse_sql_line(line)
-                    if parsed:
-                        class_name, type_val, points, count = parsed
-                        # Basic validation of parsed data
-                        if 0 <= points <= 6 and type_val in ['student', 'teacher']:
-                             temp_data[class_name][type_val][points] = count
-                             found_classes.add(class_name)
-                        else:
-                             print(f"Warning: Invalid data values skipped in counts line {line_num}: {line.strip()}")
-
-            print(f"Loaded counts data for classes found in file: {', '.join(sorted(list(found_classes)))}")
-
-        except Exception as e:
-            print(f"!!! ERROR reading or parsing {SQL_FILE_PATH}: {e}. Counts data store might be empty or incomplete.")
-            # Optionally clear temp_data if error is severe
-            # temp_data.clear()
-            # found_classes.clear()
-
-    else:
-         print(f"Warning: {SQL_FILE_PATH} not found. Will initialize default counts data.")
-
-    # Ensure all SUPPORTED_CLASSES have default entries if missing
-    needs_save = False
-    for class_name in SUPPORTED_CLASSES:
-        if class_name not in temp_data: # Check against temp_data, not found_classes
-             print(f"Initializing default zero counts data for missing class: {class_name}")
-             needs_save = True # Need to save the defaults we're adding
-             for type_val in ['student', 'teacher']:
-                 for points_val in range(7): # 0 to 6
-                     temp_data[class_name][type_val][points_val] = 0 # Default to 0
-
-    # Update the global data store under lock
     with data_lock:
-        data_store = temp_data
+        if file_existed_initially:
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    for line_num, line in enumerate(f, 1):
+                        parsed = parse_sql_line(line)
+                        if parsed:
+                            class_name, type_val, points, count = parsed
+                            if 0 <= points <= 6 and type_val in ['student', 'teacher']:
+                                temp_data[class_name][type_val][points] = count
+                            else:
+                                print(f"Warning: Invalid data in {file_path} line {line_num}: {line.strip()}")
+                print(f"Loaded counts from {file_path}.")
+            except Exception as e:
+                print(f"!!! ERROR reading or parsing {file_path}: {e}. Data might be incomplete.")
+        else:
+            print(f"Warning: {file_path} not found. Will initialize with defaults.")
 
-    # If we added defaults or the file didn't exist, save the current state
-    if needs_save or not file_exists:
-        print("Saving initial/default counts data state to tables.sql...")
-        # This call will acquire the RLock again, which is allowed
-        if not save_data_to_sql():
-             print("!!! CRITICAL: Failed to save initial counts data. File might be missing or unwritable.")
+        # Ensure all SUPPORTED_CLASSES have default entries if missing from this file's data
+        # This is crucial for creating the file with all classes if it's new.
+        made_changes_to_temp_data = False
+        if not SUPPORTED_CLASSES:
+            print("Warning: SUPPORTED_CLASSES list is empty. Cannot initialize defaults for counts files.")
+        else:
+            for class_name_supported in SUPPORTED_CLASSES:
+                if class_name_supported not in temp_data:
+                    print(f"Initializing default zero counts in {file_path} for missing class: {class_name_supported}")
+                    made_changes_to_temp_data = True
+                    for type_val_supported in ['student', 'teacher']:
+                        for points_val_supported in range(7): # 0 to 6
+                            temp_data[class_name_supported][type_val_supported][points_val_supported] = 0
 
-    print("Counts data loading/initialization complete.")
+        # If the file didn't exist initially, or if we added default data for supported classes, save it.
+        if not file_existed_initially or made_changes_to_temp_data:
+            print(f"Saving initial/default counts data to {file_path}...")
+            if not save_counts_to_file(file_path, temp_data): # Pass the full temp_data
+                 print(f"!!! CRITICAL: Failed to save initial/default counts data to {file_path}.")
+            else:
+                 print(f"Successfully saved initial/default counts to {file_path}.")
+
+    print(f"Counts data loading/initialization complete for {file_path}.")
+    return temp_data
 
 # --- Loading for classes.sql ---
 def load_class_data_from_sql():
@@ -586,13 +595,20 @@ def load_class_data_from_sql():
     # Update the global data store under lock
     with data_lock: # Reusing data_lock for simplicity
         class_data_store = temp_class_store
+        # Populate SUPPORTED_CLASSES after loading class data
+        global SUPPORTED_CLASSES
+        SUPPORTED_CLASSES = sorted([cls['class'] for cls in class_data_store])
+        if SUPPORTED_CLASSES:
+            print(f"SUPPORTED_CLASSES populated: {SUPPORTED_CLASSES}")
+        else:
+            print("Warning: No classes loaded, SUPPORTED_CLASSES is empty.")
 
     print("Class data loading complete.")
 
 # --- Loading for students.sql ---
 def load_students_data_from_sql():
     """Loads data from students.sql into the in-memory students_data_store."""
-    global students_data_store
+    global students_data_store # Ensure it's global
     students_sql_file_path = DATA_DIR / 'students.sql'
     print(f"Attempting to load student data from: {students_sql_file_path}")
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -682,50 +698,48 @@ def load_user_data_from_sql():
 
 
 # --- Saving for tables.sql ---
-def save_data_to_sql():
-    """Saves the current in-memory data_store back to tables.sql. Returns True on success, False on failure."""
-    global data_store
-    print(f"Attempting to save counts data to: {SQL_FILE_PATH}")
+def save_counts_to_file(file_path, day_data_to_save):
+    """
+    Saves the provided day-specific count data to the specified SQL file.
+    `day_data_to_save` should be in the format: {class_name: {type: {points: count}}}
+    Returns True on success, False on failure.
+    """
+    print(f"Attempting to save counts data to: {file_path}")
     # Acquire lock. RLock allows acquiring again if the thread already holds it.
     with data_lock:
         try:
             sql_lines = []
             sql_lines.append(f"-- Data saved on {datetime.datetime.now().isoformat()} --")
-            sql_lines.append("-- This file is used as the primary data storage for counts. --")
+            sql_lines.append(f"-- This file stores counts for: {file_path.name} --")
             sql_lines.append("")
 
-            # Iterate through the in-memory store and generate INSERT statements
+            # Iterate through the provided data_to_save and generate INSERT statements
             # Sort for consistent file output
-            for class_name in sorted(data_store.keys()):
-                 # Consider only saving SUPPORTED_CLASSES if desired, but saving all is safer
-                 for type_val in sorted(data_store[class_name].keys()):
-                     for points_val in sorted(data_store[class_name][type_val].keys()):
-                         count_val = data_store[class_name][type_val][points_val]
+            for class_name in sorted(day_data_to_save.keys()):
+                 for type_val in sorted(day_data_to_save[class_name].keys()):
+                     for points_val in sorted(day_data_to_save[class_name][type_val].keys()):
+                         count_val = day_data_to_save[class_name][type_val][points_val]
                          safe_class_name = class_name.replace("'", "''") # Basic escaping
                          insert_statement = f"INSERT INTO counts (class_name, type, points, count) VALUES ('{safe_class_name}', '{type_val}', {points_val}, {count_val});"
                          sql_lines.append(insert_statement)
 
-            # --- Enhanced Debugging Around File Write ---
-            print(f"DEBUG: About to open {SQL_FILE_PATH} for writing ('w' mode)...")
             # Write the file (overwrite existing)
-            with open(SQL_FILE_PATH, 'w', encoding='utf-8') as f:
-                print(f"DEBUG: File {SQL_FILE_PATH} opened successfully.")
+            with open(file_path, 'w', encoding='utf-8') as f:
                 f.write("\n".join(sql_lines))
                 f.write("\n") # Add a final newline
-                print(f"DEBUG: Data written to file buffer.")
             # 'with open' automatically closes the file here, flushing the buffer.
-            print(f"Counts data successfully saved to {SQL_FILE_PATH}") # Success message
+            print(f"Counts data successfully saved to {file_path}") # Success message
             return True
 
         except PermissionError as e: # Catch specific permission error first
-            print(f"!!! PERMISSION ERROR writing to {SQL_FILE_PATH}: {e}")
-            print("!!! Please check write permissions for the script/server on the 'data' directory and 'tables.sql' file.")
+            print(f"!!! PERMISSION ERROR writing to {file_path}: {e}")
+            print(f"!!! Please check write permissions for the script/server on the 'data' directory and '{file_path.name}' file.")
             return False
         except IOError as e: # Catch other IO errors
-            print(f"!!! IO ERROR writing to {SQL_FILE_PATH}: {e}")
+            print(f"!!! IO ERROR writing to {file_path}: {e}")
             return False
         except Exception as e: # Catch any other unexpected error
-            print(f"!!! UNEXPECTED ERROR during save_data_to_sql:")
+            print(f"!!! UNEXPECTED ERROR during save_counts_to_file for {file_path}:")
             print(traceback.format_exc()) # Print full traceback
             return False
         
@@ -931,10 +945,11 @@ def handle_increment_module(handler_instance, data, request_path):
     class_name = data.get('className')
     type_val = data.get('type')
     points_val = data.get('points')
+    day_identifier = data.get('day') # Get the day identifier
 
     # Basic validation
-    if not all([class_name, type_val, points_val is not None]):
-        handler_instance._send_response(400, {"error": "Missing data: className, type, or points"})
+    if not all([class_name, type_val, points_val is not None, day_identifier]):
+        handler_instance._send_response(400, {"error": "Missing data: className, type, points, or day"})
         return
     if type_val not in ['student', 'teacher']:
         handler_instance._send_response(400, {"error": "Invalid type"})
@@ -942,28 +957,39 @@ def handle_increment_module(handler_instance, data, request_path):
     if not isinstance(points_val, int) or not (0 <= points_val <= 6):
         handler_instance._send_response(400, {"error": "Invalid points value"})
         return
+    if day_identifier.lower() not in SQL_DAY_FILE_PATHS:
+        handler_instance._send_response(400, {"error": f"Invalid day. Must be one of {list(SQL_DAY_FILE_PATHS.keys())}"})
+        return
 
     success = False
     message = "Increment failed"
     status_code = 500
-    save_needed = False
 
-    with data_lock:
+    try:
+        target_file_path = get_sql_file_path_for_day(day_identifier)
+        # Load data for the specific day, this also initializes the file with defaults if needed
+        day_specific_data = load_counts_from_file(target_file_path)
+
+        # Perform increment on the loaded day-specific data
+        # Ensure class_name exists in day_specific_data (load_counts_from_file should handle this via SUPPORTED_CLASSES)
+        if class_name not in day_specific_data: # Should not happen if load_counts_from_file works correctly
+            day_specific_data[class_name] = collections.defaultdict(lambda: collections.defaultdict(int))
+            for t in ['student', 'teacher']:
+                for p in range(7): day_specific_data[class_name][t][p] = 0
+
+        current_count = day_specific_data[class_name][type_val][points_val]
+        day_specific_data[class_name][type_val][points_val] = current_count + 1
+
+        print(f"DEBUG: Change detected (increment for {day_identifier}), attempting save to {target_file_path}...")
         try:
-            current_count = data_store.get(class_name, {}).get(type_val, {}).get(points_val, 0)
-            data_store[class_name][type_val][points_val] = current_count + 1
-            save_needed = True
-
-            if save_needed:
-                print(f"DEBUG: Change detected (increment), attempting save...")
-                if save_data_to_sql():
-                    success = True
-                    message = "Count incremented"
-                    status_code = 200
-                else:
-                    success = False
-                    message = "Count incremented in memory, but CRITICAL error saving to file."
-                    status_code = 500
+            if save_counts_to_file(target_file_path, day_specific_data):
+                success = True
+                message = f"Count incremented for {day_identifier}"
+                status_code = 200
+            else:
+                success = False
+                message = f"Count incremented for {day_identifier}, but CRITICAL error saving to file."
+                status_code = 500
         except Exception as e:
             print(f"!!! UNEXPECTED ERROR during POST {request_path} operation (within lock):") # Use request_path
             print(traceback.format_exc())
@@ -981,10 +1007,11 @@ def handle_decrement_module(handler_instance, data, request_path):
     class_name = data.get('className')
     type_val = data.get('type')
     points_val = data.get('points')
+    day_identifier = data.get('day') # Get the day identifier
 
     # Basic validation
-    if not all([class_name, type_val, points_val is not None]):
-        handler_instance._send_response(400, {"error": "Missing data: className, type, or points"})
+    if not all([class_name, type_val, points_val is not None, day_identifier]):
+        handler_instance._send_response(400, {"error": "Missing data: className, type, points, or day"})
         return
     if type_val not in ['student', 'teacher']:
         handler_instance._send_response(400, {"error": "Invalid type"})
@@ -992,34 +1019,43 @@ def handle_decrement_module(handler_instance, data, request_path):
     if not isinstance(points_val, int) or not (0 <= points_val <= 6):
         handler_instance._send_response(400, {"error": "Invalid points value"})
         return
+    if day_identifier.lower() not in SQL_DAY_FILE_PATHS:
+        handler_instance._send_response(400, {"error": f"Invalid day. Must be one of {list(SQL_DAY_FILE_PATHS.keys())}"})
+        return
 
     success = False
     message = "Decrement failed"
     status_code = 500
-    save_needed = False
 
-    with data_lock:
-        try:
-            current_count = data_store.get(class_name, {}).get(type_val, {}).get(points_val, 0)
-            if current_count > 0:
-                data_store[class_name][type_val][points_val] = current_count - 1
-                save_needed = True
+    try:
+        target_file_path = get_sql_file_path_for_day(day_identifier)
+        day_specific_data = load_counts_from_file(target_file_path)
+
+        if class_name not in day_specific_data: # Should not happen
+            day_specific_data[class_name] = collections.defaultdict(lambda: collections.defaultdict(int))
+            # Initialize if somehow missing, though load_counts_from_file should handle this
+            for t_init in ['student', 'teacher']:
+                for p_init in range(7): day_specific_data[class_name][t_init][p_init] = 0
+
+        current_count = day_specific_data[class_name][type_val][points_val]
+        if current_count > 0:
+            day_specific_data[class_name][type_val][points_val] = current_count - 1
+            
+            print(f"DEBUG: Change detected (decrement for {day_identifier}), attempting save to {target_file_path}...")
+            if save_counts_to_file(target_file_path, day_specific_data):
+                success = True
+                message = f"Count decremented for {day_identifier}"
+                status_code = 200
             else:
                 success = False
-                message = "Count already zero"
-                status_code = 400
-                save_needed = False
+                message = f"Count decremented for {day_identifier}, but CRITICAL error saving to file."
+                status_code = 500
+        else:
+            success = False
+            message = "Count already zero"
+            status_code = 400 # Bad request, can't decrement zero
 
-            if save_needed:
-                print(f"DEBUG: Change detected (decrement), attempting save...")
-                if save_data_to_sql():
-                    success = True
-                    message = "Count decremented"
-                    status_code = 200
-                else:
-                    success = False
-                    message = "Count decremented in memory, but CRITICAL error saving to file."
-                    status_code = 500
+        try:
         except Exception as e:
             print(f"!!! UNEXPECTED ERROR during POST {request_path} operation (within lock):") # Use request_path
             print(traceback.format_exc())
@@ -1036,7 +1072,6 @@ def handle_decrement_module(handler_instance, data, request_path):
 # --- HTTP Request Handler ---
 class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
-    # (Helper methods: get_cookies, is_logged_in, _send_response remain the same)
     def get_cookies(self):
         cookies = SimpleCookie()
         cookie_header = self.headers.get('Cookie')
@@ -1325,7 +1360,6 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 # --- Inside the ColorDaysHandler class ---
 
     def do_GET(self):
-        global data_store
         global user_password_store # Add access to user store
         parsed_path = urllib.parse.urlparse(self.path)
         path = parsed_path.path
@@ -1579,30 +1613,42 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 return
 
             class_name = query.get('class', [None])[0]
-            if not class_name:
-                self._send_response(400, {"error": "Missing 'class' query parameter"})
+            day_identifier = query.get('day', [None])[0] # Get day for loading counts
+
+            if not class_name or not day_identifier:
+                self._send_response(400, {"error": "Missing 'class' or 'day' query parameter"})
+                return
+            
+            try:
+                target_file_path = get_sql_file_path_for_day(day_identifier)
+            except ValueError as e:
+                self._send_response(400, {"error": str(e)})
                 return
 
             response_data = []
-            # Acquire lock briefly to ensure consistent read
-            with data_lock:
-                if class_name in data_store:
-                    class_data = data_store[class_name]
+            try:
+                # Load data for the specific day. This also initializes the file if needed.
+                day_specific_loaded_data = load_counts_from_file(target_file_path)
+
+                if class_name in day_specific_loaded_data:
+                    class_day_data = day_specific_loaded_data[class_name]
                     # Format data for JSON response, ensuring all points 0-6 exist
                     for type_val in ['student', 'teacher']:
                         for points_val in range(7):
-                            count = class_data.get(type_val, {}).get(points_val, 0)
+                            count = class_day_data.get(type_val, {}).get(points_val, 0)
                             response_data.append({"type": type_val, "points": points_val, "count": count})
                     response_data.sort(key=lambda x: (x['type'], x['points']))
                 else:
-                    # Class not found in memory, return default structure with zeros
-                    print(f"Warning: Class '{class_name}' requested via API but not found in memory. Returning zeros.")
+                    # Class not found in this day's file, return default structure with zeros
+                    print(f"Warning: Class '{class_name}' requested via API for day '{day_identifier}' but not found in {target_file_path}. Returning zeros.")
                     for type_val in ['student', 'teacher']:
                         for points_val in range(7):
                              response_data.append({"type": type_val, "points": points_val, "count": 0})
-
-            self._send_response(200, response_data)
-            return # Make sure to return after handling
+                self._send_response(200, response_data)
+            except Exception as e:
+                print(f"Error processing /api/counts for day {day_identifier}: {e}\n{traceback.format_exc()}")
+                self._send_response(500, {"error": "Server error fetching counts."})
+            return
 
         # --- Google OAuth Endpoints (Moved to do_GET) ---
         elif path == '/login/google':
@@ -1834,7 +1880,6 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
     # Handle POST requests (/login, /api/increment, /api/decrement)
     def do_POST(self):
-        global data_store
         global user_password_store # Already accessed here
         parsed_path = urllib.parse.urlparse(self.path)
         path = parsed_path.path
@@ -2741,15 +2786,18 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 if __name__ == "__main__":
     print("--- Starting Color Days Server ---")
 
-    # --- Load Data ---
-    # Load counts data first
-    load_data_from_sql()
-    # Load user login data <--- NEW
+    # --- Load Configuration and User/Class Data ---
     load_main_config_from_json() # Load server configuration
     load_user_data_from_sql()
-    load_class_data_from_sql() # Load class data
+    load_class_data_from_sql() # Load class data (this populates SUPPORTED_CLASSES)
     load_students_data_from_sql() # Load student data
-    # --- End Load Data ---
+
+    # Initialize day-specific count files if they don't exist
+    # This happens on-demand now when load_counts_from_file is first called for a day.
+    # Optionally, you could pre-initialize them here:
+    # for day_key in SQL_DAY_FILE_PATHS.keys():
+    #     print(f"Pre-checking/initializing counts file for {day_key}...")
+    #     load_counts_from_file(get_sql_file_path_for_day(day_key))
 
     # Server setup using ThreadingMixIn for basic concurrency
     class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
@@ -2760,7 +2808,9 @@ if __name__ == "__main__":
 
     print(f"\nServing HTTP on {HOST}:{PORT}...")
     print(f"Frontend root: {FRONTEND_DIR}")
-    print(f"Using counts data file: {SQL_FILE_PATH}")
+    print("Day-specific count files:")
+    for day, filepath in SQL_DAY_FILE_PATHS.items():
+        print(f"  {day.capitalize()}: {filepath}")
     print(f"Using logins data file: {LOGINS_SQL_FILE_PATH}") # <--- NEW
     print(f"Using classes data file: {CLASSES_SQL_FILE_PATH}")
     print(f"Using students data file: {DATA_DIR / 'students.sql'}")
