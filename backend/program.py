@@ -1,7 +1,60 @@
+import os
+
+if "pip: command not found" in os.popen('pip --version').read(): # Check if pip is installed
+    print("pip not found, attempting to install...")
+    os.system('python ./get-pip.py')
+    os.system('pip install --upgrade pip')
+
+# Initialize required names to None. They will be populated if imports succeed.
+InstalledAppFlow = None
+google_discovery_service = None # This will hold the 'discovery' module
+
+try:
+    from google_auth_oauthlib.flow import InstalledAppFlow as IAF
+    from googleapiclient import discovery as discovery_module
+    
+    # Assign to our module-level variables
+    InstalledAppFlow = IAF
+    google_discovery_service = discovery_module
+    print("Google OAuth libraries found and imported.")
+except ImportError:
+    print("One or more Google OAuth libraries not found, attempting to install...")
+    install_cmd = 'pip install --upgrade google-auth-oauthlib google-api-python-client requests'
+    print(f"Running: {install_cmd}")
+    return_code = os.system(install_cmd)
+    if return_code == 0:
+        print("Installation attempt successful. Re-attempting import...")
+        try:
+            # Re-import and assign to the module-level variables using globals()
+            # to ensure they are updated in the module's scope.
+            from google_auth_oauthlib.flow import InstalledAppFlow as IAF_retry
+            from googleapiclient import discovery as discovery_module_retry
+            
+            globals()['InstalledAppFlow'] = IAF_retry
+            globals()['google_discovery_service'] = discovery_module_retry
+            print("Libraries imported successfully after installation.")
+        except ImportError:
+            print("!!! CRITICAL: Failed to import libraries even after installation. OAuth will not work. Please restart the server.")
+            # Ensure they remain None if the retry fails
+            globals()['InstalledAppFlow'] = None
+            globals()['google_discovery_service'] = None
+    else:
+        print(f"!!! CRITICAL: Installation failed with code {return_code}. Please install 'google-auth-oauthlib' and 'google-api-python-client' manually and restart the server.")
+        globals()['InstalledAppFlow'] = None
+        globals()['google_discovery_service'] = None
+
+# Check if imports were successful
+if InstalledAppFlow is None or google_discovery_service is None:
+    print("!!! WARNING: Google OAuth libraries could not be loaded. Google login will be disabled.")
+    # Ensure they are defined as None if not already, to prevent NameErrors later if checked.
+    if 'InstalledAppFlow' not in globals() or globals()['InstalledAppFlow'] is None:
+        InstalledAppFlow = None
+    if 'google_discovery_service' not in globals() or globals()['google_discovery_service'] is None:
+        google_discovery_service = None
+
 import http.server
 import socketserver
 import json
-import os
 import urllib.parse
 from pathlib import Path
 import re # Regular expressions for parsing SQL
@@ -12,7 +65,6 @@ import traceback # For detailed error printing
 from http.cookies import SimpleCookie # <-- Added for login cookies
 import hashlib # <-- Use built-in hashlib
 import hmac # <-- Use built-in hmac for secure comparison
-import os      # <-- Use built-in os for random salt
 import binascii # <-- For converting bytes to hex and back
 
 # --- Configuration ---
@@ -20,14 +72,29 @@ BACKEND_DIR = Path(__file__).parent.resolve()
 FRONTEND_DIR = (BACKEND_DIR.parent / 'frontend').resolve()
 DATA_DIR = (BACKEND_DIR / 'data').resolve()
 SQL_FILE_PATH = DATA_DIR / 'tables.sql' # Path to the SQL data file
+CLASSES_SQL_FILE_PATH = DATA_DIR / 'classes.sql' # Path to the classes data file
 LOGINS_SQL_FILE_PATH = DATA_DIR / 'logins.sql' # Path to the SQL logins file <--- NEW
 HOST = 'localhost' # Or '0.0.0.0' to be accessible on your network
 PORT = 8000 # Choose a port
-SUPPORTED_CLASSES = ['C1', 'C2', 'C3'] # Must match menu.html and initial tables.sql
+SUPPORTED_CLASSES = [] # Must match menu.html and initial tables.sql
+
+# --- Google OAuth Configuration ---
+CLIENT_SECRETS_FILE = DATA_DIR / 'client_secret.json' # Path to your client_secret.json
+GOOGLE_SCOPES = ['openid', 'https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile']
+GOOGLE_REDIRECT_URI = f'http://{HOST}:{PORT}/oauth2callback' # Must match one in client_secret.json and Google Console
 
 # --- Secure Login Configuration (Using hashlib.pbkdf2_hmac) ---
 
 # Parameters for PBKDF2
+import random # For generating random codes
+import string # For character sets for random codes
+
+# --- Student Code Generation ---
+def generate_random_code(length=15):
+    """Generates a random alphanumeric code of a given length."""
+    characters = string.ascii_letters + string.digits
+    return ''.join(random.choice(characters) for i in range(length))
+
 HASH_ALGORITHM = 'sha256'
 # Iterations: Higher is more secure but slower. Start high (e.g., 260000+)
 # Adjust based on your server performance and security needs.
@@ -35,6 +102,12 @@ HASH_ALGORITHM = 'sha256'
 ITERATIONS = 390000 # Example value, tune as needed
 SALT_BYTES = 16     # Size of the salt (16 bytes is common)
 DK_LENGTH = 32      # Desired key length in bytes (e.g., 32 for SHA256)
+
+# --- Role Configuration ---
+ADMIN_ROLE = 'administrator'
+TEACHER_ROLE = 'teacher'
+DEFAULT_ROLE_FOR_NEW_USERS = TEACHER_ROLE # Default role for users created without a specified role
+# --- End Role Configuration ---
 
 # --- Helper Functions for Hashing ---
 
@@ -59,39 +132,67 @@ def hash_password(password):
 
 def verify_password(stored_password_info, provided_password, username):
     """Verifies a provided password against the stored salt and hash."""
-    extra_cookie_headers = [] # Initialize default empty list
+    # Ensure stored_password_info is the expected dictionary structure
+    if not isinstance(stored_password_info, dict) or 'password_hash' not in stored_password_info:
+        print(f"Error: Invalid stored_password_info structure for user '{username}'. Expected a dict with 'password_hash'.")
+        return False, []
+    
+    password_hash = stored_password_info['password_hash']
+    extra_cookie_headers = [] # Initialize for cookies that might be set on successful pre-gen password login
 
-    if not stored_password_info or ':' not in stored_password_info:
-        # Check for pre-generated password format _password_
-        if stored_password_info and stored_password_info.startswith('_') and stored_password_info.endswith('_'):
-            _stored_password_info_ = stored_password_info[1:-1]
-            if _stored_password_info_ == provided_password:
-                print(f"User '{username}' logged in with pregenerated password '{provided_password}'. Setting change password cookie.")
-                # Create the specific cookie needed for this case
-                change_pw_cookie_headers = create_cookies(
-                    CHANGE_PASSWORD_COOKIE_NAME,
-                    "not-required", # Use a simple value like "required" or "true"
-                    path='/', # Apply cookie to root path so it's sent for all requests
-                    # max_age=3600, # Optional: Give it a lifetime (e.g., 1 hour)
-                    httponly=False # Allow JavaScript to read this specific cookie
-                )
-                return True, change_pw_cookie_headers # Return True and the specific cookie headers
-            else:
-                # Pregenerated password provided, but it didn't match
-                print(f"Pregenerated password verification failed for user: {username}")
-                return False, [] # <-- MODIFIED: Return tuple
+    # 1. Handle special, non-loginable password states or unset passwords
+    # These states mean the user cannot log in with a password.
+    if not password_hash or \
+       password_hash.upper() == '_NULL_' or \
+       password_hash == 'NOT_SET' or \
+       password_hash == '_GOOGLE_AUTH_USER_':
+        
+        if password_hash == '_GOOGLE_AUTH_USER_':
+            print(f"Login attempt for Google OAuth user '{username}' with password. Denied.")
+        elif not password_hash or password_hash.upper() == '_NULL_' or password_hash == 'NOT_SET':
+            print(f"Login attempt for user '{username}' with unset, null, or 'NOT_SET' password state.")
+        else: # Should not happen if above conditions are exhaustive for non-loginable
+            print(f"Login attempt for user '{username}' with an unhandled special password state: {password_hash}")
+        return False, []
+
+    # 2. Handle pre-generated passwords (e.g., _password123_)
+    # These are temporary passwords that usually require a change.
+    # This check explicitly excludes _NULL_ and _GOOGLE_AUTH_USER_ due to the checks above.
+    if password_hash.startswith('_') and password_hash.endswith('_'):
+        # Extract the actual password part from within the underscores
+        _stored_actual_password_ = password_hash[1:-1] 
+        if _stored_actual_password_ == provided_password:
+            print(f"User '{username}' logged in with pregenerated password. Setting change password cookie.")
+            # Create a cookie to indicate that a password change is required/prompted
+            change_pw_cookie_headers = create_cookies(
+                CHANGE_PASSWORD_COOKIE_NAME,
+                "not-required", # Value indicates verification (old pass) isn't needed for change
+                path='/', 
+                httponly=False # Allow JS to read this to manage UI for password change
+            )
+            return True, change_pw_cookie_headers
         else:
-            # Stored info is invalid (not pregenerated format and no ':')
-            print(f"Error: Invalid or missing stored password info for user '{username}'.")
-            return False, [] # <-- MODIFIED: Return tuple
+            # Pregenerated password was provided, but it didn't match
+            print(f"Pregenerated password verification failed for user: {username}")
+            return False, []
+
+    # 3. Handle normally hashed passwords (format: salt_hex:key_hex)
+    # This is the standard case for secure password storage.
+    # We only proceed here if password_hash is not a special state and not a pre-generated one.
+    # It must contain a ':' to be a valid salt:key pair.
+    if ':' not in password_hash:
+        # If it's not pre-generated and doesn't have a colon, it's an invalid format.
+        print(f"Error: Unrecognized or invalid password_hash format ('{password_hash}') for user '{username}'. Expected 'salt:key'.")
+        return False, []
+
     try:
-        salt_hex, key_hex = stored_password_info.split(':')
+        salt_hex, key_hex = password_hash.split(':')
         salt = binascii.unhexlify(salt_hex)
         stored_key = binascii.unhexlify(key_hex)
     except (ValueError, binascii.Error):
         # Invalid format or hex decoding failed
         print(f"Error: Invalid stored password format for hash starting with '{salt_hex[:8]}...' for user '{username}'")
-        return False, [] # <-- MODIFIED: Return tuple
+        return False, []
 
     # Password must be bytes
     provided_pwd_bytes = provided_password.encode('utf-8')
@@ -108,7 +209,11 @@ def verify_password(stored_password_info, provided_password, username):
     # Compare the derived key with the stored key
     # hmac.compare_digest helps prevent timing attacks
     is_match = hmac.compare_digest(stored_key, new_key)
-    return is_match, [] # <-- MODIFIED: Return tuple (True/False, empty list)
+    if not is_match:
+        print(f"Password hash mismatch for user '{username}'.")
+    # For standard hash verification, no extra cookies are typically set by this function itself.
+    # The login handler will set session cookies if is_match is True.
+    return is_match, []
 
 # --- User Credentials Store (Loaded from logins.sql) --- <--- MODIFIED
 # This dictionary will be populated by load_user_data_from_sql()
@@ -120,12 +225,54 @@ USERNAME_COOKIE_NAME = "ColorDaysUser"
 SESSION_COOKIE_NAME = "ColorDaysSession"
 VALID_SESSION_VALUE = "user_is_logged_in_secret_value" # Replace with a secure, random session ID mechanism
 CHANGE_PASSWORD_COOKIE_NAME = "ChangePasswordVerificationNotNeeded" # For the change password flow
+GOOGLE_COOKIE_NAME = "GoogleAuthUser" # For Google OAuth users
+SQL_COOKIE_NAME = "SQLAuthUser" # For SQL users
+SQL_AUTH_USER_STUDENT_COOKIE_NAME = "SQLAuthUserStudent" # For SQL Student users
 # --- End Session Configuration ---
 
 
 # --- In-Memory Data Store and Lock ---
 data_store = collections.defaultdict(lambda: collections.defaultdict(lambda: collections.defaultdict(int)))
 data_lock = threading.RLock()
+server_config = {} # To store data from config.json
+class_data_store = [] # To store data from classes.sql as a list of dicts
+students_data_store = [] # To store data from students.sql
+
+def get_current_user_info(handler_instance): # Returns username_key, role
+    """
+    Retrieves the authenticated user's key (as used in user_password_store) and their role.
+    """
+    cookies = handler_instance.get_cookies()
+    
+    username_key_in_store = None
+    # Prioritize specific auth cookies that hold the exact key from user_password_store
+    sql_auth_cookie = cookies.get(SQL_COOKIE_NAME)
+    if sql_auth_cookie and sql_auth_cookie.value in user_password_store:
+        username_key_in_store = sql_auth_cookie.value
+    
+    if not username_key_in_store:
+        google_auth_cookie = cookies.get(GOOGLE_COOKIE_NAME)
+        if google_auth_cookie and google_auth_cookie.value in user_password_store:
+            username_key_in_store = google_auth_cookie.value
+
+    # Fallback for USERNAME_COOKIE_NAME if it directly matches a key (less common for Google users)
+    if not username_key_in_store:
+        username_cookie = cookies.get(USERNAME_COOKIE_NAME)
+        if username_cookie and username_cookie.value in user_password_store:
+            username_key_in_store = username_cookie.value
+
+    if username_key_in_store:
+        user_data = user_password_store.get(username_key_in_store)
+        if user_data:
+            return username_key_in_store, user_data.get('role', DEFAULT_ROLE_FOR_NEW_USERS) # Default if role somehow missing
+    return None, None
+
+def is_user_using_oauth(username, self):
+    user_data = user_password_store.get(username) # username here is the key in user_password_store
+    if user_data and user_data.get('password_hash') == '_GOOGLE_AUTH_USER_':
+        print(f"User '{username}' is using Google OAuth. Password change not allowed.")
+        return True
+    return False
 
 def create_cookies(name, value, path='/', expires=None, max_age=None, httponly=True, samesite='Lax'):
     """
@@ -223,9 +370,67 @@ def parse_sql_line(line):
              print(f"Warning: Could not parse counts line format: {line.strip()}")
         return None
 
+# --- Parsing for classes.sql ---
+def parse_classes_sql_line(line):
+    """Parses a single INSERT statement line for the classes table."""
+    # Regex for: INSERT INTO classes (class, teacher, counts1, counts2, counts3) VALUES ('1.A', 'name', 'F', 'F', 'F');
+    # Updated to include iscountedby1, iscountedby2, iscountedby3
+    match = re.match(
+        r"INSERT INTO classes\s*\("
+        r"\s*class\s*,\s*teacher\s*,\s*counts1\s*,\s*counts2\s*,\s*counts3\s*,"
+        r"\s*iscountedby1\s*,\s*iscountedby2\s*,\s*iscountedby3\s*"  # New columns
+        r"\)\s*VALUES\s*\("
+        r"\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([TF])'\s*,\s*'([TF])'\s*,\s*'([TF])'\s*,"  # class, teacher, counts1-3
+        r"\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*"  # iscountedby1-3
+        r"\);",
+        line.strip(),
+        re.IGNORECASE
+    )
+    if match:
+        class_name, teacher, counts1, counts2, counts3, iscountedby1, iscountedby2, iscountedby3 = match.groups()
+        return {
+            "class": class_name, "teacher": teacher,
+            "counts1": counts1, "counts2": counts2, "counts3": counts3,
+            "iscountedby1": iscountedby1,
+            "iscountedby2": iscountedby2,
+            "iscountedby3": iscountedby3
+        }
+    else:
+        # Ignore comments and empty lines silently
+        if line.strip() and not line.strip().startswith('--') and not line.strip().upper().startswith('CREATE TABLE'):
+            print(f"Warning: Could not parse classes line format: {line.strip()}")
+        return None
+
+# --- Parsing for students.sql ---
+def parse_students_sql_line(line):
+    """Parses a single INSERT statement line for the students table."""
+    # Updated Regex for: INSERT INTO students (code, class, note, counts_classes) VALUES ('somecode', '9.A', 'note', '[1.A, 1.B, 1.C]');
+    match = re.match(
+        r"INSERT INTO students\s*\(\s*code\s*,\s*class\s*,\s*note\s*,\s*counts_classes\s*\)\s*VALUES\s*\(\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*\);",
+        line.strip(),
+        re.IGNORECASE
+    )
+    if match:
+        code, class_name, note, counts_classes_str = match.groups()
+        return {
+            "code": code, # Store the code from the file
+            "class": class_name,
+            "note": note,
+            "counts_classes_str": counts_classes_str # Renamed field
+        }
+    else:
+        # Ignore comments and empty lines silently
+        if line.strip() and not line.strip().startswith('--') and not line.strip().upper().startswith('CREATE TABLE'):
+             print(f"Warning: Could not parse students line format: {line.strip()}")
+        return None
+
 # --- Parsing for logins.sql --- <--- NEW
 def parse_logins_sql_line(line):
-    """Parses a single valid INSERT line for the users table."""
+    """
+    Parses a single valid INSERT line for the users table.
+    Handles formats with and without profile_picture_url and role.
+    Returns (username, password_hash, profile_picture_url) or None.
+    """
     line = line.strip()
 
     # Skip empty lines or comments
@@ -236,22 +441,59 @@ def parse_logins_sql_line(line):
     if not line.upper().startswith("INSERT INTO USERS"):
         return None
 
-    # Regex to extract username and password_hash
-    match = re.match(
-        r"INSERT INTO users\s*\(\s*username\s*,\s*password_hash\s*\)\s*VALUES\s*\(\s*'([^']+)'\s*,\s*'([^']+)'\s*\);",
-        line,
-        re.IGNORECASE
-    )
+    # Generic parser for INSERT INTO users (...) VALUES (...)
+    match = re.match(r"INSERT INTO users\s*\((.*?)\)\s*VALUES\s*\((.*?)\);", line, re.IGNORECASE)
 
     if match:
-        username, password_hash = match.groups()
-        if ':' in password_hash or password_hash.upper() == '_NULL_' or (password_hash[0] == '_' and password_hash[-1] == '_'):
-            return username, password_hash
-        else:
-            print(f"Warning: Skipped user due to bad hash format: {line}")
+        columns_str, values_str = match.groups()
+        columns = [col.strip().lower() for col in columns_str.split(',')]
+        
+        # Naive value splitting assuming values are simple strings in single quotes and no escaped quotes/commas within values
+        value_parts = []
+        temp_val = ""
+        in_string_literal = False
+        for char_idx, char_val in enumerate(values_str):
+            if char_val == "'":
+                if in_string_literal and char_idx + 1 < len(values_str) and values_str[char_idx+1] == "'": # Escaped quote ''
+                    temp_val += "'"
+                    # Skip next char as it's part of escaped quote, but regex for this is hard
+                    # This simple parser doesn't handle escaped quotes robustly.
+                    # For this app, assume simple non-escaped values.
+                else:
+                    in_string_literal = not in_string_literal
+                    if not in_string_literal: # End of a string literal
+                        value_parts.append(temp_val)
+                        temp_val = ""
+            elif in_string_literal:
+                temp_val += char_val
+        
+        if len(columns) != len(value_parts):
+            print(f"Warning: Column count ({len(columns)}) doesn't match value count ({len(value_parts)}) in logins line: {line.strip()}")
             return None
+    
+        parsed_data = dict(zip(columns, value_parts))
+        username = parsed_data.get('username')
+        password_hash = parsed_data.get('password_hash')
+        profile_picture_url = parsed_data.get('profile_picture_url', '_NULL_')
+        role = parsed_data.get('role') # Get role
+
+        if not role: # If role column is missing or value is empty/None from parsed_data
+            # This handles cases where the 'role' column might not be in the INSERT statement
+            print(f"Warning: 'role' not found or empty for user '{username}' in logins line: {line.strip()}. Assigning default role: '{DEFAULT_ROLE_FOR_NEW_USERS}'.")
+            role = DEFAULT_ROLE_FOR_NEW_USERS
+
+        if not username or not password_hash:
+            print(f"Warning: Missing username or password_hash in parsed data from logins line: {line.strip()}")
+            return None
+        # Basic validation for password_hash format (can be expanded)
+        if not (':' in password_hash or password_hash.upper() == '_NULL_' or password_hash.upper() == 'GOOGLE_AUTH_USER' or (password_hash.startswith('_') and password_hash.endswith('_'))):
+            print(f"Warning: User '{username}' has unrecognized password_hash format: '{password_hash}' in line: {line.strip()}. Will be loaded but may cause issues.")
+            return None
+        return username, password_hash, profile_picture_url, role
     else:
-        print(f"Warning: Could not parse logins line format: {line}")
+        # Only print warning for lines that look like they should be INSERTs but don't match
+        if line.upper().startswith("INSERT INTO USERS"):
+            print(f"Warning: Could not parse logins line format (regex mismatch): {line.strip()}")
         return None
 
 # --- Loading for tables.sql ---
@@ -315,6 +557,85 @@ def load_data_from_sql():
 
     print("Counts data loading/initialization complete.")
 
+# --- Loading for classes.sql ---
+def load_class_data_from_sql():
+    """Loads data from classes.sql into the in-memory class_data_store."""
+    global class_data_store
+    print(f"Attempting to load class data from: {CLASSES_SQL_FILE_PATH}")
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    temp_class_store = []
+    file_exists = CLASSES_SQL_FILE_PATH.exists()
+    classes_loaded_count = 0
+
+    if file_exists:
+        try:
+            with open(CLASSES_SQL_FILE_PATH, 'r', encoding='utf-8') as f:
+                for line_num, line in enumerate(f, 1):
+                    parsed = parse_classes_sql_line(line)
+                    if parsed:
+                        temp_class_store.append(parsed)
+                        classes_loaded_count += 1
+            print(f"Loaded {classes_loaded_count} class(es) from {CLASSES_SQL_FILE_PATH}.")
+        except Exception as e:
+            print(f"!!! ERROR reading or parsing {CLASSES_SQL_FILE_PATH}: {e}. Class data store might be empty or incomplete.")
+            temp_class_store.clear()
+    else:
+        print(f"Warning: {CLASSES_SQL_FILE_PATH} not found. No classes loaded. Class management will start with an empty list.")
+
+    # Update the global data store under lock
+    with data_lock: # Reusing data_lock for simplicity
+        class_data_store = temp_class_store
+
+    print("Class data loading complete.")
+
+# --- Loading for students.sql ---
+def load_students_data_from_sql():
+    """Loads data from students.sql into the in-memory students_data_store."""
+    global students_data_store
+    students_sql_file_path = DATA_DIR / 'students.sql'
+    print(f"Attempting to load student data from: {students_sql_file_path}")
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    temp_students_store = []
+    file_exists = students_sql_file_path.exists()
+    students_loaded_count = 0
+    codes_were_generated = False # Flag to track if we generated any codes
+
+    if file_exists:
+        try:
+            with open(students_sql_file_path, 'r', encoding='utf-8') as f:
+                for line_num, line in enumerate(f, 1):
+                    parsed = parse_students_sql_line(line)
+                    if parsed:
+                        # If code from file is empty or placeholder, generate a new one.
+                        # Otherwise, use the code from the file.
+                        if not parsed.get('code') or parsed['code'] == "''" or parsed['code'] == "": # Check for empty string or literal ''
+                            parsed['code'] = generate_random_code()
+                            codes_were_generated = True # Mark that a code was generated
+                        # If the SQL has an empty string for code, like VALUES ('', ...), the regex captures it as an empty string.
+                        # The above check handles this.
+                        temp_students_store.append(parsed)
+                        students_loaded_count += 1
+            print(f"Loaded {students_loaded_count} student configuration(s) from {students_sql_file_path}.")
+        except Exception as e:
+            print(f"!!! ERROR reading or parsing {students_sql_file_path}: {e}. Student data store might be empty or incomplete.")
+            temp_students_store.clear()
+    else:
+        print(f"Warning: {students_sql_file_path} not found. No student configurations loaded.")
+
+    # Update the global data store under lock
+    with data_lock: # Reusing data_lock for simplicity
+        students_data_store = temp_students_store
+
+    # If we generated any codes for students with initially empty code fields, save the data back.
+    if codes_were_generated:
+        print("Generated new codes for some students during load. Saving student data...")
+        if not save_students_data_to_sql(): # This function already handles locking
+            print("!!! CRITICAL: Failed to save student data to file after generating new codes.")
+
+    print("Student data loading complete.")
+
 # --- Loading for logins.sql --- <--- NEW
 def load_user_data_from_sql():
     """Loads user data from logins.sql into the in-memory user_password_store."""
@@ -332,8 +653,12 @@ def load_user_data_from_sql():
                 for line_num, line in enumerate(f, 1):
                     parsed = parse_logins_sql_line(line)
                     if parsed:
-                        username, password_hash = parsed
-                        temp_user_store[username] = password_hash
+                        username, password_hash, profile_picture_url, role = parsed # Unpack role
+                        temp_user_store[username] = {
+                            'password_hash': password_hash,
+                            'profile_picture_url': profile_picture_url if profile_picture_url else '_NULL_',
+                            'role': role # Store role
+                        }
                         users_loaded_count += 1
 
             print(f"Loaded {users_loaded_count} user(s) from {LOGINS_SQL_FILE_PATH}.")
@@ -404,7 +729,110 @@ def save_data_to_sql():
             print(traceback.format_exc()) # Print full traceback
             return False
         
+# --- Saving for classes.sql ---
+def save_class_data_to_sql():
+    """Saves the current in-memory class_data_store back to classes.sql. Returns True on success, False on failure."""
+    global class_data_store
+    print(f"Attempting to save class data to: {CLASSES_SQL_FILE_PATH}")
+    with data_lock: # Reusing data_lock
+        try:
+            sql_lines = []
+            sql_lines.append(f"-- Class data saved on {datetime.datetime.now().isoformat()} --")
+            sql_lines.append("")
+
+            # Sort by class name for consistent file output, if desired, or keep original order
+            # sorted_class_data = sorted(class_data_store, key=lambda x: x['class'])
+            # For now, saving in current order (append order for new items)
+            for class_item in class_data_store:
+                # Basic escaping for class name and teacher (should be sufficient if they don't contain quotes)
+                safe_class_name = class_item['class'].replace("'", "''")
+                safe_teacher = class_item['teacher'].replace("'", "''")
+                # Get new fields, defaulting to '_NULL_' if somehow missing (though parser/add should ensure they exist)
+                safe_iscountedby1 = str(class_item.get('iscountedby1', '_NULL_')).replace("'", "''")
+                safe_iscountedby2 = str(class_item.get('iscountedby2', '_NULL_')).replace("'", "''")
+                safe_iscountedby3 = str(class_item.get('iscountedby3', '_NULL_')).replace("'", "''")
+
+                insert_statement = (
+                    f"INSERT INTO classes (class, teacher, counts1, counts2, counts3, iscountedby1, iscountedby2, iscountedby3) VALUES "
+                    f"('{safe_class_name}', '{safe_teacher}', '{class_item['counts1']}', '{class_item['counts2']}', '{class_item['counts3']}', "
+                    f"'{safe_iscountedby1}', '{safe_iscountedby2}', '{safe_iscountedby3}');"
+                )
+                sql_lines.append(insert_statement)
+
+            with open(CLASSES_SQL_FILE_PATH, 'w', encoding='utf-8') as f:
+                f.write("\n".join(sql_lines))
+                f.write("\n")
+            print(f"Class data successfully saved to {CLASSES_SQL_FILE_PATH}")
+            return True
+        except Exception as e:
+            print(f"!!! UNEXPECTED ERROR during save_class_data_to_sql:")
+            print(traceback.format_exc())
+            return False
+
+# --- Saving for students.sql ---
+def save_students_data_to_sql():
+    """Saves the current in-memory students_data_store back to students.sql.
+       The 'code' field (either from file or generated if was empty) is now saved.
+       Returns True on success, False on failure.
+    """
+    global students_data_store
+    students_sql_file_path = DATA_DIR / 'students.sql'
+    print(f"Attempting to save student data to: {students_sql_file_path}")
+    with data_lock: # Reusing data_lock
+        try:
+            sql_lines = []
+            # Optional: Add a timestamp comment
+            # sql_lines.append(f"-- Student data saved on {datetime.datetime.now().isoformat()} --")
+            # sql_lines.append("")
+
+            for student_item in students_data_store:
+                # Basic escaping
+                safe_code = student_item.get('code', generate_random_code()).replace("'", "''") # Ensure code exists and is escaped
+                safe_class_name = student_item['class'].replace("'", "''")
+                safe_note = student_item['note'].replace("'", "''")
+                # counts_classes_str should already be in the correct format like '[1.A, 1.B]'
+                counts_classes_value = student_item.get('counts_classes_str', '[]') # Default to empty list string
+                insert_statement = (
+                    f"INSERT INTO students (code, class, note, counts_classes) VALUES "
+                    f"('{safe_code}', '{safe_class_name}', '{safe_note}', '{counts_classes_value}');"
+                )
+                sql_lines.append(insert_statement)
+
+            with open(students_sql_file_path, 'w', encoding='utf-8') as f:
+                f.write("\n".join(sql_lines))
+                f.write("\n")
+            print(f"Student data successfully saved to {students_sql_file_path}")
+            return True
+        except Exception as e:
+            print(f"!!! UNEXPECTED ERROR during save_students_data_to_sql:")
+            print(traceback.format_exc())
+            return False
+
 # --- Add this function near save_data_to_sql ---
+
+# --- Loading for config.json ---
+def load_main_config_from_json():
+    """Loads configuration from config.json into the in-memory server_config."""
+    global server_config
+    config_file_path = DATA_DIR / 'config.json'
+    print(f"Attempting to load server configuration from: {config_file_path}")
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    temp_config = {}
+    if config_file_path.is_file():
+        try:
+            with open(config_file_path, 'r', encoding='utf-8') as f:
+                temp_config = json.load(f)
+            print(f"Server configuration loaded from {config_file_path}.")
+        except json.JSONDecodeError:
+            print(f"!!! ERROR: Invalid JSON format in {config_file_path}. Server configuration might be incomplete or default.")
+        except Exception as e:
+            print(f"!!! ERROR reading {config_file_path}: {e}. Server configuration might be incomplete or default.")
+    else:
+        print(f"Warning: {config_file_path} not found. Using default server configuration.")
+
+    server_config = temp_config # Update the global variable
+    print("Server configuration loading complete.")
 
 # --- Lock for user data modifications ---
 # It's better practice to have a separate lock for user data
@@ -427,12 +855,16 @@ def save_user_data_to_sql():
 
             # Iterate through the in-memory store and generate INSERT statements
             # Sort by username for consistent file output
-            for username, password_hash in sorted(user_password_store.items()):
-                 # Basic escaping for username (should be sufficient if usernames don't contain quotes)
-                 safe_username = username.replace("'", "''")
-                 # Password hash is already hex, should be safe
-                 insert_statement = f"INSERT INTO users (username, password_hash) VALUES ('{safe_username}', '{password_hash}');"
-                 sql_lines.append(insert_statement)
+            for username, user_data in sorted(user_password_store.items()):
+                # Basic escaping for username (should be sufficient if usernames don't contain quotes)
+                safe_username = username.replace("'", "''")
+                password_hash = user_data['password_hash'] # Already hex or special string
+                profile_pic_url = user_data.get('profile_picture_url', '_NULL_')
+                role = user_data.get('role', DEFAULT_ROLE_FOR_NEW_USERS) # Get role, default if missing
+                safe_profile_pic_url = profile_pic_url.replace("'", "''") if profile_pic_url else '_NULL_'
+                safe_role = role.replace("'", "''") # Escape role
+                insert_statement = f"INSERT INTO users (username, password_hash, role, profile_picture_url) VALUES ('{safe_username}', '{password_hash}', '{safe_role}', '{safe_profile_pic_url}');"
+                sql_lines.append(insert_statement)
 
             # Write the file (overwrite existing)
             with open(LOGINS_SQL_FILE_PATH, 'w', encoding='utf-8') as f:
@@ -453,6 +885,45 @@ def save_user_data_to_sql():
             return False
 
 # --- End of new function ---
+
+# --- Function to save main config.json ---
+def save_main_config_to_json(new_oauth_data):
+    """
+    Reads the existing config.json, updates OAuth specific keys,
+    and writes the entire config back.
+    Also updates the in-memory server_config.
+    Returns True on success, False on failure.
+    """
+    config_file_path = DATA_DIR / 'config.json'
+    print(f"Attempting to update OAuth settings in: {config_file_path}")
+
+    with data_lock: # Reuse data_lock for simplicity
+        try:
+            current_config = {}
+            if config_file_path.exists():
+                with open(config_file_path, 'r', encoding='utf-8') as f:
+                    current_config = json.load(f)
+            
+            # Update keys from the provided data (assuming it's the full config or a partial update)
+            # A more robust approach would merge keys carefully. For now, assume new_oauth_data has relevant keys.
+            current_config.update(new_oauth_data) # Update with all keys from new_oauth_data
+
+            # Ensure specific keys are handled if needed, e.g., oauth_eneabled as string
+            current_config['oauth_eneabled'] = new_oauth_data.get('oauth_eneabled', current_config.get('oauth_eneabled', 'false'))
+            # allowed_oauth_domains and can_students_count_their_own_class will be updated by .update()
+
+            with open(config_file_path, 'w', encoding='utf-8') as f:
+                json.dump(current_config, f, indent=4) # Pretty print with indent
+            
+            print(f"OAuth settings successfully updated in {config_file_path}")
+            return True
+        except Exception as e:
+            # Note: If saving fails, the in-memory server_config might be inconsistent with the file.
+            print(f"!!! UNEXPECTED ERROR during save_main_config_to_json:")
+            print(traceback.format_exc())
+            return False
+
+# --- End function to save main config.json ---
 
 # --- Module-level Handler Functions for Increment/Decrement ---
 
@@ -597,7 +1068,13 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                     self.send_header(key, value)
             self.end_headers()
             if data is not None:
-                response_body = json.dumps(data).encode('utf-8') if content_type == 'application/json' else data
+                if content_type == 'application/json':
+                    if isinstance(data, bytes): # Data is already bytes (e.g., pre-read JSON file)
+                        response_body = data
+                    else: # Data is a Python object (dict/list) to be serialized
+                        response_body = json.dumps(data).encode('utf-8')
+                else: # Not JSON content type, assume data is already in correct byte format or is a Python object for non-JSON
+                    response_body = data
                 self.wfile.write(response_body)
         except Exception as e:
             print(f"!!! Error sending response (status {status_code}): {e}")
@@ -618,21 +1095,35 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
     # Inside your request handler (e.g., in do_GET or do_POST):
 
     def handle_get_users(self):
-        users = load_user_data_from_sql() # <--- Corrected line (no argument)
-        user_list = []
-        for username, password_hash in users.items():
-            # Determine status based on the hash format from the file
-            if password_hash is None or password_hash.upper() == '_NULL_': # Check for NULL explicitly if handle_add_user writes it
-                status = "not_set"
-            # You might need a more robust check than just length if handle_add_user writes NULL
-            # Let's assume parse_logins_sql_line filters out bad hashes, so what's loaded is valid or None/NULL
-            elif password_hash[0] == '_' and password_hash[-1] == '_':
-                status = password_hash[1:-1] # Extract the password between underscores
-            else:
-                status = "set" # If it has a valid hash format, it's set
+        # RBAC Check
+        _user_key, user_role = get_current_user_info(self)
+        if not self.is_logged_in() or user_role != ADMIN_ROLE:
+            self._send_response(403, {"error": "Forbidden: Administrator access required."})
+            return
 
-            # The frontend expects 'password' field, map status to it
-            user_list.append({"username": username, "password": status})
+        # Use in-memory user_password_store, no need to reload from file here
+        user_list = []
+        with data_lock: # Access user_password_store safely
+            for username_key, user_data_val in user_password_store.items():
+                password_hash = user_data_val['password_hash']
+                role = user_data_val.get('role', DEFAULT_ROLE_FOR_NEW_USERS) # Get role
+
+                # Determine password status for frontend
+                status = "set" # Default
+                if password_hash is None or password_hash.upper() == '_NULL_':
+                    status = "not_set"
+                elif password_hash == '_GOOGLE_AUTH_USER_':
+                    status = "google_auth_user"
+                # Check for pre-generated passwords like _password_, but not _NULL_ or _GOOGLE_AUTH_USER_
+                elif password_hash.startswith('_') and password_hash.endswith('_') and \
+                     password_hash.upper() != '_NULL_' and password_hash.upper() != '_GOOGLE_AUTH_USER_':
+                    status = password_hash[1:-1] # Extract the pre-generated password
+                
+                user_list.append({
+                    "username": username_key,
+                    "password": status, # 'password' field name is for frontend compatibility
+                    "role": role
+                })
         self.send_json(user_list)
 
     def handle_post_users(self):
@@ -661,7 +1152,11 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 return
 
             # Add the user with NOT_SET as the password
-            user_password_store[username] = "NOT_SET"
+            user_password_store[username] = {
+                'password_hash': 'NOT_SET', # Or use "_NOT_SET_" if you prefer the underscore convention
+                'profile_picture_url': '_NULL_',
+                'role': DEFAULT_ROLE_FOR_NEW_USERS # Assign default role
+            }
 
             # Call your save function here!
             success = save_user_data_to_sql()
@@ -714,6 +1209,12 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         if not username:
             self._send_response(400, {"error": "Missing username"})
             return
+                    
+        # RBAC check (already done by caller in do_POST, but good for standalone use)
+        _user_key, current_user_role = get_current_user_info(self)
+        if not self.is_logged_in() or current_user_role != ADMIN_ROLE:
+            self._send_response(403, {"error": "Forbidden: Administrator access required."})
+            return
 
         # --- Prevent deleting admin user ---
         if username == 'admin':
@@ -729,7 +1230,12 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
         with data_lock: # Use the lock
             if username not in user_password_store:
-                message = f"User '{username}' not found."
+                # Check if it's a case issue by iterating keys
+                found_user_case_insensitive = next((k for k in user_password_store if k.lower() == username.lower()), None)
+                if found_user_case_insensitive:
+                    message = f"User '{username}' not found (case mismatch? Found: '{found_user_case_insensitive}')."
+                else:
+                    message = f"User '{username}' not found."
                 status_code = 404 # Not Found
             else:
                 del user_password_store[username] # Remove from memory
@@ -757,6 +1263,15 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         username = data.get("username")
         new_password = data.get("new_password")
 
+        # RBAC check (already done by caller in do_POST, but good for standalone use)
+        # _user_key, current_user_role = get_current_user_info(self)
+        # if not self.is_logged_in() or current_user_role != ADMIN_ROLE:
+        #     self._send_response(403, {"error": "Forbidden: Administrator access required."})
+        #     return
+        if is_user_using_oauth(username, self): # username is the key from user_password_store
+            self._send_response(403, {"error": "Password change not allowed for Google OAuth users."})
+            return
+
         # --- Add checks for missing data ---
         if not username or not new_password:
             print("Error: Missing username or new_password in handle_reset_password data.")
@@ -782,7 +1297,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             else:
                 try:
                     # Update the in-memory store
-                    user_password_store[username] = hashed
+                    user_password_store[username]['password_hash'] = hashed # Only update hash
                     save_needed = True
                     print(f"Password set/reset in memory for user '{username}'.")
                 except Exception as e:
@@ -816,13 +1331,22 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         path = parsed_path.path
         query = urllib.parse.parse_qs(parsed_path.query)
 
+        # DEBUG: Print the requested path at the beginning of do_GET
+        print(f"--- DEBUG: do_GET received request for path: '{path}', full self.path: '{self.path}' ---")
+
+        user_key, user_role = get_current_user_info(self) # Get user info once
+
         if path == '/list_users':
             # --- Authentication Check ---
             if not self.is_logged_in():
                 print(f"Denied GET request to {path} - User not logged in.")
                 self._send_response(401, {"error": "Authentication required"})
                 return
-            # --- End Authentication Check ---
+            # --- RBAC Check ---
+            if user_role != ADMIN_ROLE:
+                self._send_response(403, {"error": "Forbidden: Administrator access required."})
+                return
+            # --- End RBAC Check ---
 
             # Acquire lock briefly to read user list safely
             with data_lock: # Or use a dedicated user_data_lock
@@ -856,26 +1380,204 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         # --- End Password Change Check for API GET ---
 
         elif path == '/api/users':
-            # Note: handle_get_users currently doesn't check authentication
-            # Add authentication check here if needed:
-            # if not self.is_logged_in():
-            #     print(f"Denied GET request to {path} - User not logged in.")
-            #     self._send_response(401, {"error": "Authentication required"})
-            #     return
+            # RBAC is handled inside handle_get_users
+            if not self.is_logged_in(): # Basic auth check
+                print(f"Denied GET request to {path} - User not logged in.")
+                self._send_response(401, {"error": "Authentication required"})
+                return
+            
             print(f"Handling GET request for {path}") # Add log
             self.handle_get_users() # Call the handler function
             return # Make sure to return after handling
 
+        elif path == '/api/classes':
+            if not self.is_logged_in():
+                print(f"Denied GET request to {path} - User not logged in.")
+                self._send_response(401, {"error": "Authentication required"})
+                return
+        
+            # RBAC Check
+            # user_role is already available from the top of do_GET
+            # Check if it's a student session via the specific student cookie
+            is_student_session = cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME) is not None
+
+            if not (user_role in [ADMIN_ROLE, TEACHER_ROLE] or is_student_session):
+                self._send_response(403, {"error": "Forbidden: Access to this resource is restricted for your account type."})
+                return
+            
+            with data_lock: # Ensure thread-safe read
+                # Send a copy to avoid issues if it's modified elsewhere during serialization
+                response_data = list(class_data_store) 
+            self._send_response(200, response_data)
+            return
+
+        elif path == '/api/students':
+            if not self.is_logged_in():
+                self._send_response(401, {"error": "Authentication required"})
+                return
+            
+            student_auth_cookie = cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME)
+            is_student_user_session = student_auth_cookie is not None
+            
+            response_payload = []
+            with data_lock: # Ensure thread-safe read
+                if is_student_user_session:
+                    student_code_from_cookie = student_auth_cookie.value
+                    found_student_data_item = None
+                    for s_data_item in students_data_store:
+                        if s_data_item.get('code') == student_code_from_cookie:
+                            found_student_data_item = s_data_item
+                            break
+                    
+                    if found_student_data_item:
+                        # Parse counts_classes_str for the single student
+                        counting_classes_list = []
+                        try:
+                            s_str = found_student_data_item.get('counts_classes_str', '[]')
+                            if s_str.startswith('[') and s_str.endswith(']'):
+                                s_content = s_str[1:-1]
+                                if s_content.strip():
+                                    counting_classes_list = [item.strip() for item in s_content.split(',')]
+                            else:
+                                print(f"Warning: counts_classes_str for student {found_student_data_item.get('class')} is not in expected list format: {s_str}")
+                        except Exception as e:
+                            print(f"Error parsing counts_classes_str for student {found_student_data_item.get('class')}: '{found_student_data_item.get('counts_classes_str')}'. Error: {e}")
+                        
+                        # Return a list containing only the single student's data
+                        response_payload.append({**found_student_data_item, "counting_classes": counting_classes_list})
+                    else:
+                        print(f"Warning: Student auth cookie for code '{student_code_from_cookie}' present, but no matching student found in store.")
+                        # response_payload remains empty, frontend will likely fallback or show no classes.
+                
+                else: # Not a student session, check for admin/teacher role
+                    if user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
+                        self._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
+                        return
+                    
+                    # Admin/Teacher: return all students
+                    for student_data_item in students_data_store:
+                        counting_classes_list = []
+                        try:
+                            s_str = student_data_item.get('counts_classes_str', '[]')
+                            if s_str.startswith('[') and s_str.endswith(']'):
+                                s_content = s_str[1:-1]
+                                if s_content.strip():
+                                    counting_classes_list = [item.strip() for item in s_content.split(',')]
+                            else:
+                                print(f"Warning: counts_classes_str for student {student_data_item.get('class')} is not in expected list format: {s_str}")
+                        except Exception as e:
+                            print(f"Error parsing counts_classes_str for student {student_data_item.get('class')}: '{student_data_item.get('counts_classes_str')}'. Error: {e}")
+                        response_payload.append({**student_data_item, "counting_classes": counting_classes_list})
+            
+            self._send_response(200, response_payload)
+            return
+
+        elif path == '/api/student/counting-details': # GET endpoint
+            if not self.is_logged_in():
+                self._send_response(401, {"error": "Authentication required"})
+                return
+            # RBAC: Allow admin/teacher
+            if user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
+                self._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
+                return
+
+            student_code_param = query.get('code', [None])[0] # Changed from note to code
+            day_param_str = query.get('day', [None])[0]
+
+            if not student_code_param or not day_param_str:
+                self._send_response(400, {"error": "Missing 'code' or 'day' query parameter."})
+                return
+            if day_param_str not in ['1', '2', '3']:
+                self._send_response(400, {"error": "Invalid 'day' parameter. Must be 1, 2, or 3."})
+                return
+            
+            target_student_config = None
+            with data_lock:
+                # Find the target student by note
+                for s_config in students_data_store:
+                    if s_config.get('code') == student_code_param: # Changed to find by code
+                        target_student_config = s_config
+                        break
+
+                if not target_student_config:
+                    self._send_response(404, {"error": f"Student configuration with code '{student_code_param}' not found."})
+                    return
+
+                student_main_class_name = target_student_config.get('class')
+                if not student_main_class_name:
+                    self._send_response(500, {"error": f"Student with code '{student_code_param}' has no class assigned."})
+                    return
+
+                # Determine the field to check in classes.sql based on the day
+                is_counted_by_field = f"iscountedby{day_param_str}"
+                response_payload = []
+
+                # Get the set of classes the current student (by note) is personally configured to count
+                target_student_personal_counts_str = target_student_config.get('counts_classes_str', '[]')
+                student_personal_counts_set = set()
+                try:
+                    if target_student_personal_counts_str.startswith('[') and target_student_personal_counts_str.endswith(']'):
+                        content = target_student_personal_counts_str[1:-1]
+                        if content.strip():
+                            student_personal_counts_set = {c.strip() for c in content.split(',') if c.strip()}
+                except Exception:
+                    print(f"Warning: Could not parse counts_classes_str for student with code {student_code_param}: {target_student_personal_counts_str}")
+
+                # Iterate through ALL classes in class_data_store to find which ones student_main_class_name is supposed to count today
+                for class_being_evaluated in class_data_store:
+                    # Check if student_main_class_name is responsible for counting class_being_evaluated on this day
+                    if class_being_evaluated.get(is_counted_by_field) == student_main_class_name:
+                        class_to_display_name = class_being_evaluated['class']
+
+                        # Check if the target_student (by note) has this class_to_display_name in their personal list
+                        student_is_counting_this_class = class_to_display_name in student_personal_counts_set
+
+                        # Find other students also counting this class_to_display_name
+                        also_counted_by_notes = []
+                        for other_student_config in students_data_store:
+                            if other_student_config.get('code') == student_code_param: # Skip the target student
+                                continue
+                            other_student_counts_classes_str = other_student_config.get('counts_classes_str', '[]')
+                            try:
+                                if other_student_counts_classes_str.startswith('[') and other_student_counts_classes_str.endswith(']'):
+                                    other_content = other_student_counts_classes_str[1:-1]
+                                    if other_content.strip():
+                                        if class_to_display_name in {c.strip() for c in other_content.split(',') if c.strip()}:
+                                            also_counted_by_notes.append(other_student_config.get('note', 'Unknown Note'))
+                            except Exception:
+                                print(f"Warning: Could not parse counts_classes_str for other student {other_student_config.get('note')}: {other_student_counts_classes_str}")
+                        
+                        response_payload.append({
+                            "class_name": class_to_display_name,
+                            "is_counted_by_current_student": student_is_counting_this_class,
+                            "also_counted_by_notes": sorted(list(set(also_counted_by_notes)))
+                        })
+                
+                # Prepare the final response object
+                final_api_response = {
+                    "student_note": target_student_config.get('note', ''), # Include student's note
+                    "student_class": target_student_config.get('class', ''), # Include student's main class
+                    "counting_details": sorted(response_payload, key=lambda x: x['class_name'])
+                }
+
+            self._send_response(200, final_api_response)
+            return
+
         # API Endpoint: /api/counts?class=ClassName
         elif path == '/api/counts':
-            # ... (existing code for /api/counts remains the same)
-            # ... make sure it also has an authentication check if needed!
-            # --- Authentication Check (Example - Add if counts should be protected) ---
-            # if not self.is_logged_in():
-            #     print(f"Denied GET request to {path} - User not logged in.")
-            #     self._send_response(401, {"error": "Authentication required"})
-            #     return
-            # --- End Authentication Check ---
+            if not self.is_logged_in():
+                print(f"Denied GET request to {path} - User not logged in.")
+                self._send_response(401, {"error": "Authentication required"})
+                return
+
+            # RBAC Check: Allow teachers, admins, and students
+            # is_student_session is already available from the top of do_GET if needed,
+            # but cookies variable is directly accessible here.
+            is_student_session_for_counts = cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME) is not None
+            if not (user_role in [ADMIN_ROLE, TEACHER_ROLE] or is_student_session_for_counts):
+                self._send_response(403, {"error": "Forbidden: Access denied for your role."})
+                return
+
             class_name = query.get('class', [None])[0]
             if not class_name:
                 self._send_response(400, {"error": "Missing 'class' query parameter"})
@@ -902,6 +1604,138 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             self._send_response(200, response_data)
             return # Make sure to return after handling
 
+        # --- Google OAuth Endpoints (Moved to do_GET) ---
+        elif path == '/login/google':
+            print(f"--- DEBUG: Matched '/login/google' endpoint ---")
+            try:
+                if InstalledAppFlow is None:
+                    print("!!! ERROR: InstalledAppFlow not available for Google OAuth.")
+                    self._send_response(500, {"error": "Google OAuth component (InstalledAppFlow) missing on server."})
+                    return
+
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    CLIENT_SECRETS_FILE, scopes=GOOGLE_SCOPES, redirect_uri=GOOGLE_REDIRECT_URI
+                )
+                auth_url, _ = flow.authorization_url(prompt='consent', access_type='offline') # Added access_type for refresh token
+
+                print(f"--- DEBUG: Redirecting to Google OAuth URL: {auth_url} ---")
+                self.send_response(302)
+                self.send_header('Location', auth_url)
+                self.end_headers()
+            except FileNotFoundError:
+                print(f"!!! ERROR: {CLIENT_SECRETS_FILE} not found. Google OAuth will not work.")
+                self._send_response(500, {"error": "Google OAuth configuration error (server-side)."})
+            except Exception as e:
+                print(f"!!! Error during Google OAuth initiation: {e}")
+                print(traceback.format_exc())
+                self._send_response(500, {"error": "Could not initiate Google login."})
+            return
+
+        elif path == '/oauth2callback':
+            print(f"--- DEBUG: Matched '/oauth2callback' endpoint ---")
+            try:
+                code = query.get('code', [None])[0] # 'query' is available from start of do_GET
+                if not code:
+                    self._send_response(400, {"error": "Missing authorization code from Google."})
+                    return
+
+                if InstalledAppFlow is None or google_discovery_service is None:
+                    print("!!! ERROR: OAuth components (InstalledAppFlow or discovery service) not available.")
+                    self._send_response(500, {"error": "Google OAuth components missing on server."})
+                    return
+
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    CLIENT_SECRETS_FILE, scopes=GOOGLE_SCOPES, redirect_uri=GOOGLE_REDIRECT_URI
+                )
+                flow.fetch_token(code=code)
+                credentials = flow.credentials
+
+                # Use the imported google_discovery_service module
+                userinfo_service = google_discovery_service.build('oauth2', 'v2', credentials=credentials)
+                user_info = userinfo_service.userinfo().get().execute()
+                
+                # DEBUG: Print user_info from Google
+                print(f"--- DEBUG: User info from Google: {user_info} ---")
+
+                _user_email_from_google = user_info.get('email') # Get the email as Google provides it
+                # Ensure the email used for cookies and storage is stripped of any surrounding quotes.
+                user_email = _user_email_from_google.strip('"') if _user_email_from_google else None
+
+                user_name_from_google_raw = user_info.get('name', _user_email_from_google) # Get the raw name, fallback to original email from Google
+                profile_picture = user_info.get('picture') # Get profile picture URL
+
+                # Determine the name to be used for the cookie
+                name_for_cookie = ''
+                if user_email: # If we have an email from Google (now stripped)
+                    name_for_cookie = user_email.split('@', 1)[0] # Take the part before the first '@'
+                elif user_name_from_google_raw: # Fallback to Google display name if email is somehow missing
+                    name_for_cookie = user_name_from_google_raw.strip('"') # Ensure raw name is also stripped if used
+                # If both email and raw name are missing, name_for_cookie will be empty.
+                # This is unlikely with Google OAuth scopes requesting email.
+
+                print(f"--- DEBUG: OAuth - Email: '{user_email}', Raw Google Name: '{user_name_from_google_raw}', Picture: '{profile_picture}', Generated Name for Cookie: '{name_for_cookie}' ---")
+
+                if not user_email:
+                    self._send_response(400, {"error": "Could not retrieve email from Google."})
+                    return
+
+                with data_lock:
+                    if user_email not in user_password_store:
+                        print(f"--- DEBUG: New Google user '{user_email}' (name: '{name_for_cookie}'). Adding to store. ---")
+                        user_password_store[user_email] = {
+                            'password_hash': '_GOOGLE_AUTH_USER_',
+                            'profile_picture_url': profile_picture if profile_picture else '_NULL_',
+                            'role': DEFAULT_ROLE_FOR_NEW_USERS # Assign default role for new Google users
+                        }
+                        save_user_data_to_sql()
+
+                all_cookies = create_cookies(USERNAME_COOKIE_NAME, name_for_cookie, path='/', httponly=False) + \
+                              create_cookies(SESSION_COOKIE_NAME, VALID_SESSION_VALUE, path='/') + \
+                              create_cookie_clear_headers(CHANGE_PASSWORD_COOKIE_NAME, path='/') + \
+                              create_cookies(GOOGLE_COOKIE_NAME, user_email, path='/', httponly=False)
+                
+                # --- Send response headers MANUALLY for OAuth callback ---
+                self.send_response(302) # Redirect
+                self.send_header('Location', '/menu.html') # Redirect location
+                # CORS Headers (important if the redirect target needs them, though usually not for 302)
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+                self.send_header('Access-Control-Allow-Headers', 'Content-Type, Cookie')
+                self.send_header('Access-Control-Allow-Credentials', 'true')
+
+                # Send EACH Set-Cookie header individually
+                print(f"--- DEBUG: OAuth - Preparing to send {len(all_cookies)} cookie(s)... ---")
+                for header_name, header_value in all_cookies:
+                    self.send_header(header_name, header_value)
+                    print(f"--- DEBUG: OAuth - Sent {header_name} header: {header_value} ---")
+                
+                self.end_headers()
+                # No body needed for a 302 redirect
+                print(f"--- DEBUG: OAuth successful for user '{name_for_cookie}', redirecting to /menu.html with cookies. ---")
+                # self._send_response(302, headers={'Location': '/menu.html', **dict(all_cookies)}) # Old problematic line
+            except Exception as e:
+                print(f"!!! Error during Google OAuth callback: {e}")
+                print(traceback.format_exc())
+                self._send_response(500, {"error": "Google OAuth callback failed."})
+            return
+
+        elif path == '/api/data/config': # Serve the main config.json
+            print(f"--- DEBUG: Matched request for '/backend/data/config.json' ---")
+            config_file_path = DATA_DIR / 'config.json'
+            if config_file_path.is_file():
+                try:
+                    with open(config_file_path, 'rb') as f:
+                        content = f.read()
+                    # _send_response handles CORS and content type if data is bytes
+                    self._send_response(200, data=content, content_type='application/json')
+                except Exception as e:
+                    print(f"!!! Error serving {config_file_path}: {e}")
+                    self._send_response(500, {"error": f"Error serving server configuration file: {e}"}, content_type='application/json')
+            else:
+                print(f"!!! CRITICAL: Server configuration file {config_file_path} not found.")
+                self._send_response(404, {"error": "Server configuration file not found."}, content_type='application/json')
+            return
+
         # File Serving Logic
         # --- Password Change Check (for Pages) ---
         # Check *after* login check but *before* serving protected files
@@ -914,6 +1748,19 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             return
         # --- End Password Change Check for Pages ---
+
+        # --- NEW: Student Access Restriction for specific pages ---
+        if path == '/classes.html' or path == '/config.html':
+            # Check if the user is generally logged in and if it's a student session
+            if self.is_logged_in(): 
+                cookies = self.get_cookies()
+                # Check if the student-specific auth cookie is present
+                if cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME):
+                    print(f"Access denied for student to {path}. Student session identified.")
+                    self._send_response(403, {"error": "Forbidden: Access to this page is restricted for your account type."})
+                    return
+        # --- END Student Access Restriction ---
+
         try:
             # Default to menu.html if root path is requested
             # Check for login.html request specifically
@@ -964,13 +1811,17 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                     content = f.read()
                 self._send_response(200, data=content, content_type=content_type)
             else:
-                 # If it's not a file, maybe it's a directory index request? Deny for now.
-                 print(f"File not found or is directory: {file_path}")
-                 self._send_response(404, {"error": "Resource not found"}, content_type='application/json')
+                # If it's not a recognized API endpoint or an existing file, return 404
+                print(f"--- DEBUG: Path '{path}' did not match specific API or OAuth endpoints, and file not found at '{file_path}', sending 404. ---")
+                self._send_response(404, {"error": "Resource not found", "requested_path": path}, content_type='application/json')
 
         except FileNotFoundError as e:
             print(f"File serving error (404): {e}")
-            self._send_response(404, {"error": "File not found"}, content_type='application/json')
+            # Ensure the error message includes the path for better debugging
+            # The 'path' variable here is the one parsed at the start of do_GET
+            print(f"--- DEBUG: FileNotFoundError for path '{path}', sending 404. ---")
+            self._send_response(404, {"error": "File not found", "requested_path": path}, content_type='application/json')
+
         except Exception as e:
             print(f"!!! Error serving file {path}: {e}")
             print(traceback.format_exc())
@@ -988,20 +1839,25 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         parsed_path = urllib.parse.urlparse(self.path)
         path = parsed_path.path
 
-        # Read request body
         content_length = int(self.headers.get('Content-Length', 0))
-        # Allow empty body for /logout
-        if content_length == 0 and path != '/logout':
-             self._send_response(400, {"error": "Empty request body"})
-             return
-        body = self.rfile.read(content_length)
+        post_body_bytes = b'' # Use a more descriptive name for the raw bytes
+        if content_length > 0:
+            post_body_bytes = self.rfile.read(content_length)
+        # Note: We don't immediately reject empty bodies here,
+        # as /logout allows it. Specific endpoints will check if they need a body.
 
         # --- LOGIN Endpoint ---
         if path == '/login':
+            # Login endpoint specifically requires a non-empty body
+            if not post_body_bytes:
+                self._send_response(400, {"error": "Missing request body for login"})
+                return
             try:
-                credentials = json.loads(body)
+                credentials = json.loads(post_body_bytes) # Use the correctly read body
                 username = credentials.get('username')
                 submitted_password = credentials.get('password')
+                print(f"DEBUG: Login attempt for username: '{username}'") # Log username
+
 
                 # Initialize login result and extra headers
                 login_successful = False
@@ -1023,11 +1879,16 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
                 if login_successful:
                     # --- Prepare the standard cookies ---
-                    user_cookie_headers = create_cookies(USERNAME_COOKIE_NAME, f"{username}", path='/')
-                    session_cookie_headers = create_cookies(SESSION_COOKIE_NAME, f"{VALID_SESSION_VALUE}", path='/')
+                    # Ensure username doesn't have accidental surrounding quotes before setting cookie
+                    cleaned_username = username.strip('"') if username else ""
+                    
+                    # Use cleaned_username for the cookie
+                    user_cookie_headers = create_cookies(USERNAME_COOKIE_NAME, cleaned_username, path='/', httponly=False)
+                    session_cookie_headers = create_cookies(SESSION_COOKIE_NAME, VALID_SESSION_VALUE, path='/')
+                    sql_user_cookie_headers = create_cookies(SQL_COOKIE_NAME, username, path='/', httponly=False) # Set the SQL auth cookie
 
                     # --- COMBINE standard cookies with any extra ones returned ---
-                    all_cookie_headers = user_cookie_headers + session_cookie_headers + extra_cookie_headers
+                    all_cookie_headers = user_cookie_headers + session_cookie_headers + extra_cookie_headers + sql_user_cookie_headers
                     # --- END CHANGE ---
 
                     # --- Send response headers MANUALLY ---
@@ -1047,7 +1908,17 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
                     self.end_headers()
 
-                    response_body = json.dumps({"success": True, "message": "Login successful"}).encode('utf-8')
+                    # Include role in login response
+                    user_key_for_role = username # This is the key used to lookup in user_password_store
+                    role = user_password_store.get(user_key_for_role, {}).get('role', DEFAULT_ROLE_FOR_NEW_USERS)
+
+                    response_payload = {
+                        "success": True,
+                        "message": "Login successful",
+                        "username": cleaned_username, # The display username for the cookie
+                        "role": role
+                    }
+                    response_body = json.dumps(response_payload).encode('utf-8')
                     self.wfile.write(response_body)
 
                     print(f"Login successful for user: {username}, {len(all_cookie_headers)} session/other cookie(s) sent.")
@@ -1064,6 +1935,60 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 self._send_response(500, {"error": f"Server error during login"})
             return # Stop processing after handling /login
 
+        # --- STUDENT LOGIN Endpoint ---
+        elif path == '/login/student':
+            if not post_body_bytes:
+                self._send_response(400, {"error": "Missing request body for student login"})
+                return
+            try:
+                credentials = json.loads(post_body_bytes)
+                student_code = credentials.get('code')
+                print(f"DEBUG: Student login attempt with code: '{student_code}'")
+
+                if not student_code:
+                    self._send_response(400, {"error": "Missing student code"})
+                    return
+
+                found_student = None
+                with data_lock: # Access students_data_store safely
+                    for student_item in students_data_store:
+                        if student_item.get('code') == student_code:
+                            found_student = student_item
+                            break
+                
+                if found_student:
+                    student_note = found_student.get('note', 'Student') # Fallback note
+                    student_actual_code = found_student.get('code') # This is the validated code
+
+                    session_cookie_headers = create_cookies(SESSION_COOKIE_NAME, VALID_SESSION_VALUE, path='/')
+                    user_cookie_headers = create_cookies(USERNAME_COOKIE_NAME, student_note, path='/', httponly=False) # httponly=False for JS access
+                    student_auth_cookie_headers = create_cookies(SQL_AUTH_USER_STUDENT_COOKIE_NAME, student_actual_code, path='/', httponly=False) # httponly=False
+
+                    all_cookie_headers = session_cookie_headers + user_cookie_headers + student_auth_cookie_headers
+
+                    self.send_response(200)
+                    self.send_header('Content-type', 'application/json')
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+                    self.send_header('Access-Control-Allow-Headers', 'Content-Type, Cookie')
+                    self.send_header('Access-Control-Allow-Credentials', 'true')
+
+                    for header_name, header_value in all_cookie_headers:
+                        self.send_header(header_name, header_value)
+                    
+                    self.end_headers()
+                    response_payload = {"success": True, "message": "Student login successful", "note": student_note, "class": found_student.get('class')}
+                    self.wfile.write(json.dumps(response_payload).encode('utf-8'))
+                    print(f"Student login successful for code: {student_actual_code} (Note: {student_note}). Cookies sent.")
+                else:
+                    self._send_response(401, {"error": "Invalid student code"})
+
+            except json.JSONDecodeError:
+                self._send_response(400, {"error": "Invalid JSON format in request body"})
+            except Exception as e:
+                print(f"Error during student login processing: {e}\n{traceback.format_exc()}")
+                self._send_response(500, {"error": "Server error during student login"})
+            return
         # --- LOGOUT Endpoint ---
         elif path == '/logout':
             # Prepare an expired cookie to clear the browser's cookie
@@ -1074,7 +1999,10 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             session_clear_headers = create_cookie_clear_headers(SESSION_COOKIE_NAME, path='/')
             user_clear_headers = create_cookie_clear_headers(USERNAME_COOKIE_NAME, path='/')
             change_pw_clear_headers = create_cookie_clear_headers(CHANGE_PASSWORD_COOKIE_NAME, path='/') # Clear this too
-            all_clear_headers = session_clear_headers + user_clear_headers + change_pw_clear_headers
+            sql_user_clear_headers = create_cookie_clear_headers(SQL_COOKIE_NAME, path='/') # Clear SQL user cookie if used
+            google_auth_clear_headers = create_cookie_clear_headers(GOOGLE_COOKIE_NAME, path='/') # Clear Google auth cookie if used
+            sql_student_auth_clear_headers = create_cookie_clear_headers(SQL_AUTH_USER_STUDENT_COOKIE_NAME, path='/') # Clear student auth cookie
+            all_clear_headers = session_clear_headers + user_clear_headers + change_pw_clear_headers + sql_user_clear_headers + google_auth_clear_headers + sql_student_auth_clear_headers
             # --- End using new function ---
 
             # --- Send response headers MANUALLY ---
@@ -1104,36 +2032,54 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             return # Stop processing after handling /logout
         # --- End Authentication Check ---
 
+        # --- For all other POST endpoints below, a JSON body is generally expected ---
+        # (and authentication is required)
+
         # --- Password Change Check for POST ---
         # Must happen *after* login check but *before* executing protected endpoint logic
         cookies = self.get_cookies() # Get fresh cookies for POST check
         password_change_required = cookies.get(CHANGE_PASSWORD_COOKIE_NAME)
 
-        # Define allowed POST paths during forced change
+        # Define POST paths allowed even if a password change is "pending" (e.g., from pre-gen password)
+        # /api/auth/change is the endpoint TO change the password.
         allowed_post_paths_during_change = ['/login', '/logout', '/api/auth/change']
 
-        if password_change_required and path not in allowed_post_paths_during_change:
+        # If the "ChangePasswordVerificationNotNeeded" cookie exists, it means they logged in with a pre-gen password.
+        # They should only be able to call /api/auth/change or /logout.
+        if password_change_required and password_change_required.value == "not-required" and path not in allowed_post_paths_during_change:
             print(f"Denied POST request to {path} - Password change required.")
             self._send_response(403, {"error": "Password change required before performing this action."})
             return
         # --- End Password Change Check ---
+
+        # --- RBAC: Get current user's role for protected endpoints ---
+        user_key_for_rbac, current_user_role = get_current_user_info(self)
+        if not self.is_logged_in(): # Should be caught by password_change_required logic too, but good to double check
+            self._send_response(401, {"error": "Authentication required for this action."})
+            return
+
 
         # --- Protected Endpoints below require login ---
         print(f"Processing authenticated POST request to {path}...") # Log access
 
         # Parse JSON body (already read, just need to decode)
         try:
-            # Handle potential empty body for endpoints that might not need it (though ours do)
-            if content_length > 0:
-                data = json.loads(body)
-            else:
-                data = {} # Or handle error if body is required
+            # Most subsequent endpoints expect a JSON body.
+            # If post_body_bytes is empty here, it means content_length was 0 and it wasn't /login or /logout.
+            if not post_body_bytes:
+                self._send_response(400, {"error": "Missing JSON payload for this endpoint"})
+                return
+            data = json.loads(post_body_bytes)
         except json.JSONDecodeError:
             self._send_response(400, {"error": "Invalid JSON payload"})
             return
-
         # --- Handle /add_user ---
         if path == '/add_user':
+            # RBAC Check
+            if current_user_role != ADMIN_ROLE:
+                self._send_response(403, {"error": "Forbidden: Administrator access required."})
+                return
+
             username = data.get('username')
             password = data.get('password')
 
@@ -1159,16 +2105,27 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                     if pass_null == False:
                         try:
                             hashed_pw = hash_password(password)
-                            user_password_store[username] = hashed_pw
+                            user_password_store[username] = {
+                                'password_hash': hashed_pw,
+                                'profile_picture_url': '_NULL_',
+                                'role': DEFAULT_ROLE_FOR_NEW_USERS # Assign default role
+                            }
                             save_needed = True
                             print(f"User '{username}' added to memory.")
                         except Exception as e:
                             print(f"!!! Error hashing password for {username}: {e}")
                             message = "Server error during password hashing."
                             status_code = 500
+                    elif pass_null == True and username in user_password_store: # User exists, setting password to NULL
+                        user_password_store[username]['password_hash'] = "_NULL_"
+                        save_needed = True # This branch is unlikely to be hit due to outer check, but if it were, it's fine.
                     else:
                         hashed_pw = "_NULL_" # Explicitly set to null
-                        user_password_store[username] = hashed_pw
+                        user_password_store[username] = { # Ensure a dictionary is stored
+                            'password_hash': hashed_pw,
+                            'profile_picture_url': '_NULL_', # Default profile picture URL
+                            'role': DEFAULT_ROLE_FOR_NEW_USERS # Assign default role
+                        }
                         print(f"User '{username}' added to memory with NULL password.")
                         save_needed = True
 
@@ -1192,19 +2149,390 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                  self._send_response(status_code, {"error": message}) # Send error message for frontend alert
             return # Handled
 
-        # --- Handle /change_password ---
-        elif path == '/api/auth/change':
-            # --- CORRECTED USERNAME RETRIEVAL ---
-            username_cookie = self.get_cookies().get(USERNAME_COOKIE_NAME)
-            if username_cookie:
-                username = username_cookie.value # Extract the string value from the Morsel
+        # --- Handle /api/classes/add ---
+        elif path == '/api/classes/add':
+            # RBAC Check
+            if current_user_role != ADMIN_ROLE:
+                self._send_response(403, {"error": "Forbidden: Administrator access required."})
+                return
+
+            class_name = data.get('class')
+            teacher = data.get('teacher')
+            counts1 = data.get('counts1', 'F') # Default to 'F' if not provided
+            counts2 = data.get('counts2', 'F')  # Use 'counts2' to match SQL and JS
+            counts3 = data.get('counts3', 'F')  # Use 'counts3' to match SQL and JS
+            # Get new fields, defaulting to _NULL_
+            iscountedby1 = data.get('iscountedby1', '_NULL_')
+            iscountedby2 = data.get('iscountedby2', '_NULL_')
+            iscountedby3 = data.get('iscountedby3', '_NULL_')
+
+            if not class_name or not teacher:
+                self._send_response(400, {"error": "Missing class name or teacher"})
+                return
+            if counts1 not in ['T', 'F'] or counts2 not in ['T', 'F'] or counts3 not in ['T', 'F']:
+                self._send_response(400, {"error": "Invalid counts values (must be T or F)"})
+                return
+
+            success = False
+            message = "Failed to add class."
+            status_code = 500
+
+            with data_lock:
+                if any(c['class'] == class_name for c in class_data_store):
+                    message = f"Class '{class_name}' already exists."
+                    status_code = 409 # Conflict
+                else:
+                    new_class = {
+                        "class": class_name, "teacher": teacher,
+                        "counts1": counts1, "counts2": counts2, "counts3": counts3,
+                        "iscountedby1": iscountedby1, "iscountedby2": iscountedby2,
+                        "iscountedby3": iscountedby3
+                    }
+                    class_data_store.append(new_class)
+                    # Sort the class_data_store alphabetically by class name
+                    class_data_store.sort(key=lambda x: x['class'])
+                    if save_class_data_to_sql():
+                        success = True
+                        message = f"Class '{class_name}' added successfully."
+                        status_code = 201 # Created
+                    else:
+                        # Revert add if save fails
+                        class_data_store.pop() 
+                        message = f"Failed to save class '{class_name}' to file."
+                        status_code = 500
+            
+            if success:
+                self._send_response(status_code, {"success": True, "message": message})
             else:
-                # This case should ideally not happen if the request is authenticated,
-                # but handle it defensively.
+                self._send_response(status_code, {"error": message})
+            return
+
+        # --- Handle /api/classes/remove ---
+        elif path == '/api/classes/remove':
+            # RBAC Check
+            if current_user_role != ADMIN_ROLE:
+                self._send_response(403, {"error": "Forbidden: Administrator access required."})
+                return
+
+            class_name_to_remove = data.get('class')
+            if not class_name_to_remove:
+                self._send_response(400, {"error": "Missing class name to remove"})
+                return
+
+            success = False
+            message = "Failed to remove class."
+            status_code = 500
+
+            with data_lock:
+                original_len = len(class_data_store)
+                class_data_store[:] = [c for c in class_data_store if c['class'] != class_name_to_remove]
+                if len(class_data_store) < original_len: # If something was removed
+                    if save_class_data_to_sql():
+                        success = True
+                        message = f"Class '{class_name_to_remove}' removed successfully."
+                        status_code = 200
+                    else:
+                        # This is tricky, if save fails, we should ideally reload or revert.
+                        # For now, log error, data in memory is changed but not file.
+                        message = f"Class '{class_name_to_remove}' removed from memory, but FAILED to save to file."
+                        status_code = 500 # Internal Server Error
+                else:
+                    message = f"Class '{class_name_to_remove}' not found."
+                    status_code = 404 # Not Found
+
+            if success:
+                self._send_response(status_code, {"success": True, "message": message})
+            else:
+                self._send_response(status_code, {"error": message})
+            return
+
+        # --- Handle /api/classes/update_counts ---
+        elif path == '/api/classes/update_counts':
+            # RBAC Check
+            if current_user_role != ADMIN_ROLE:
+                self._send_response(403, {"error": "Forbidden: Administrator access required."})
+                return
+
+            class_name = data.get('class')
+            count_field = data.get('countField') # e.g., "counts1", "counts2", "counts3"
+            new_value = data.get('value')       # 'T' or 'F'
+
+            if not all([class_name, count_field, new_value is not None]): # new_value can be 'F'
+                self._send_response(400, {"error": "Missing class, countField, or value"})
+                return
+            
+            # Ensure count_field matches the keys used in your data (including the typo)
+            valid_count_fields = ["counts1", "counts2", "counts3"]
+            if count_field not in valid_count_fields:
+                self._send_response(400, {"error": f"Invalid countField. Must be one of {valid_count_fields}"})
+                return
+            
+            if new_value not in ['T', 'F']:
+                self._send_response(400, {"error": "Invalid value. Must be 'T' or 'F'"})
+                return
+
+            success = False
+            message = "Failed to update class count."
+            status_code = 500
+
+            with data_lock:
+                class_to_update = next((cls_item for cls_item in class_data_store if cls_item['class'] == class_name), None)
+                
+                if not class_to_update:
+                    message = f"Class '{class_name}' not found."
+                    status_code = 404
+                else:
+                    class_to_update[count_field] = new_value
+                    if save_class_data_to_sql():
+                        success = True
+                        message = f"Count '{count_field}' for class '{class_name}' updated to '{new_value}'."
+                        status_code = 200
+                    else:
+                        message = f"Count for class '{class_name}' updated in memory, but FAILED to save to file. Consider restarting server or checking file permissions."
+                        status_code = 500 # Keep as 500, as the persistent save failed
+            
+            if success:
+                self._send_response(status_code, {"success": True, "message": message})
+            else:
+                self._send_response(status_code, {"error": message})
+            return
+
+        # --- Handle /api/classes/update_iscountedby ---
+        elif path == '/api/classes/update_iscountedby':
+            # RBAC Check
+            if current_user_role not in [ADMIN_ROLE, TEACHER_ROLE]: # Allow Admins and Teachers
+                self._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
+                return
+
+            class_name_to_update = data.get('class')
+            day_identifier = data.get('dayIdentifier') # '1', '2', or '3'
+            new_value = data.get('value')
+
+            if not all([class_name_to_update, day_identifier, new_value is not None]):
+                self._send_response(400, {"error": "Missing class, dayIdentifier, or value"})
+                return
+
+            if day_identifier not in ['1', '2', '3']:
+                self._send_response(400, {"error": "Invalid dayIdentifier. Must be '1', '2', or '3'."})
+                return
+            
+            # Map dayIdentifier to the actual field name
+            field_to_update = f"iscountedby{day_identifier}"
+
+            # --- Server-side check for can_students_count_their_own_class ---
+            # Read config.json directly for this check on every request
+            allow_self_count_str = 'true' # Default to true (allow self-count)
+            config_file_path = DATA_DIR / 'config.json'
+            try:
+                if config_file_path.is_file():
+                    with open(config_file_path, 'r', encoding='utf-8') as f:
+                        current_config_on_disk = json.load(f)
+                    allow_self_count_str = current_config_on_disk.get('can_students_count_their_own_class', 'true')
+                    print(f"DEBUG: Read 'can_students_count_their_own_class' from disk: {allow_self_count_str}")
+                else:
+                    print(f"Warning: {config_file_path} not found during iscountedby update. Defaulting 'can_students_count_their_own_class' to 'true'.")
+            except json.JSONDecodeError:
+                print(f"!!! ERROR: Invalid JSON in {config_file_path} during iscountedby update. Defaulting 'can_students_count_their_own_class' to 'true'.")
+            except Exception as e:
+                print(f"!!! ERROR reading {config_file_path} during iscountedby update: {e}. Defaulting 'can_students_count_their_own_class' to 'true'.")
+            
+            allow_self_count = allow_self_count_str.lower() == 'true'
+            # --- End of direct config file read ---
+
+            # Old way using in-memory server_config:
+            # allow_self_count_str = server_config.get('can_students_count_their_own_class', 'true') # Default to true if missing
+            # allow_self_count = allow_self_count_str.lower() == 'true'
+
+            if not allow_self_count and new_value == class_name_to_update:
+                self._send_response(400, {"error": f"Configuration prevents class '{class_name_to_update}' from counting itself."})
+                return
+            # --- End server-side check ---
+
+            success = False
+            message = "Failed to update class counting assignment."
+            status_code = 500
+
+            with data_lock:
+                class_found = False
+                for cls_item in class_data_store:
+                    if cls_item['class'] == class_name_to_update:
+                        cls_item[field_to_update] = new_value
+                        class_found = True
+                        break
+                
+                if not class_found:
+                    message = f"Class '{class_name_to_update}' not found."
+                    status_code = 404
+                else:
+                    if save_class_data_to_sql():
+                        success = True
+                        message = f"Assignment for class '{class_name_to_update}' on day {day_identifier} updated to '{new_value}' and saved."
+                        status_code = 200
+                    else:
+                        message = f"Assignment for class '{class_name_to_update}' updated in memory, but FAILED to save to file."
+                        status_code = 500
+            if success:
+                self._send_response(status_code, {"success": True, "message": message})
+            else:
+                self._send_response(status_code, {"error": message})
+            return
+
+        # --- Handle /api/students/remove ---
+        elif path == '/api/students/remove':
+            if not self.is_logged_in(): # Should be caught by earlier checks
+                self._send_response(401, {"error": "Authentication required"})
+                return
+            # RBAC Check
+            if current_user_role not in [ADMIN_ROLE, TEACHER_ROLE]: # Allow Admins and Teachers
+                self._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
+                return
+
+            student_code_to_remove = data.get('code') # Identify student by their 'code'
+            if not student_code_to_remove:
+                self._send_response(400, {"error": "Missing 'code' of student configuration to remove"})
+                return
+
+            success = False
+            message = "Failed to remove student configuration."
+            status_code = 500
+
+            with data_lock:
+                original_len = len(students_data_store)
+                # Filter out the student to remove
+                students_data_store[:] = [s_config for s_config in students_data_store if s_config.get('code') != student_code_to_remove]
+                
+                if len(students_data_store) < original_len: # If something was removed
+                    if save_students_data_to_sql():
+                        success = True
+                        # We don't easily have the note/class here without finding it first, so a generic message is fine
+                        message = f"Student configuration with code '{student_code_to_remove}' removed successfully."
+                        status_code = 200
+                    else:
+                        message = f"Student configuration with code '{student_code_to_remove}' removed from memory, but FAILED to save to file."
+                        status_code = 500 # Internal Server Error
+                else:
+                    message = f"Student configuration with code '{student_code_to_remove}' not found."
+                    status_code = 404 # Not Found
+            self._send_response(status_code, {"success": success, "message": message} if success else {"error": message})
+            return
+
+        # --- Handle /api/students/add ---
+        elif path == '/api/students/add':
+            if not self.is_logged_in():
+                self._send_response(401, {"error": "Authentication required"})
+                return
+            # RBAC Check - Allow Admins and Teachers to add student configurations
+            if current_user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
+                self._send_response(403, {"error": "Forbidden: Administrator access required."})
+                return
+
+            student_class = data.get('class')
+            note = data.get('note', '') # Default to empty string if note is not provided
+
+            if not student_class:
+                self._send_response(400, {"error": "Missing 'class' for the new student configuration."})
+                return
+
+            success = False
+            message = "Failed to add student configuration."
+            status_code = 500
+
+            with data_lock:
+                # Removed the check for existing student configuration by class.
+                # Now multiple configurations can exist for the same class,
+                # distinguished by their notes or codes.
+                new_student_config = {
+                    "code": generate_random_code(), # Server generates the code
+                    "class": student_class,
+                    "note": note,
+                    "counts_classes_str": "[]" # New students start with no classes to count
+                }
+                students_data_store.append(new_student_config)
+                students_data_store.sort(key=lambda x: (x['class'], x.get('note', ''))) # Keep sorted by class, then note
+
+                if save_students_data_to_sql():
+                    success = True
+                    message = f"Student configuration for class '{student_class}' (Note: '{note}') added successfully."
+                    status_code = 201 # Created
+                else:
+                    students_data_store.pop() # Revert in-memory change if save fails
+                    message = f"Failed to save new student configuration for '{student_class}' (Note: '{note}') to file."
+                    status_code = 500
+            self._send_response(status_code, {"success": success, "message": message} if success else {"error": message})
+            return
+        
+        # --- Handle /api/student/update-counting-class ---
+        elif path == '/api/student/update-counting-class': # POST endpoint
+            if not self.is_logged_in():
+                self._send_response(401, {"error": "Authentication required"})
+                return
+            # RBAC Check - Only Admins/Teachers can modify student counting assignments
+            if current_user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
+                self._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
+                return
+
+            student_code_to_update = data.get('student_code') # Changed from student_note
+            class_to_update = data.get('class_name')
+            is_counting = data.get('is_counting') # boolean
+
+            if not student_code_to_update or not class_to_update or is_counting is None:
+                self._send_response(400, {"error": "Missing student_code, class_name, or is_counting status."})
+                return
+
+            success = False
+            message = "Failed to update student's counting classes."
+            status_code = 500
+            student_note_for_message = "Unknown" # For user-friendly messages
+
+            with data_lock:
+                target_student_config = next((s for s in students_data_store if s.get('code') == student_code_to_update), None)
+
+                if not target_student_config:
+                    message = f"Student configuration with code '{student_code_to_update}' not found."
+                    status_code = 404
+                else:
+                    student_note_for_message = target_student_config.get('note', student_code_to_update)
+                    counts_str = target_student_config.get('counts_classes_str', '[]')
+                    current_counts_set = set()
+                    if counts_str.startswith('[') and counts_str.endswith(']'):
+                        content = counts_str[1:-1]
+                        if content.strip():
+                            current_counts_set = {c.strip() for c in content.split(',') if c.strip()}
+                    
+                    if is_counting:
+                        current_counts_set.add(class_to_update)
+                    else:
+                        current_counts_set.discard(class_to_update) # Use discard to not raise error if not present
+                    
+                    # Reconstruct the string, sorted for consistency
+                    sorted_list_of_classes = sorted(list(current_counts_set))
+                    new_counts_classes_str = f"[{', '.join(sorted_list_of_classes)}]" if sorted_list_of_classes else "[]"
+                    
+                    target_student_config['counts_classes_str'] = new_counts_classes_str
+
+                    if save_students_data_to_sql():
+                        success = True
+                        action = "added to" if is_counting else "removed from"
+                        message = f"Class '{class_to_update}' {action} student '{student_note_for_message}'s counting list."
+                        status_code = 200
+                    else:
+                        # Attempt to revert in-memory change if save fails (though original counts_str was overwritten)
+                        # For simplicity, we'll just report the error. A more robust undo would store original_counts_str.
+                        message = f"Failed to save updated counting list for student '{student_note_for_message}' to file."
+                        status_code = 500
+            self._send_response(status_code, {"success": success, "message": message} if success else {"error": message})
+            return
+        # --- Handle /api/auth/change ---
+        elif path == '/api/auth/change':
+            # user_key_for_rbac (user's actual key in user_password_store) is already available
+            if not user_key_for_rbac: # Should be caught by is_logged_in earlier
                 print("Error: Username cookie missing in authenticated /api/auth/change request.")
                 self._send_response(401, {"error": "Authentication error: User identity not found."})
                 return
-            # --- END CORRECTION ---
+            if is_user_using_oauth(user_key_for_rbac, self): # Pass the correct key
+                self._send_response(403, {"error": "Password change not allowed for Google OAuth users."})
+                return
+            username_for_messages = user_key_for_rbac # For logging/messages
 
             old_password = data.get('oldPassword')
             new_password = data.get('newPassword') # Get new password from request
@@ -1216,7 +2544,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 verification_needed = False # Override whatever the client sent
             # --- End cookie check ---
             
-            if not username or not new_password:
+            if not user_key_for_rbac or not new_password: # Check against the actual key
                 self._send_response(400, {"error": "Missing username or new password"})
                 return
 
@@ -1226,17 +2554,16 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             save_needed = False
 
             with data_lock: # Or use a dedicated user_data_lock
-                stored_password_info = user_password_store.get(username)
+                stored_user_data = user_password_store.get(user_key_for_rbac)
 
-                if not stored_password_info:
-                    message = f"User '{username}' not found."
+                if not stored_user_data:
+                    message = f"User '{username_for_messages}' not found."
                     status_code = 404 # Not Found
                 else:
                     if verification_needed == True:
                         # verify_password returns a tuple (bool, headers)
-                        is_old_valid, _ = verify_password(stored_password_info, old_password, username)
+                        is_old_valid, _ = verify_password(stored_user_data, old_password, username_for_messages)
                         if not is_old_valid:
-                        # if verify_password(stored_password_info, old_password, username) == False:
                             message = "Old password verification failed."
                             status_code = 401
                             self._send_response(status_code, {"error": message})
@@ -1244,22 +2571,22 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
                     try:
                         hashed_pw = hash_password(new_password)
-                        user_password_store[username] = hashed_pw
+                        user_password_store[user_key_for_rbac]['password_hash'] = hashed_pw # Update only hash
                         save_needed = True
-                        print(f"Password changed in memory for user '{username}'.")
+                        print(f"Password changed in memory for user '{username_for_messages}'.")
                     except Exception as e:
-                        print(f"!!! Error hashing new password for {username}: {e}")
+                        print(f"!!! Error hashing new password for {username_for_messages}: {e}")
                         message = "Server error during password hashing."
                         status_code = 500
 
                 if save_needed:
                     if save_user_data_to_sql():
                         success = True
-                        message = f"Password for user '{username}' changed successfully."
+                        message = f"Password for user '{username_for_messages}' changed successfully."
                         status_code = 200 # OK
                     else:
                         success = False
-                        message = f"Password changed in memory for '{username}', but FAILED to save to file."
+                        message = f"Password changed in memory for '{username_for_messages}', but FAILED to save to file."
                         status_code = 500
 
             if success:
@@ -1293,6 +2620,11 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
         # --- Handle /remove_user ---
         elif path == '/remove_user':
+            # RBAC Check
+            if current_user_role != ADMIN_ROLE:
+                self._send_response(403, {"error": "Forbidden: Administrator access required."})
+                return
+
             username = data.get('username')
 
             if not username:
@@ -1338,15 +2670,31 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                  self._send_response(status_code, {"error": message})
             return # Handled
         
-        elif self.path == "/api/users":
-            self.handle_add_user()
+        elif path == "/api/users": # POST to /api/users
+            # RBAC check is inside handle_post_users, called after auth check
+            self.handle_post_users() # This adds a user with 'NOT_SET' password
             return # Handled
-        elif self.path == "/api/users/remove":
+        elif path == "/api/users/remove":
+            # RBAC Check
+            if current_user_role != ADMIN_ROLE:
+                self._send_response(403, {"error": "Forbidden: Administrator access required."})
+                return
             self.handle_remove_user(data)
-        elif self.path == "/api/users/set":
+            return # Handled
+        elif path == "/api/users/set":
+            # RBAC Check
+            if current_user_role != ADMIN_ROLE:
+                self._send_response(403, {"error": "Forbidden: Administrator access required."})
+                return
             self.handle_reset_password(data)
-        elif self.path == "/api/users/reset":
+            return # Handled
+        elif path == "/api/users/reset": # Alias for /set
+            # RBAC Check
+            if current_user_role != ADMIN_ROLE:
+                self._send_response(403, {"error": "Forbidden: Administrator access required."})
+                return
             self.handle_reset_password(data)
+            return # Handled
 
         # --- Handle /api/increment & /api/decrement ---
         elif path == '/api/increment':
@@ -1356,6 +2704,31 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         elif path == '/api/decrement':
             handle_decrement_module(self, data, self.path)
 
+        # --- Handle /api/data/save/config ---
+        elif path == '/api/data/save/config':
+            # RBAC Check
+            if current_user_role != ADMIN_ROLE:
+                self._send_response(403, {"error": "Forbidden: Administrator access required."})
+                return
+            
+            # Data is already parsed from the start of do_POST
+            oauth_eneabled = data.get('oauth_eneabled')
+            allowed_domains = data.get('allowed_oauth_domains')
+
+            if oauth_eneabled is None or not isinstance(allowed_domains, list):
+                self._send_response(400, {"error": "Invalid payload. 'oauth_eneabled' (string) and 'allowed_oauth_domains' (list) are required."})
+                return
+            
+            # Ensure oauth_eneabled is "true" or "false"
+            if oauth_eneabled not in ["true", "false"]:
+                self._send_response(400, {"error": "'oauth_eneabled' must be the string 'true' or 'false'."})
+                return
+
+            if save_main_config_to_json(data):
+                self._send_response(200, {"message": "OAuth configuration saved successfully."})
+            else:
+                self._send_response(500, {"error": "Failed to save OAuth configuration to file."})
+            return
         # --- Handle unknown authenticated POST paths ---
         else:
             print(f"Authenticated POST request to unknown path: {path}")
@@ -1372,7 +2745,10 @@ if __name__ == "__main__":
     # Load counts data first
     load_data_from_sql()
     # Load user login data <--- NEW
+    load_main_config_from_json() # Load server configuration
     load_user_data_from_sql()
+    load_class_data_from_sql() # Load class data
+    load_students_data_from_sql() # Load student data
     # --- End Load Data ---
 
     # Server setup using ThreadingMixIn for basic concurrency
@@ -1386,9 +2762,14 @@ if __name__ == "__main__":
     print(f"Frontend root: {FRONTEND_DIR}")
     print(f"Using counts data file: {SQL_FILE_PATH}")
     print(f"Using logins data file: {LOGINS_SQL_FILE_PATH}") # <--- NEW
+    print(f"Using classes data file: {CLASSES_SQL_FILE_PATH}")
+    print(f"Using students data file: {DATA_DIR / 'students.sql'}")
+    print(f"Using Google client secrets file: {CLIENT_SECRETS_FILE}")
     print(f"Using hashlib.pbkdf2_hmac with {ITERATIONS} iterations.")
     print(f"\nAccess the application via: http://{HOST}:{PORT}/")
     print(f"(Will redirect to /login.html if not logged in)")
+    print("-------------------------------------------------------------")
+    print("")
 
 
     try:

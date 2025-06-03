@@ -58,18 +58,42 @@
         /* Add some padding to the body so content doesn't start under the fixed buttons */
         body {
             padding-top: 60px; /* Adjust this value based on button height + desired space */
+            padding-left: 15px; /* Add some padding on the left for the username */
         }
 
+        #loggedInUser {
+          display: flex; /* Arrange circle and username side-by-side */
+          align-items: center; /* Vertically align items in the middle */
+          position: fixed;
+          top: 20px; /* Fine-tuned for axis alignment with buttons */
+          left: 20px;
+          font-weight: bold;
+          color: #333; /* Or your preferred color */
+        }
+
+        #profileCircle {
+          width: 30px; /* Adjust size as needed */
+          height: 30px; /* Adjust size as needed */
+          background-color: #ccc; /* Gray color */
+          border-radius: 50%; /* Makes it a circle */
+          margin-right: 15px; /* Space between circle and username */
+        }
     </style>
 </head>
 <body>
+  <!-- Element to display the logged-in username -->
+  <div id="loggedInUser">
+    <div id="profileCircle"></div>
+    <span id="usernameText"></span>
+  </div>
 
   <!-- Container for Header Buttons -->
   <div id="headerButtons">
-    <!-- Config Button (Links to config.html) -->
+    <!-- Classes Button (Links to classes.html) -->
+    <button id="classesButton" class="header-button" onclick="window.location.href='classes.html'">Classes</button>
     <button id="configButton" class="header-button" onclick="window.location.href='config.html'">Config</button>
-    <!-- Config Button (Links to config.html) -->
-    <button id="configButton" class="header-button" onclick="window.location.href='change-password.html'">Change Password</button>
+    <!-- Change Password Button -->
+    <button id="changePasswordBtn" class="header-button" onclick="window.location.href='change-password.html'">Change Password</button>
     <!-- Logout Button -->
     <button id="logoutButton" class="header-button">Logout</button>
   </div>
@@ -77,16 +101,15 @@
   <h1>Color Days Counter</h1>
   <h2>Select Your Class:</h2>
 
-    <ul class="classList">
-      <!-- Add list items for each class you want -->
-      <li><a href="index.html?class=C1">Class 1</a></li>
-      <li><a href="index.html?class=C2">Class 2</a></li>
-      <li><a href="index.html?class=C3">Class 3</a></li>
-      <!-- Add more classes as needed -->
+    <ul class="classList" id="dynamicClassList">
+      <!-- Classes will be populated here by JavaScript -->
     </ul>
 
     <script>
-        const logoutButton = document.getElementById('logoutButton'); // Get the logout button
+        const dynamicClassList = document.getElementById('dynamicClassList');
+        const logoutButton = document.getElementById('logoutButton');
+        const classesButton = document.getElementById('classesButton'); // Get the Classes button
+        const configButton = document.getElementById('configButton'); // Get the Config button
         // No need to get configButton unless you add specific JS logic for it
 
         // --- Logout Functionality (Keep this as is) ---
@@ -116,6 +139,145 @@
 
         logoutButton.addEventListener('click', handleLogout);
         // --- END Logout Functionality ---
+
+        // --- Function to fetch and display classes ---
+        async function loadAndDisplayClasses() {
+            const studentCode = getCookie("SQLAuthUserStudent");
+            let classesToDisplay = [];
+            let errorMessage = null;
+
+            try {
+                if (studentCode) {
+                    console.log("Student session detected. Fetching specific classes for student code:", studentCode);
+                    const studentsResponse = await fetch('/api/students', { credentials: 'include' });
+                    if (!studentsResponse.ok) {
+                        const errorData = await studentsResponse.json().catch(() => ({ error: "Failed to fetch student data" }));
+                        throw new Error(errorData.error || `HTTP error! status: ${studentsResponse.status}`);
+                    }
+                    const allStudents = await studentsResponse.json();
+                    const currentStudent = allStudents.find(s => s.code === studentCode);
+
+                    if (currentStudent && currentStudent.counting_classes) {
+                        // The `counting_classes` array from /api/students contains the class names.
+                        // We need to format them into objects like /api/classes does for consistency,
+                        // or simply use the names directly if the structure is just { class: "ClassName" }.
+                        // For simplicity, we'll assume counting_classes is an array of strings.
+                        classesToDisplay = currentStudent.counting_classes.map(className => ({ class: className }));
+                        console.log("Displaying classes for student:", classesToDisplay);
+                    } else {
+                        console.warn("Current student data not found or no counting_classes. Student code:", studentCode);
+                        errorMessage = "Could not load your assigned classes. Showing all available classes.";
+                        // Fallback to fetching all classes if student-specific data is missing
+                        const allClassesResponse = await fetch('/api/classes', { credentials: 'include' });
+                        if (!allClassesResponse.ok) {
+                            const errorData = await allClassesResponse.json().catch(() => ({ error: "Failed to fetch all classes" }));
+                            throw new Error(errorData.error || `HTTP error! status: ${allClassesResponse.status}`);
+                        }
+                        classesToDisplay = await allClassesResponse.json();
+                    }
+                } else {
+                    // Not a student, or student cookie not found, load all classes
+                    console.log("No student session. Fetching all classes.");
+                    const response = await fetch('/api/classes', { credentials: 'include' });
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({ error: "Failed to fetch classes" }));
+                        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                    }
+                    classesToDisplay = await response.json();
+                }
+            } catch (error) {
+                console.error('Error loading classes:', error);
+                errorMessage = `Error loading classes: ${error.message}. Please try again later or contact support.`;
+            }
+
+            dynamicClassList.innerHTML = ''; // Clear any existing items
+            if (errorMessage) dynamicClassList.innerHTML = `<li>${errorMessage}</li>`;
+
+            classesToDisplay.forEach(cls => { // cls should be an object like { class: "ClassName" }
+                const listItem = document.createElement('li');
+                listItem.innerHTML = `<a href="index.html?class=${encodeURIComponent(cls.class)}">${cls.class}</a>`;
+                dynamicClassList.appendChild(listItem);
+            })
+        }
+
+        // --- Function to display logged-in username ---
+        function displayLoggedInUser() {
+          const cookies = document.cookie.split('; ');
+          const usernameCookie = cookies.find(row => row.startsWith('ColorDaysUser='));
+          const usernameTextSpan = document.getElementById('usernameText');
+
+          if (usernameCookie) {
+            const username = usernameCookie.split('=')[1];
+            usernameTextSpan.textContent = decodeURIComponent(username);
+          } else {
+          usernameTextSpan.textContent = 'Not Logged In'; // Fallback, circle will still show
+          }
+        }
+
+        // Helper function to get a specific cookie by name
+        function getCookie(name) {
+          const nameEQ = name + "=";
+          const ca = document.cookie.split(';');
+          for(let i = 0; i < ca.length; i++) {
+            let c = ca[i];
+            while (c.charAt(0) === ' ') c = c.substring(1, c.length); // trim leading spaces
+            if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length); // Return cookie value
+          }
+          return null; // Cookie not found
+        }
+
+        // --- Function to manage visibility of Admin/Teacher buttons for students ---
+        function manageStudentButtonVisibility() {
+            console.log("--- manageStudentButtonVisibility ---");
+            const studentAuthCookie = getCookie("SQLAuthUserStudent");
+            const isStudent = studentAuthCookie !== null;
+            console.log(`SQLAuthUserStudent cookie exists: ${isStudent}`);
+
+            if (isStudent) {
+                console.log("Student session detected. Hiding Classes and Config buttons.");
+                if (classesButton) classesButton.style.display = 'none';
+                if (configButton) configButton.style.display = 'none';
+            }
+            console.log("--- End manageStudentButtonVisibility ---");
+        }
+
+        // --- Function to manage visibility of Change Password button based on SQLAuthUser cookie ---
+        function manageChangePasswordButtonVisibility() {
+          console.log("--- manageChangePasswordButtonVisibility ---");
+          console.log("Raw document.cookie:", `'${document.cookie}'`);
+
+          const cookieName = "SQLAuthUser"; // The name of the cookie we're looking for
+          const sqlAuthCookieValue = getCookie(cookieName);
+          const cookieExists = sqlAuthCookieValue !== null;
+
+          console.log(`Cookie '${cookieName}' value (via getCookie): ${sqlAuthCookieValue}`);
+          console.log(`'${cookieName}' cookie exists status (based on getCookie): ${cookieExists}`);
+
+          // Select the button using its new unique ID
+          const changePasswordButton = document.getElementById('changePasswordBtn');
+          console.log("Change Password button element selected by ID:", changePasswordButton);
+
+          if (changePasswordButton) {
+            if (cookieExists) {
+              console.log(`SQLAuthUser cookie IS present (value: ${sqlAuthCookieValue}). Showing Change Password button.`);
+              changePasswordButton.style.display = ''; // Revert to default/stylesheet display (e.g., inline-block)
+            } else { // SQLAuthUser cookie does NOT exist
+              console.log("SQLAuthUser cookie is NOT present. Hiding Change Password button.");
+              changePasswordButton.style.display = 'none';
+            }
+          } else {
+            console.error("ERROR: Change Password button (ID: 'changePasswordBtn') not found in the DOM!");
+          }
+          console.log("--- End manageChangePasswordButtonVisibility ---");
+        }
+
+        // Load classes when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            loadAndDisplayClasses();
+            displayLoggedInUser(); // Also display the username
+            manageStudentButtonVisibility(); // Hide buttons if student
+            manageChangePasswordButtonVisibility(); // Update Change Password button visibility
+        });
     </script>
 
 </body>

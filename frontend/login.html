@@ -3,57 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <title>Login - Color Days</title>
-    <link rel="stylesheet" href="style.css"> <!-- Optional: Link to your existing style -->
-    <style>
-        /* Basic styling for the login form */
-        body {
-            font-family: sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding-top: 50px;
-        }
-        form {
-            border: 1px solid #ccc;
-            padding: 20px;
-            border-radius: 5px;
-            background-color: #f9f9f9;
-        }
-        label, input, button {
-            display: block;
-            margin-bottom: 10px;
-            width: 200px;
-        }
-        button {
-            width: auto;
-            padding: 8px 15px;
-            cursor: pointer;
-        }
-        #error-message {
-            color: red;
-            margin-top: 10px;
-            min-height: 1em; /* Reserve space for the message */
-        }
-    </style>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
     <h1>Login to Color Days Counter</h1>
-
-    <form id="loginForm">
-        <div>
-            <label for="username">Username:</label>
-            <input type="text" id="username" name="username" required>
-        </div>
-        <div>
-            <label for="password">Password:</label>
-            <input type="password" id="password" name="password" required>
-        </div>
-        <button type="submit">Login</button>
-    </form>
-
+    <div id="login-sections-container">
+        <section>
+            <h2>Login as Student</h2>
+            <form id="studentLoginForm">
+                <div>
+                    <label for="code">Code:</label>
+                    <input type="text" id="code" name="code" required>
+                </div>
+                <button type="submit">Login</button>
+            </form>
+        </section>
+        <section>
+            <h2>Login as Teacher</h2>
+            <button onclick="window.location.href='/login/google'">Login with Google</button>
+            <p style="display: flex; justify-content: center;">or</p>
+            <form id="loginForm" style="margin-top: 1rem;">
+                <div>
+                    <label for="username">Username:</label>
+                    <input type="text" id="username" name="username" required>
+                </div>
+                <div>
+                    <label for="password">Password:</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+                <button type="submit">Login</button>
+            </form>            
+        </section>
+    </div>
     <div id="error-message"></div>
-
     <script src="login.js"></script>
 </body>
 </html>
