@@ -965,7 +965,7 @@ def handle_increment_module(handler_instance, data, request_path):
     message = "Increment failed"
     status_code = 500
 
-    try:
+    try: # Outer try for the entire operation
         target_file_path = get_sql_file_path_for_day(day_identifier)
         # Load data for the specific day, this also initializes the file with defaults if needed
         day_specific_data = load_counts_from_file(target_file_path)
@@ -995,7 +995,15 @@ def handle_increment_module(handler_instance, data, request_path):
             print(traceback.format_exc())
             success = False
             message = "An internal error occurred during the increment operation."
-            status_code = 500
+            status_code = 500 # Ensure status_code is set for the error
+    except ValueError as ve: # Catch specific error from get_sql_file_path_for_day
+        message = str(ve)
+        status_code = 400 # Bad request
+    except Exception as e_outer: # Catch other errors from load_counts_from_file or other logic
+        print(f"!!! UNEXPECTED ERROR during POST {request_path} (outer try): {e_outer}")
+        print(traceback.format_exc())
+        message = "An internal error occurred during the increment operation."
+        status_code = 500 # Ensure status_code is set for the error
 
     if status_code == 200:
         handler_instance._send_response(status_code, {"success": success, "message": message})
@@ -1027,7 +1035,7 @@ def handle_decrement_module(handler_instance, data, request_path):
     message = "Decrement failed"
     status_code = 500
 
-    try:
+    try: # Outer try for the entire operation
         target_file_path = get_sql_file_path_for_day(day_identifier)
         day_specific_data = load_counts_from_file(target_file_path)
 
@@ -1054,14 +1062,14 @@ def handle_decrement_module(handler_instance, data, request_path):
             success = False
             message = "Count already zero"
             status_code = 400 # Bad request, can't decrement zero
-
-        try:
-        except Exception as e:
-            print(f"!!! UNEXPECTED ERROR during POST {request_path} operation (within lock):") # Use request_path
-            print(traceback.format_exc())
-            success = False
-            message = "An internal error occurred during the decrement operation."
-            status_code = 500
+    except ValueError as ve: # Catch specific error from get_sql_file_path_for_day
+        message = str(ve)
+        status_code = 400 # Bad request
+    except Exception as e: # Catch-all for other errors (load_counts_from_file, save_counts_to_file, etc.)
+        print(f"!!! UNEXPECTED ERROR during POST {request_path} operation: {e}")
+        print(traceback.format_exc())
+        message = "An internal error occurred during the decrement operation."
+        status_code = 500 # Ensure status_code is set for the error
 
     if status_code == 200:
         handler_instance._send_response(status_code, {"success": success, "message": message})
