@@ -239,6 +239,7 @@ CHANGE_PASSWORD_COOKIE_NAME = "ChangePasswordVerificationNotNeeded" # For the ch
 GOOGLE_COOKIE_NAME = "GoogleAuthUser" # For Google OAuth users
 SQL_COOKIE_NAME = "SQLAuthUser" # For SQL users
 SQL_AUTH_USER_STUDENT_COOKIE_NAME = "SQLAuthUserStudent" # For SQL Student users
+LANGUAGE_COOKIE_NAME = "language" # For language preference
 # --- End Session Configuration ---
 
 
@@ -2895,6 +2896,50 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 self._send_response(500, {"error": "Failed to save OAuth configuration to file."})
             return
         # --- Handle unknown authenticated POST paths ---
+        elif path == '/api/language/set':
+            # This endpoint can be accessed whether logged in or not.
+            if not post_body_bytes:
+                self._send_response(400, {"error": "Missing request body"})
+                return
+            try:
+                data = json.loads(post_body_bytes)
+                language_code = data.get('language')
+
+                if language_code not in ['cs', 'en']:
+                    self._send_response(400, {"error": "Invalid language code. Must be 'cs' or 'en'."})
+                    return
+
+                # Set cookie to expire in 1 year
+                max_age_1_year = 365 * 24 * 60 * 60
+                language_cookie_headers = create_cookies(
+                    LANGUAGE_COOKIE_NAME,
+                    language_code,
+                    path='/',
+                    max_age=max_age_1_year,
+                    httponly=False # Allow JS to read for UI updates if needed
+                )
+
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+                self.send_header('Access-Control-Allow-Headers', 'Content-Type, Cookie')
+                self.send_header('Access-Control-Allow-Credentials', 'true')
+
+                for header_name, header_value in language_cookie_headers:
+                    self.send_header(header_name, header_value)
+                
+                self.end_headers()
+                response_payload = {"success": True, "message": f"Language set to {language_code}"}
+                self.wfile.write(json.dumps(response_payload).encode('utf-8'))
+                print(f"Language cookie set to '{language_code}'.")
+            except json.JSONDecodeError:
+                self._send_response(400, {"error": "Invalid JSON payload"})
+            except Exception as e:
+                print(f"Error in /api/language/set: {e}")
+                traceback.print_exc()
+                self._send_response(500, {"error": "Server error while setting language."})
+            return # Handled
         else:
             print(f"Authenticated POST request to unknown path: {path}")
             self._send_response(404, {"error": "API endpoint not found"})

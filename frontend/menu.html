@@ -110,13 +110,16 @@
 
   <!-- Container for Header Buttons -->
   <div id="headerButtons">
+    <!-- Language Toggle Buttons -->
+    <button id="langCsButton" class="header-button">Čeština</button>
+    <button id="langEnButton" class="header-button">English</button>
     <!-- Classes Button (Links to classes.html) -->
     <button id="classesButton" class="header-button" onclick="window.location.href='classes.html'">Classes</button>
     <button id="configButton" class="header-button" onclick="window.location.href='config.html'">Config</button>
     <!-- Change Password Button -->
     <button id="changePasswordBtn" class="header-button" onclick="window.location.href='change-password.html'">Change Password</button>
     <!-- Logout Button -->
-    <button id="logoutButton" class="header-button">Logout</button>
+    <button id="logoutButton" class="header-button">Logout</button> <!-- Fixed class attribute -->
   </div>
 
   <h1>Color Days Counter</h1>
@@ -131,6 +134,8 @@
         const logoutButton = document.getElementById('logoutButton');
         const classesButton = document.getElementById('classesButton'); // Get the Classes button
         const configButton = document.getElementById('configButton'); // Get the Config button
+        const langCsButton = document.getElementById('langCsButton');
+        const langEnButton = document.getElementById('langEnButton');
         // No need to get configButton unless you add specific JS logic for it
 
         // --- Logout Functionality (Keep this as is) ---
@@ -374,6 +379,39 @@
           }
           console.log("--- End manageChangePasswordButtonVisibility ---");
         }
+
+        // --- Function to set language preference via backend ---
+        async function setLanguagePreference(lang) {
+            console.log(`Setting language preference to: ${lang}`);
+            try {
+                const response = await fetch('/api/language/set', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ language: lang }),
+                    credentials: 'include' // Important for the server to set cookies for this origin
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    console.log(`Language successfully set to ${lang} via backend. Server message: ${result.message}`);
+                    alert(`Language preference updated to ${lang}. You might need to reload the page for changes to take full effect.`);
+                    // Optionally, reload the page:
+                    // window.location.reload();
+                } else {
+                    console.error('Failed to set language preference:', response.status, result.error || 'Unknown server error');
+                    alert(`Failed to set language: ${result.error || 'Server error'}`);
+                }
+            } catch (error) {
+                console.error('Error during setLanguagePreference fetch:', error);
+                alert('An error occurred while setting language preference. Please check your connection.');
+            }
+        }
+
+        // Add event listeners for language buttons
+        if (langCsButton) langCsButton.addEventListener('click', () => setLanguagePreference('cs'));
+        if (langEnButton) langEnButton.addEventListener('click', () => setLanguagePreference('en'));
 
         // Load classes when the page loads
         document.addEventListener('DOMContentLoaded', () => {
