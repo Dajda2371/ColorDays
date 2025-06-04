@@ -240,6 +240,7 @@ GOOGLE_COOKIE_NAME = "GoogleAuthUser" # For Google OAuth users
 SQL_COOKIE_NAME = "SQLAuthUser" # For SQL users
 SQL_AUTH_USER_STUDENT_COOKIE_NAME = "SQLAuthUserStudent" # For SQL Student users
 LANGUAGE_COOKIE_NAME = "language" # For language preference
+TRANSLATIONS_FILE_PATH = DATA_DIR / 'language_translations.json' # Path to the translations file
 # --- End Session Configuration ---
 
 
@@ -1902,6 +1903,23 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 print(f"!!! CRITICAL: Server configuration file {config_file_path} not found.")
                 self._send_response(404, {"error": "Server configuration file not found."}, content_type='application/json')
             return
+
+        elif path == '/api/translations': # Serve the translations JSON
+            print(f"--- DEBUG: Matched request for '/api/translations' ---")
+            if TRANSLATIONS_FILE_PATH.is_file():
+                try:
+                    with open(TRANSLATIONS_FILE_PATH, 'rb') as f:
+                        content = f.read()
+                    # _send_response handles CORS and content type if data is bytes
+                    self._send_response(200, data=content, content_type='application/json')
+                except Exception as e:
+                    print(f"!!! Error serving {TRANSLATIONS_FILE_PATH}: {e}")
+                    self._send_response(500, {"error": f"Error serving translations file: {e}"}, content_type='application/json')
+            else:
+                print(f"!!! CRITICAL: Translations file {TRANSLATIONS_FILE_PATH} not found.")
+                self._send_response(404, {"error": "Translations file not found."}, content_type='application/json')
+            return
+
 
         # File Serving Logic
         # --- Password Change Check (for Pages) ---

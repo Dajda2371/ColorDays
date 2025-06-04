@@ -7,6 +7,10 @@ const toggleCs = document.getElementById('toggleCs');
 const toggleEn = document.getElementById('toggleEn');
 // No need to get configButton unless you add specific JS logic for it
 
+// --- Localization ---
+let translations = {};
+let currentLanguage = 'en'; // Default language
+
 // --- Logout Functionality (Keep this as is) ---
 async function handleLogout() {
     console.log("Attempting logout...");
@@ -35,9 +39,48 @@ async function handleLogout() {
 logoutButton.addEventListener('click', handleLogout);
 // --- END Logout Functionality ---
 
+// --- Localization Functions ---
+async function fetchTranslations() {
+    try {
+        console.log("Attempting to fetch translations from /api/translations...");
+        const response = await fetch('/api/translations'); // Fetch from the new backend endpoint
+        if (!response.ok) {
+            console.error('Failed to load translations:', response.status);
+            return;
+        }
+        console.log("Translations fetched successfully. Parsing JSON...");
+        translations = await response.json();
+        applyTranslations(); // Apply translations once fetched
+    } catch (error) {
+        console.error('Error fetching translations:', error);
+    }
+}
+
+function applyTranslations() {
+    // currentLanguage is now set globally before this function is called.
+    console.log(`Applying translations for language: ${currentLanguage}`);
+    console.log("Translations object:", translations); // Log the loaded translations
+
+    document.querySelectorAll('[data-translate-key]').forEach(element => {
+        const key = element.getAttribute('data-translate-key');
+        console.log(`Processing element with key: '${key}'`);
+        if (translations[key] && translations[key][currentLanguage]) {
+            console.log(`Found translation for '${key}' in '${currentLanguage}': '${translations[key][currentLanguage]}'`);
+            element.textContent = translations[key][currentLanguage];
+        } else if (translations[key] && translations[key]['en']) { // Fallback to English
+            console.warn(`Translation missing for key '${key}' in language '${currentLanguage}'. Falling back to English.`);
+            element.textContent = translations[key]['en'];
+            element.style.color = 'orange'; // Optional: Highlight missing translations
+        } else {
+            console.warn(`Translation key '${key}' not found or no English fallback available.`);
+        }
+    });
+}
+
 // --- Function to fetch and display classes ---
 async function loadAndDisplayClasses() {
-    dynamicClassList.innerHTML = '<p>Loading classes...</p>'; // Initial loading message
+    const loadingMessage = translations.loadingClassesText?.[currentLanguage] || translations.loadingClassesText?.['en'] || 'Loading classes...'; // Added English fallback
+    dynamicClassList.innerHTML = `<p>${loadingMessage}</p>`;
     const studentCode = getCookie("SQLAuthUserStudent");
     let allClasses = [];
     let currentStudentData = null; // To store the specific student's record
@@ -100,9 +143,9 @@ async function loadAndDisplayClasses() {
     }
 
     const days = [
-        { name: "Monday", iscountedbyFlag: "iscountedby1" },
-        { name: "Tuesday", iscountedbyFlag: "iscountedby2" },
-        { name: "Wednesday", iscountedbyFlag: "iscountedby3" }
+        { nameKey: "dayMonday", defaultName: "Monday", iscountedbyFlag: "iscountedby1" },
+        { nameKey: "dayTuesday", defaultName: "Tuesday", iscountedbyFlag: "iscountedby2" },
+        { nameKey: "dayWednesday", defaultName: "Wednesday", iscountedbyFlag: "iscountedby3" }
     ];
 
     let contentRendered = false;
@@ -121,8 +164,9 @@ async function loadAndDisplayClasses() {
 
         days.forEach(day => {
             // Check if the student's main class is responsible for counting ANY class on this day
+            const dayDisplayName = translations[day.nameKey]?.[currentLanguage] || translations[day.nameKey]?.['en'] || day.defaultName; // Added English fallback
             const isDayVisibleForStudent = allClasses.some(cls => cls[day.iscountedbyFlag] === studentMainClass);
-            console.log(`Day: ${day.name}, iscountedbyFlag: ${day.iscountedbyFlag}, Student Main Class: ${studentMainClass}, Is Visible: ${isDayVisibleForStudent}`);
+            console.log(`Day: ${dayDisplayName}, iscountedbyFlag: ${day.iscountedbyFlag}, Student Main Class: ${studentMainClass}, Is Visible: ${isDayVisibleForStudent}`);
 
             if (isDayVisibleForStudent) {
                 // Get the classes this student is personally assigned to count
@@ -132,13 +176,13 @@ async function loadAndDisplayClasses() {
                     contentRendered = true;
                     const daySectionDiv = document.createElement('div');
                     daySectionDiv.className = 'day-section';
-                    daySectionDiv.innerHTML = `<h2>${day.name}</h2>`;
+                    daySectionDiv.innerHTML = `<h2>${dayDisplayName}</h2>`;
 
                     const ul = document.createElement('ul');
                     ul.className = 'classList';
                     classesStudentCounts.sort().forEach(className => { // Sort the class names
                         const listItem = document.createElement('li');
-                        listItem.innerHTML = `<a href="index.html?class=${encodeURIComponent(className)}&day=${day.name.toLowerCase()}">${className}</a>`;
+                        listItem.innerHTML = `<a href="index.html?class=${encodeURIComponent(className)}&day=${day.defaultName.toLowerCase()}">${className}</a>`;
                         ul.appendChild(listItem);
                     });
                     daySectionDiv.appendChild(ul);
@@ -147,7 +191,7 @@ async function loadAndDisplayClasses() {
             }
         });
         if (!contentRendered && !errorMessage) {
-            dynamicClassList.innerHTML = '<p>You have no classes to count for the currently scheduled days, or no days are assigned for your class to supervise counting.</p>';
+            dynamicClassList.innerHTML = `<p>${translations.noClassesToCountStudentText?.[currentLanguage] || translations.noClassesToCountStudentText?.['en'] || 'You have no classes to count...'}</p>`; // Added English fallback
         }
 
     } else if (!studentCode) {
@@ -155,16 +199,17 @@ async function loadAndDisplayClasses() {
         // Admins/Teachers see all classes under every day
         days.forEach(day => {
             contentRendered = true; // A day section will always be rendered
+            const dayDisplayName = translations[day.nameKey]?.[currentLanguage] || translations[day.nameKey]?.['en'] || day.defaultName; // Added English fallback
             const daySectionDiv = document.createElement('div');
             daySectionDiv.className = 'day-section';
-            daySectionDiv.innerHTML = `<h2>${day.name}</h2>`;
+            daySectionDiv.innerHTML = `<h2>${dayDisplayName}</h2>`;
 
             const ul = document.createElement('ul');
             ul.className = 'classList';
             // Display ALL classes from allClasses
             allClasses.sort((a, b) => a.class.localeCompare(b.class)).forEach(cls => {
                 const listItem = document.createElement('li');
-                listItem.innerHTML = `<a href="index.html?class=${encodeURIComponent(cls.class)}&day=${day.name.toLowerCase()}">${cls.class}</a>`;
+                listItem.innerHTML = `<a href="index.html?class=${encodeURIComponent(cls.class)}&day=${day.defaultName.toLowerCase()}">${cls.class}</a>`;
                 ul.appendChild(listItem);
             });
             daySectionDiv.appendChild(ul);
@@ -174,7 +219,7 @@ async function loadAndDisplayClasses() {
 
         // Final check if nothing was rendered and no specific error message was already set for students
         if (!contentRendered && !errorMessage && dynamicClassList.innerHTML === '') {
-            dynamicClassList.innerHTML = '<p>No classes are scheduled or assigned for these days.</p>';
+            dynamicClassList.innerHTML = `<p>${translations.noClassesScheduledAdminText?.[currentLanguage] || translations.noClassesScheduledAdminText?.['en'] || 'No classes are scheduled...'}</p>`; // Added English fallback
         }
     }
 
@@ -187,8 +232,8 @@ function displayLoggedInUser() {
   if (usernameCookie) {
     const username = usernameCookie.split('=')[1];
     usernameTextSpan.textContent = decodeURIComponent(username);
-  } else {
-  usernameTextSpan.textContent = 'Not Logged In'; // Fallback, circle will still show
+  } else { // This branch is for when the ColorDaysUser cookie is missing
+  usernameTextSpan.textContent = translations.usernameNotLoggedIn?.[currentLanguage] || 'Not Logged In';
   }
 }
 
@@ -265,16 +310,21 @@ async function setLanguagePreference(lang) {
         const result = await response.json();
         if (response.ok) {
             console.log(`Language successfully set to ${lang} via backend. Server message: ${result.message}`);
-            alert(`Language preference updated to ${lang}. You might need to reload the page for changes to take full effect.`);
-            // Optionally, reload the page:
-            // window.location.reload();
+            const alertMessage = (translations.languageUpdateSuccessAlert?.[lang] || "Language preference updated to {lang}. You might need to reload the page for changes to take full effect.")
+                .replace("{lang}", lang === 'cs' ? 'Čeština' : 'English');
+            // alert(alertMessage); // Removed alert, page updates visually
+            currentLanguage = lang; // Update current language
+            applyTranslations(); // Re-apply translations to the page
+            // Reload dynamic content that needs re-translation
+            loadAndDisplayClasses();
+            displayLoggedInUser();
         } else {
             console.error('Failed to set language preference:', response.status, result.error || 'Unknown server error');
-            alert(`Failed to set language: ${result.error || 'Server error'}`);
+            alert((translations.languageUpdateFailedAlert?.[currentLanguage] || translations.languageUpdateFailedAlert?.['en'] || "Failed to set language: {error}").replace("{error}", result.error || 'Server error')); // Added English fallback
         }
     } catch (error) {
         console.error('Error during setLanguagePreference fetch:', error);
-        alert('An error occurred while setting language preference. Please check your connection.');
+        alert(translations.languageUpdateErrorAlert?.[currentLanguage] || translations.languageUpdateErrorAlert?.['en'] || 'An error occurred while setting language preference. Please check your connection.'); // Added English fallback
     }
 }
 
@@ -309,12 +359,15 @@ if (languageToggle) {
 
 // Load classes when the page loads
 document.addEventListener('DOMContentLoaded', () => {
-    loadAndDisplayClasses();
-    displayLoggedInUser(); // Also display the username
-    manageStudentButtonVisibility(); // Hide buttons if student
-    manageChangePasswordButtonVisibility(); // Update Change Password button visibility
+    // Set currentLanguage from cookie first, so it's available for all subsequent calls
+    currentLanguage = getCookie("language") || 'en';
 
-    // Set initial language toggle state based on cookie
-    const currentLangCookie = getCookie(LANGUAGE_COOKIE_NAME); // Use the constant from program.py if available, otherwise hardcode "language"
-    setToggleState(currentLangCookie); // Pass the cookie value to set the initial state
+    fetchTranslations().then(() => { // Fetch translations first
+        // applyTranslations has been called by fetchTranslations and used the currentLanguage set above.
+        setToggleState(currentLanguage);
+        loadAndDisplayClasses();
+        displayLoggedInUser();
+        manageStudentButtonVisibility();
+        manageChangePasswordButtonVisibility();
+    });
 });
