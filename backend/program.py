@@ -79,7 +79,8 @@ CURRENT_YEAR_DIR = DATA_DIR / str(datetime.datetime.now().year)
 # Update file paths to point to the year-specific directory
 CLASSES_SQL_FILE_PATH = DATA_DIR / 'classes.sql' # Path to the classes data file
 LOGINS_SQL_FILE_PATH = DATA_DIR / 'logins.sql' # Path to the SQL logins file <--- NEW
-HOST = 'localhost' # Or '0.0.0.0' to be accessible on your network
+DOMAIN = 'barevnedny.davidbenes.cz'
+HOST = '0.0.0.0'
 PORT = 8000 # Choose a port
 SUPPORTED_CLASSES = [] # Will be populated from classes.sql
 SQL_DAY_FILE_PATHS = {
@@ -92,7 +93,7 @@ STUDENTS_SQL_FILE_PATH = DATA_DIR / 'students.sql' # This will be updated below
 # --- Google OAuth Configuration ---
 CLIENT_SECRETS_FILE = DATA_DIR / 'client_secret.json' # Path to your client_secret.json
 GOOGLE_SCOPES = ['openid', 'https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile']
-GOOGLE_REDIRECT_URI = f'http://{HOST}:{PORT}/oauth2callback' # Must match one in client_secret.json and Google Console
+GOOGLE_REDIRECT_URI = f'http://{DOMAIN}:{PORT}/oauth2callback' # Must match one in client_secret.json and Google Console
 
 # --- Secure Login Configuration (Using hashlib.pbkdf2_hmac) ---
 
