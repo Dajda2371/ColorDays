@@ -66,6 +66,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Function to render students (add QR Code button)
     function renderStudentsTable(students) {
+      window.lastStudentsList = students;
       const tbody = document.getElementById('students-table-body');
       tbody.innerHTML = '';
       students.forEach(student => {
@@ -87,6 +88,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Show QR code modal
     window.showQrCode = function(code) {
+      // Find the student object by code (assuming you have access to the students array)
+      const student = (window.lastStudentsList || []).find(s => s.code === code);
+      document.getElementById('qrNote').textContent = student && student.note ? student.note : '';
       const url = `http://${DOMAIN}:${PORT}/login.html?code=${encodeURIComponent(code)}`;
       document.getElementById('qrModal').style.display = 'flex';
       document.getElementById('qrUrl').textContent = code;
