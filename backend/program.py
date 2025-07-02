@@ -1943,18 +1943,16 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         elif path == '/api/data/config': # Serve the main config.json
             print(f"--- DEBUG: Matched request for '/backend/data/config.json' ---")
             config_file_path = DATA_DIR / 'config.json'
+            config_json = {}
             if config_file_path.is_file():
                 try:
-                    with open(config_file_path, 'rb') as f:
-                        content = f.read()
-                    # _send_response handles CORS and content type if data is bytes
-                    self._send_response(200, data=content, content_type='application/json')
+                    with open(config_file_path, 'r', encoding='utf-8') as f:
+                        config_json = json.load(f)
                 except Exception as e:
-                    print(f"!!! Error serving {config_file_path}: {e}")
-                    self._send_response(500, {"error": f"Error serving server configuration file: {e}"}, content_type='application/json')
-            else:
-                print(f"!!! CRITICAL: Server configuration file {config_file_path} not found.")
-                self._send_response(404, {"error": "Server configuration file not found."}, content_type='application/json')
+                    print(f"!!! Error reading config.json: {e}")
+            config_json['DOMAIN'] = DOMAIN
+            config_json['PORT'] = PORT
+            self._send_response(200, data=config_json)
             return
 
         elif path == '/api/translations': # Serve the translations JSON

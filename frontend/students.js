@@ -6,7 +6,27 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
     }
 
-    loadStudents();
+    // Remove the hardcoded DOMAIN and PORT
+    // const DOMAIN = "barevnedny.davidbenes.cz";
+    // const PORT = 8000;
+
+    let DOMAIN = '';
+    let PORT = '';
+
+    // Fetch DOMAIN and PORT from backend config
+    function fetchDomainAndPort() {
+      return fetch('/api/data/config')
+        .then(res => res.json())
+        .then(config => {
+          DOMAIN = config.DOMAIN || window.location.hostname;
+          PORT = config.PORT || window.location.port || 80;
+        })
+        .catch(() => {
+          // fallback to current location if API fails
+          DOMAIN = window.location.hostname;
+          PORT = window.location.port || 80;
+        });
+    }
 
     // Get the 'day' parameter from the current URL if it exists
     const urlParams = new URLSearchParams(window.location.search);
@@ -39,9 +59,10 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     }
 
-    // Set these to match your backend config
-    const DOMAIN = "barevnedny.davidbenes.cz";
-    const PORT = 8000;
+    // Call fetchDomainAndPort before loading students
+    fetchDomainAndPort().then(() => {
+      loadStudents();
+    });
 
     // Function to render students (add QR Code button)
     function renderStudentsTable(students) {
@@ -55,7 +76,7 @@ document.addEventListener('DOMContentLoaded', function() {
           <td>${student.note}</td>
           <td>${(student.counting_classes || []).join(', ')}</td>
           <td>
-          <button class="class-button" onclick="window.location.href='classes.html?class=${encodeURIComponent(student.class)}'">Edit Classes</button>
+            <button class="class-button" onclick="window.location.href='student-is-counting.html?code=${encodeURIComponent(student.code)}&day=${encodeURIComponent(dayFromUrl)}'">Edit Classes</button>
             <button class="class-button" onclick="showQrCode('${student.code}')">QR Code</button>
             <button class="class-button" onclick="removeStudent('${student.code}', '${student.note?.replace(/'/g, "\\'") || ''}', '${student.class}')">Remove</button>
           </td>
