@@ -1,4 +1,6 @@
 import os
+import logging
+from logging.handlers import RotatingFileHandler
 
 if "pip: command not found" in os.popen('pip --version').read(): # Check if pip is installed
     print("pip not found, attempting to install...")
@@ -67,11 +69,61 @@ import hashlib # <-- Use built-in hashlib
 import hmac # <-- Use built-in hmac for secure comparison # Already imported
 import binascii # <-- For converting bytes to hex and back
 import datetime # <-- Import datetime to get the current year
+import sys # For logging console output
 
 # --- Configuration ---
 BACKEND_DIR = Path(__file__).parent.resolve()
 FRONTEND_DIR = (BACKEND_DIR.parent / 'frontend').resolve()
 DATA_DIR = (BACKEND_DIR / 'data').resolve()
+LOGS_DIR = DATA_DIR / 'logs'
+
+# --- Logger Setup ---
+LOGS_DIR = Path(__file__).parent.resolve() / 'data' / 'logs'
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
+
+# Daily log filename (e.g., 2025-06-28.log)
+log_filename = datetime.datetime.now().strftime("%Y-%m-%d.log")
+log_path = LOGS_DIR / log_filename
+
+# Configure logger
+logger = logging.getLogger('ColorDaysLogger')
+logger.setLevel(logging.DEBUG)
+
+# Formatter
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+
+# File handler (log to file)
+file_handler = logging.FileHandler(log_path, encoding='utf-8')
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
+
+# Console handler (log to terminal)
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.DEBUG)
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
+
+# --- Redirect all print() output to logger ---
+class StreamToLogger:
+    def __init__(self, logger, level):
+        self.logger = logger
+        self.level = level
+        self.buffer = ''
+
+    def write(self, message):
+        message = message.rstrip()
+        if message:
+            self.logger.log(self.level, message)
+
+    def flush(self):
+        pass  # No need to flush anything here
+
+# Redirect print and errors to logger
+sys.stdout = StreamToLogger(logger, logging.INFO)
+sys.stderr = StreamToLogger(logger, logging.ERROR)
+# Example log
+logger.info("Logging directly to dated file: %s", log_filename)
 
 # --- Dynamic Data Directory based on Year ---
 CURRENT_YEAR_DIR = DATA_DIR / str(datetime.datetime.now().year)
