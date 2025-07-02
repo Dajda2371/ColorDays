@@ -39,52 +39,53 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     }
 
+    // Set these to match your backend config
+    const DOMAIN = "barevnedny.davidbenes.cz";
+    const PORT = 8000;
+
+    // Function to render students (add QR Code button)
     function renderStudentsTable(students) {
-        studentsTableBody.innerHTML = ''; // Clear existing rows
-
-        if (students.length === 0) {
-            let noStudentsMessage = 'No student configurations found.';
-            if (classFromUrl) {
-                noStudentsMessage = `No student configurations found for class ${classFromUrl}.`;
-            }
-            studentsTableBody.innerHTML = `<tr><td colspan="5" style="text-align: center;">${noStudentsMessage}</td></tr>`;
-            return;
-        }
-
-        students.forEach(student => {
-            const row = studentsTableBody.insertRow();
-
-            row.insertCell().textContent = student.code;
-            row.insertCell().textContent = student.class; // Add the student's class
-            row.insertCell().textContent = student.note;
-            
-            // 'counting_classes' is expected to be an array from the backend
-            const countingClassesCell = row.insertCell();
-            countingClassesCell.textContent = student.counting_classes && student.counting_classes.length > 0 
-                                            ? student.counting_classes.join(', ') 
-                                            : 'N/A';
-
-            const actionsCell = row.insertCell();
-            
-            const editButton = document.createElement('a');
-            let editHref = `student-is-counting.html?code=${encodeURIComponent(student.code)}`;
-            if (dayFromUrl) { // If 'day' was in the URL of students.html, pass it along
-                editHref += `&day=${encodeURIComponent(dayFromUrl)}`;
-            }
-            editButton.href = editHref;
-            editButton.textContent = 'Edit Classes';
-            editButton.className = 'button class-button'; // Apply class-button style
-            actionsCell.appendChild(editButton);
-
-            actionsCell.appendChild(document.createTextNode(' ')); // For spacing
-
-            const removeButton = document.createElement('button');
-            removeButton.textContent = 'Remove';
-            removeButton.className = 'button class-button button-danger'; // Apply class-button and keep button-danger
-            removeButton.addEventListener('click', () => removeStudent(student.code, student.note, student.class)); // Pass code, note, and class for confirmation
-            actionsCell.appendChild(removeButton);
-        });
+      const tbody = document.getElementById('students-table-body');
+      tbody.innerHTML = '';
+      students.forEach(student => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${student.code}</td>
+          <td>${student.class}</td>
+          <td>${student.note}</td>
+          <td>${(student.counting_classes || []).join(', ')}</td>
+          <td>
+          <button class="class-button" onclick="window.location.href='classes.html?class=${encodeURIComponent(student.class)}'">Edit Classes</button>
+            <button class="class-button" onclick="showQrCode('${student.code}')">QR Code</button>
+            <button class="class-button" onclick="removeStudent('${student.code}', '${student.note?.replace(/'/g, "\\'") || ''}', '${student.class}')">Remove</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
     }
+
+    // Show QR code modal
+    window.showQrCode = function(code) {
+      const url = `http://${DOMAIN}:${PORT}/login.html?code=${encodeURIComponent(code)}`;
+      document.getElementById('qrModal').style.display = 'flex';
+      document.getElementById('qrUrl').textContent = code;
+      document.getElementById('qrcode').innerHTML = '';
+      new QRCode(document.getElementById('qrcode'), {
+        text: url,
+        width: 220,
+        height: 220,
+      });
+    };
+
+    // Close modal
+    document.getElementById('closeQrModal').onclick = function() {
+      document.getElementById('qrModal').style.display = 'none';
+    };
+
+    // Optional: close modal when clicking outside the QR code box
+    document.getElementById('qrModal').onclick = function(e) {
+      if (e.target === this) this.style.display = 'none';
+    };
 
     function removeStudent(studentCode, studentNote, studentClass) {
         if (!confirm(`Are you sure you want to remove the student configuration:\nCode: ${studentCode}\nClass: ${studentClass}\nNote: ${studentNote || '(No note)'}?`)) {
