@@ -3015,6 +3015,49 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
 # --- End of ColorDaysHandler modifications ---
 
+# --- Token Generation and Storage ---
+
+TOKENS_SQL_FILE_PATH = DATA_DIR / 'tokens.sql'  # Path to the tokens data file
+
+def generate_token(length=128):
+    """Generates a secure random alphanumeric token of a given length."""
+    characters = string.ascii_letters + string.digits
+    return ''.join(random.SystemRandom().choice(characters) for _ in range(length))
+
+def store_token(user, token_value, ip='_NULL_'):
+    """
+    Stores a token in data/tokens.sql as an INSERT statement.
+    Args:
+        user (str): Username for whom the token is generated.
+        token_value (str): The generated token value.
+        ip (str): IP address (optional, default '_NULL_').
+    Returns:
+        bool: True if stored successfully, False otherwise.
+    """
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        TOKENS_SQL_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        safe_user = user.replace("'", "''")
+        safe_token = token_value.replace("'", "''")
+        safe_ip = ip.replace("'", "''") if ip else '_NULL_'
+        insert_line = f"INSERT INTO tokens (user, value, ip) VALUES ('{safe_user}', '{safe_token}', '{safe_ip}');\n"
+        with open(TOKENS_SQL_FILE_PATH, 'a', encoding='utf-8') as f:
+            f.write(insert_line)
+        print(f"Token stored for user '{user}'.")
+        return True
+    except Exception as e:
+        print(f"Error storing token for user '{user}': {e}")
+        return False
+
+def create_and_store_token(user, ip='_NULL_', length=128):
+    """
+    Generates a token and stores it in tokens.sql.
+    Returns the token value if successful, else None.
+    """
+    token = generate_token(length)
+    if store_token(user, token, ip):
+        return token
+    return None
 
 # --- Main Execution ---
 if __name__ == "__main__":
