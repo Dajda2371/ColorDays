@@ -1237,6 +1237,9 @@ def handle_decrement_module(handler_instance, data, request_path):
 # --- HTTP Request Handler ---
 class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
+    # --- In-memory session store for active sessions ---
+    self.__class__.active_sessions = {}  # Maps session_token -> username
+
     def get_cookies(self):
         cookies = SimpleCookie()
         cookie_header = self.headers.get('Cookie')
@@ -1248,7 +1251,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
     def is_logged_in(self):
         cookies = self.get_cookies()
         session_cookie = cookies.get(SESSION_COOKIE_NAME)
-        if session_cookie and session_cookie.value == VALID_SESSION_VALUE:
+        if session_cookie and session_cookie.value in self.__class__.active_sessions:
             return True
         return False
 
@@ -2119,7 +2122,18 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                     
                     # Use cleaned_username for the cookie
                     user_cookie_headers = create_cookies(USERNAME_COOKIE_NAME, cleaned_username, path='/', httponly=False)
-                    session_cookie_headers = create_cookies(SESSION_COOKIE_NAME, VALID_SESSION_VALUE, path='/')
+
+                    # ...inside the login success block in do_POST...
+
+                    # Generate a secure session token
+                    session_token = generate_token(64)
+                    # Optionally store the token in tokens.sql for tracking/auditing
+                    store_token(username, session_token, self.client_address[0] if hasattr(self, 'client_address') else '_NULL_')
+                    # Register the session token in the in-memory session store
+                    self.__class__.active_sessions[session_token] = username
+                    # Set the session cookie to the generated token
+                    session_cookie_headers = create_cookies(SESSION_COOKIE_NAME, session_token, path='/')
+
                     sql_user_cookie_headers = create_cookies(SQL_COOKIE_NAME, username, path='/', httponly=False) # Set the SQL auth cookie
 
                     # --- COMBINE standard cookies with any extra ones returned ---
