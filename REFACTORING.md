@@ -4,8 +4,10 @@
 
 ✅ **Completed:**
 - Created `backend/api/` directory
-- Created `backend/api/get.py` with all GET endpoint handlers
-- Organized GET endpoints into reusable functions
+- Created `backend/api/get.py` with all GET endpoint handlers (9 endpoints)
+- Created `backend/api/post.py` with all POST endpoint handlers (18 endpoints)
+- Organized all endpoints into reusable functions with route mappings
+- Created `backend/api/__init__.py` for easy imports
 
 ## Structure
 
@@ -23,43 +25,51 @@ Contains all GET endpoint handlers organized as functions:
 
 Route mapping dictionary: `GET_ROUTES`
 
-### api/post.py (TODO)
-Should contain POST endpoint handlers organized by category:
+### api/post.py (DONE)
+Contains all POST endpoint handlers organized by category:
 
 **Authentication:**
-- POST /login - Username/password login
-- POST /login/student - Student code login
-- POST /logout - Logout
-- POST /api/auth/change - Change password
+- `handle_login()` - POST /login
+- `handle_login_student()` - POST /login/student
+- `handle_logout()` - POST /logout
+- `handle_auth_change()` - POST /api/auth/change
 
 **User Management:**
-- POST /api/users - Add user
-- POST /api/users/remove - Remove user
-- POST /api/users/set - Set password
-- POST /api/users/reset - Reset password
+- `handle_api_users_post()` - POST /api/users
+- `handle_api_users_remove()` - POST /api/users/remove
+- `handle_api_users_set()` - POST /api/users/set (also handles /api/users/reset)
 
 **Class Management:**
-- POST /api/classes/add - Add class
-- POST /api/classes/remove - Remove class
-- POST /api/classes/update_counts - Update counting days
-- POST /api/classes/update_iscountedby - Update counting assignments
+- `handle_api_classes_add()` - POST /api/classes/add
+- `handle_api_classes_remove()` - POST /api/classes/remove
+- `handle_api_classes_update_counts()` - POST /api/classes/update_counts
+- `handle_api_classes_update_iscountedby()` - POST /api/classes/update_iscountedby
 
 **Student Management:**
-- POST /api/students/add - Add student
-- POST /api/students/remove - Remove student
-- POST /api/student/update-counting-class - Update counting assignment
+- `handle_api_students_add()` - POST /api/students/add
+- `handle_api_students_remove()` - POST /api/students/remove
+- `handle_api_student_update_counting_class()` - POST /api/student/update-counting-class
 
 **Count Data:**
-- POST /api/increment - Increment count
-- POST /api/decrement - Decrement count
+- `handle_api_increment()` - POST /api/increment
+- `handle_api_decrement()` - POST /api/decrement
 
 **Configuration:**
-- POST /api/data/save/config - Save config
-- POST /api/language/set - Set language
+- `handle_api_data_save_config()` - POST /api/data/save/config
+- `handle_api_language_set()` - POST /api/language/set
+
+Route mapping dictionary: `POST_ROUTES`
 
 ## Integration with server.py
 
-### Current do_GET method:
+### Proposed Changes:
+
+**Step 1: Import route mappings at top of server.py**
+```python
+from api import GET_ROUTES, POST_ROUTES
+```
+
+**Step 2: Simplify do_GET method**
 ```python
 def do_GET(self):
     parsed_path = urllib.parse.urlparse(self.path)
@@ -73,19 +83,63 @@ def do_GET(self):
     # Fall back to file serving...
 ```
 
-### Proposed do_POST method:
+**Step 3: Simplify do_POST method**
 ```python
 def do_POST(self):
     parsed_path = urllib.parse.urlparse(self.path)
     path = parsed_path.path
 
-    # Check POST_ROUTES from api.post
-    if path in POST_ROUTES:
+    # Handle special endpoints that don't need auth or JSON parsing
+    if path in ['/login', '/login/student', '/logout']:
         POST_ROUTES[path](self)
         return
 
+    # --- Password Change Check for POST ---
+    cookies = self.get_cookies()
+    password_change_required = cookies.get(CHANGE_PASSWORD_COOKIE_NAME)
+    allowed_post_paths_during_change = ['/login', '/logout', '/api/auth/change']
+
+    if password_change_required and password_change_required.value == "not-required" and path not in allowed_post_paths_during_change:
+        print(f"Denied POST request to {path} - Password change required.")
+        self._send_response(403, {"error": "Password change required before performing this action."})
+        return
+
+    # --- RBAC: Get current user's role for protected endpoints ---
+    user_key_for_rbac, current_user_role = get_current_user_info(self)
+    if not self.is_logged_in():
+        self._send_response(401, {"error": "Authentication required for this action."})
+        return
+
+    # --- Parse JSON body ---
+    content_length = int(self.headers.get('Content-Length', 0))
+    post_body_bytes = b''
+    if content_length > 0:
+        post_body_bytes = self.rfile.read(content_length)
+
+    try:
+        if not post_body_bytes:
+            self._send_response(400, {"error": "Missing JSON payload for this endpoint"})
+            return
+        data = json.loads(post_body_bytes)
+    except json.JSONDecodeError:
+        self._send_response(400, {"error": "Invalid JSON payload"})
+        return
+
+    # Check POST_ROUTES
+    if path in POST_ROUTES:
+        # Some handlers need the data parameter
+        if path in ['/api/auth/change', '/api/users/remove', '/api/users/set', '/api/users/reset',
+                    '/api/classes/add', '/api/classes/remove', '/api/classes/update_counts',
+                    '/api/classes/update_iscountedby', '/api/students/add', '/api/students/remove',
+                    '/api/student/update-counting-class', '/api/increment', '/api/decrement',
+                    '/api/data/save/config', '/api/language/set', '/api/users']:
+            POST_ROUTES[path](self, data)
+        else:
+            POST_ROUTES[path](self)
+        return
+
     # 404 for unknown endpoints
-    self._send_response(404, {"error": "Endpoint not found"})
+    self._send_response(404, {"error": "API endpoint not found"})
 ```
 
 ## Benefits
@@ -98,7 +152,8 @@ def do_POST(self):
 
 ## Next Steps
 
-1. Create `api/post.py` with all POST handlers
-2. Update `server.py` to use the route mappings
-3. Test all endpoints to ensure functionality is preserved
-4. Update `CLAUDE.md` with new architecture
+1. ✅ ~~Create `api/post.py` with all POST handlers~~ - DONE
+2. 🔄 Update `server.py` to use the route mappings (ready to integrate)
+3. ⏳ Test all endpoints to ensure functionality is preserved
+4. ⏳ Update `CLAUDE.md` with new architecture
+5. ⏳ Remove old handler methods from ColorDaysHandler class in server.py
