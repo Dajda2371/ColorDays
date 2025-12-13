@@ -7,12 +7,16 @@ import socketserver
 
 from config import HOST, PORT, LOG_FILENAME, LOG_PATH
 from data_manager import (
-    load_class_data_from_sql,
-    load_students_data_from_sql,
-    load_user_data_from_sql,
     load_main_config_from_json,
+    create_tables,
+    migrate_logins_to_db,
+    migrate_tokens_to_db,
+    migrate_classes_to_db,
+    migrate_students_to_db,
+    load_user_data_from_db,
+    load_class_data_from_db,
+    load_students_data_from_db,
     ensure_year_data_directory_exists,
-    update_data_file_paths,
 )
 from server import ColorDaysHandler
 
@@ -51,11 +55,10 @@ logger.info("Logging directly to dated file: %s", LOG_FILENAME)
 def main():
     """Main function to run the web server."""
     ensure_year_data_directory_exists()
-    update_data_file_paths()
     load_main_config_from_json()
-    load_class_data_from_sql()
-    load_students_data_from_sql()
-    load_user_data_from_sql()
+    load_class_data_from_db()
+    load_students_data_from_db()
+    load_user_data_from_db()
 
     httpd = socketserver.TCPServer(("", PORT), ColorDaysHandler)
     server_thread = threading.Thread(target=httpd.serve_forever)

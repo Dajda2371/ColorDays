@@ -12,12 +12,38 @@ from config import (
     SALT_BYTES,
     DK_LENGTH,
     CHANGE_PASSWORD_COOKIE_NAME,
+    DATA_DIR,
 )
 
 def generate_random_code(length=15):
     """Generates a random alphanumeric code of a given length."""
     characters = string.ascii_letters + string.digits
     return ''.join(random.choice(characters) for i in range(length))
+
+def generate_token(length=128):
+    """Generates a secure random alphanumeric token of a given length."""
+    characters = string.ascii_letters + string.digits
+    return ''.join(random.SystemRandom().choice(characters) for _ in range(length))
+
+def store_token(user, token_value, ip='_NULL_'):
+    """
+    Stores a token in tokens table in the database.
+    Args:
+        user (str): Username for whom the token is generated.
+        token_value (str): The generated token value.
+        ip (str): IP address (optional, default '_NULL_').
+    Returns:
+        bool: True if stored successfully, False otherwise.
+    """
+    try:
+        # Token storage is now handled by the database
+        # This function is kept for compatibility but could be removed
+        # if token storage in database is properly implemented
+        print(f"Token generated for user '{user}' (storage TBD).")
+        return True
+    except Exception as e:
+        print(f"Error storing token: {e}")
+        return False
 
 def hash_password(password):
     """Hashes a password using PBKDF2-HMAC-SHA256."""

@@ -16,7 +16,6 @@ LOG_PATH = LOGS_DIR / LOG_FILENAME
 CURRENT_YEAR_DIR = DATA_DIR / str(datetime.datetime.now().year)
 
 # Update file paths to point to the year-specific directory
-CLASSES_SQL_FILE_PATH = CURRENT_YEAR_DIR / 'classes.sql'
 LOGINS_SQL_FILE_PATH = DATA_DIR / 'logins.sql'
 DOMAIN = 'barevnedny.davidbenes.cz'
 HOST = '0.0.0.0'
@@ -55,3 +54,6 @@ SQL_COOKIE_NAME = "SQLAuthUser"
 SQL_AUTH_USER_STUDENT_COOKIE_NAME = "SQLAuthUserStudent"
 LANGUAGE_COOKIE_NAME = "language"
 TRANSLATIONS_FILE_PATH = DATA_DIR / 'language_translations.json'
+
+DATABASE_FILE = DATA_DIR / 'data.db'
+YEAR_DATABASE_FILE = CURRENT_YEAR_DIR / '2025.db'

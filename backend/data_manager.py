@@ -1,3 +1,4 @@
+import sqlite3
 import re
 import json
 import datetime
@@ -7,10 +8,8 @@ import threading
 from config import (
     DATA_DIR,
     CURRENT_YEAR_DIR,
-    CLASSES_SQL_FILE_PATH,
-    STUDENTS_SQL_FILE_PATH,
-    LOGINS_SQL_FILE_PATH,
-    SQL_DAY_FILE_PATHS,
+    DATABASE_FILE,
+    YEAR_DATABASE_FILE,
     SUPPORTED_CLASSES,
     DEFAULT_ROLE_FOR_NEW_USERS
 )
@@ -27,21 +26,6 @@ def ensure_year_data_directory_exists():
     print(f"Ensuring year data directory exists: {CURRENT_YEAR_DIR}")
     CURRENT_YEAR_DIR.mkdir(parents=True, exist_ok=True)
     print("Year data directory check complete.")
-
-def update_data_file_paths():
-    """Updates global file paths to point to the current year's directory."""
-    global SQL_DAY_FILE_PATHS, CLASSES_SQL_FILE_PATH, STUDENTS_SQL_FILE_PATH
-    for day in SQL_DAY_FILE_PATHS:
-        SQL_DAY_FILE_PATHS[day] = CURRENT_YEAR_DIR / f'tables-{day}.sql'
-    CLASSES_SQL_FILE_PATH = CURRENT_YEAR_DIR / 'classes.sql'
-    STUDENTS_SQL_FILE_PATH = CURRENT_YEAR_DIR / 'students.sql'
-    print(f"Data file paths updated to use directory: {CURRENT_YEAR_DIR}")
-
-def get_sql_file_path_for_day(day_identifier):
-    day_identifier = day_identifier.lower()
-    if day_identifier not in SQL_DAY_FILE_PATHS:
-        raise ValueError(f"Invalid day identifier: {day_identifier}. Must be one of {list(SQL_DAY_FILE_PATHS.keys())}")
-    return SQL_DAY_FILE_PATHS[day_identifier]
 
 def is_student_allowed(student_code_from_cookie, requested_class_name, requested_day_identifier):
     """
@@ -89,391 +73,311 @@ def is_student_allowed(student_code_from_cookie, requested_class_name, requested
     print(f"Security Check Passed: Student '{student_code_from_cookie}' ALLOWED for class '{requested_class_name}' on day '{requested_day_identifier}'.")
     return True
 
-def parse_sql_line(line):
-    """Parses a single INSERT statement line for the counts table."""
-    match = re.match(
-        r"INSERT INTO counts \(class_name, type, points, count\) VALUES \('([^']*)', '([^']*)', (\d+), (\d+)\);",
-        line.strip()
-    )
-    if match:
-        class_name, type_val, points_str, count_str = match.groups()
-        try:
-            points = int(points_str)
-            count = int(count_str)
-            return class_name, type_val, points, count
-        except ValueError:
-            print(f"Warning: Could not parse numbers in counts line: {line.strip()}")
-            return None
-    else:
-        if line.strip() and not line.strip().startswith('--') and not line.strip().upper().startswith('CREATE TABLE'):
-             print(f"Warning: Could not parse counts line format: {line.strip()}")
-        return None
 
-def parse_classes_sql_line(line):
-    """Parses a single INSERT statement line for the classes table."""
-    match = re.match(
-        r"INSERT INTO classes\s*\("
-        r"\s*class\s*,\s*teacher\s*,\s*counts1\s*,\s*counts2\s*,\s*counts3\s*,"
-        r"\s*iscountedby1\s*,\s*iscountedby2\s*,\s*iscountedby3\s*"
-        r"\)\s*VALUES\s*\("
-        r"\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([TF])'\s*,\s*'([TF])'\s*,\s*'([TF])'\s*,"
-        r"\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*"
-        r"\);",
-        line.strip(),
-        re.IGNORECASE
-    )
-    if match:
-        class_name, teacher, counts1, counts2, counts3, iscountedby1, iscountedby2, iscountedby3 = match.groups()
-        return {
-            "class": class_name, "teacher": teacher,
-            "counts1": counts1, "counts2": counts2, "counts3": counts3,
-            "iscountedby1": iscountedby1,
-            "iscountedby2": iscountedby2,
-            "iscountedby3": iscountedby3
-        }
-    else:
-        if line.strip() and not line.strip().startswith('--') and not line.strip().upper().startswith('CREATE TABLE'):
-            print(f"Warning: Could not parse classes line format: {line.strip()}")
-        return None
 
-def parse_students_sql_line(line):
-    """Parses a single INSERT statement line for the students table."""
-    match = re.match(
-        r"INSERT INTO students\s*\(\s*code\s*,\s*class\s*,\s*note\s*,\s*counts_classes\s*\)\s*VALUES\s*\(\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*\);",
-        line.strip(),
-        re.IGNORECASE
-    )
-    if match:
-        code, class_name, note, counts_classes_str = match.groups()
-        return {
-            "code": code,
-            "class": class_name,
-            "note": note,
-            "counts_classes_str": counts_classes_str
-        }
-    else:
-        if line.strip() and not line.strip().startswith('--') and not line.strip().upper().startswith('CREATE TABLE'):
-             print(f"Warning: Could not parse students line format: {line.strip()}")
-        return None
 
-def parse_logins_sql_line(line):
-    """
-    Parses a single valid INSERT line for the users table.
-    """
-    line = line.strip()
-    if not line or line.startswith('--'):
-        return None
-    if not line.upper().startswith("INSERT INTO USERS"):
-        return None
-    match = re.match(r"INSERT INTO users\s*\((.*?)\)\s*VALUES\s*\((.*?)\);", line, re.IGNORECASE)
-    if match:
-        columns_str, values_str = match.groups()
-        columns = [col.strip().lower() for col in columns_str.split(',')]
-        value_parts = []
-        temp_val = ""
-        in_string_literal = False
-        for char_idx, char_val in enumerate(values_str):
-            if char_val == "'":
-                if in_string_literal and char_idx + 1 < len(values_str) and values_str[char_idx+1] == "'":
-                    temp_val += "'"
-                else:
-                    in_string_literal = not in_string_literal
-                    if not in_string_literal:
-                        value_parts.append(temp_val)
+
+def get_db_connection(db_file):
+    """Creates a connection to the SQLite database."""
+    conn = sqlite3.connect(db_file)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def create_tables(db_file, schema_file):
+    """Creates tables in the database using the provided schema."""
+    with get_db_connection(db_file) as conn:
+        with open(schema_file, 'r') as f:
+            conn.executescript(f.read())
+
+def migrate_logins_to_db():
+    """Migrates user data from logins.sql to the database."""
+    print("Migrating logins...")
+    with get_db_connection(DATABASE_FILE) as conn:
+        conn.execute("DELETE FROM users")
+        with open(DATA_DIR / 'logins.sql', 'r') as f:
+            for line in f:
+                if line.strip() and line.upper().startswith("INSERT INTO USERS"):
+                    match = re.match(r"INSERT INTO users\s*\((.*?)\)\s*VALUES\s*\((.*?)\);", line, re.IGNORECASE)
+                    if match:
+                        columns_str, values_str = match.groups()
+                        columns = [col.strip().lower() for col in columns_str.split(',')]
+                        value_parts = []
                         temp_val = ""
-            elif in_string_literal:
-                temp_val += char_val
-        
-        if len(columns) != len(value_parts):
-            print(f"Warning: Column count ({len(columns)}) doesn't match value count ({len(value_parts)}) in logins line: {line.strip()}")
-            return None
-    
-        parsed_data = dict(zip(columns, value_parts))
-        username = parsed_data.get('username')
-        password_hash = parsed_data.get('password_hash')
-        profile_picture_url = parsed_data.get('profile_picture_url', '_NULL_')
-        role = parsed_data.get('role')
+                        in_string_literal = False
+                        for char_idx, char_val in enumerate(values_str):
+                            if char_val == "'":
+                                if in_string_literal and char_idx + 1 < len(values_str) and values_str[char_idx+1] == "'":
+                                    temp_val += "'"
+                                else:
+                                    in_string_literal = not in_string_literal
+                                    if not in_string_literal:
+                                        value_parts.append(temp_val)
+                                        temp_val = ""
+                            elif in_string_literal:
+                                temp_val += char_val
+                        
+                        if len(columns) == len(value_parts):
+                            parsed_data = dict(zip(columns, value_parts))
+                            conn.execute(
+                                "INSERT INTO users (username, password_hash, role, profile_picture_url) VALUES (?, ?, ?, ?)",
+                                (
+                                    parsed_data.get('username'),
+                                    parsed_data.get('password_hash'),
+                                    parsed_data.get('role', DEFAULT_ROLE_FOR_NEW_USERS),
+                                    parsed_data.get('profile_picture_url', '_NULL_')
+                                )
+                            )
+        conn.commit()
+    print("Logins migrated.")
 
-        if not role:
-            print(f"Warning: 'role' not found or empty for user '{username}' in logins line: {line.strip()}. Assigning default role: '{DEFAULT_ROLE_FOR_NEW_USERS}'.")
-            role = DEFAULT_ROLE_FOR_NEW_USERS
+def migrate_tokens_to_db():
+    """Migrates token data from tokens.sql to the database."""
+    print("Migrating tokens...")
+    with get_db_connection(DATABASE_FILE) as conn:
+        conn.execute("DELETE FROM tokens")
+        with open(DATA_DIR / 'tokens.sql', 'r') as f:
+            for line in f:
+                if line.strip() and line.upper().startswith("INSERT INTO TOKENS"):
+                    match = re.match(r"INSERT INTO tokens\s*\((.*?)\)\s*VALUES\s*\((.*?)\);", line, re.IGNORECASE)
+                    if match:
+                        columns_str, values_str = match.groups()
+                        columns = [col.strip().lower() for col in columns_str.split(',')]
+                        value_parts = []
+                        temp_val = ""
+                        in_string_literal = False
+                        for char_idx, char_val in enumerate(values_str):
+                            if char_val == "'":
+                                if in_string_literal and char_idx + 1 < len(values_str) and values_str[char_idx+1] == "'":
+                                    temp_val += "'"
+                                else:
+                                    in_string_literal = not in_string_literal
+                                    if not in_string_literal:
+                                        value_parts.append(temp_val)
+                                        temp_val = ""
+                            elif in_string_literal:
+                                temp_val += char_val
+                        
+                        if len(columns) == len(value_parts):
+                            parsed_data = dict(zip(columns, value_parts))
+                            conn.execute(
+                                "INSERT INTO tokens (token, email) VALUES (?, ?)",
+                                (
+                                    parsed_data.get('token'),
+                                    parsed_data.get('email')
+                                )
+                            )
+        conn.commit()
+    print("Tokens migrated.")
 
-        if not username or not password_hash:
-            print(f"Warning: Missing username or password_hash in parsed data from logins line: {line.strip()}")
-            return None
-        if not (':' in password_hash or password_hash.upper() == '_NULL_' or password_hash.upper() == 'GOOGLE_AUTH_USER' or (password_hash.startswith('_') and password_hash.endswith('_'))):
-            print(f"Warning: User '{username}' has unrecognized password_hash format: '{password_hash}' in line: {line.strip()}. Will be loaded but may cause issues.")
-            return None
-        return username, password_hash, profile_picture_url, role
-    else:
-        if line.upper().startswith("INSERT INTO USERS"):
-            print(f"Warning: Could not parse logins line format (regex mismatch): {line.strip()}")
-        return None
+def migrate_classes_to_db():
+    """Migrates class data from classes.sql to the database."""
+    print("Migrating classes...")
+    with get_db_connection(YEAR_DATABASE_FILE) as conn:
+        conn.execute("DELETE FROM classes")
+        with open(DATA_DIR / '2025' / 'classes.sql', 'r') as f:
+            for line in f:
+                if line.strip() and line.upper().startswith("INSERT INTO CLASSES"):
+                    match = re.match(r"INSERT INTO classes\s*\((.*?)\)\s*VALUES\s*\((.*?)\);", line, re.IGNORECASE)
+                    if match:
+                        columns_str, values_str = match.groups()
+                        columns = [col.strip().lower() for col in columns_str.split(',')]
+                        value_parts = []
+                        temp_val = ""
+                        in_string_literal = False
+                        for char_idx, char_val in enumerate(values_str):
+                            if char_val == "'":
+                                if in_string_literal and char_idx + 1 < len(values_str) and values_str[char_idx+1] == "'":
+                                    temp_val += "'"
+                                else:
+                                    in_string_literal = not in_string_literal
+                                    if not in_string_literal:
+                                        value_parts.append(temp_val)
+                                        temp_val = ""
+                            elif in_string_literal:
+                                temp_val += char_val
+                        
+                        if len(columns) == len(value_parts):
+                            parsed_data = dict(zip(columns, value_parts))
+                            conn.execute(
+                                "INSERT INTO classes (class, teacher, counts1, counts2, counts3, iscountedby1, iscountedby2, iscountedby3) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                                (
+                                    parsed_data.get('class'),
+                                    parsed_data.get('teacher'),
+                                    parsed_data.get('counts1'),
+                                    parsed_data.get('counts2'),
+                                    parsed_data.get('counts3'),
+                                    parsed_data.get('iscountedby1'),
+                                    parsed_data.get('iscountedby2'),
+                                    parsed_data.get('iscountedby3')
+                                )
+                            )
+        conn.commit()
+    print("Classes migrated.")
 
-def load_counts_from_file(file_path):
-    """
-    Loads data from a specific counts SQL file.
-    """
-    print(f"Attempting to load counts data from: {file_path}")
-    
-    temp_data = collections.defaultdict(lambda: collections.defaultdict(lambda: collections.defaultdict(int)))
-    file_existed_initially = file_path.exists()
+def migrate_students_to_db():
+    """Migrates student data from students.sql to the database."""
+    print("Migrating students...")
+    with get_db_connection(YEAR_DATABASE_FILE) as conn:
+        conn.execute("DELETE FROM students")
+        with open(DATA_DIR / '2025' / 'students.sql', 'r') as f:
+            for line in f:
+                if line.strip() and line.upper().startswith("INSERT INTO STUDENTS"):
+                    match = re.match(r"INSERT INTO students\s*\((.*?)\)\s*VALUES\s*\((.*?)\);", line, re.IGNORECASE)
+                    if match:
+                        columns_str, values_str = match.groups()
+                        columns = [col.strip().lower() for col in columns_str.split(',')]
+                        value_parts = []
+                        temp_val = ""
+                        in_string_literal = False
+                        for char_idx, char_val in enumerate(values_str):
+                            if char_val == "'":
+                                if in_string_literal and char_idx + 1 < len(values_str) and values_str[char_idx+1] == "'":
+                                    temp_val += "'"
+                                else:
+                                    in_string_literal = not in_string_literal
+                                    if not in_string_literal:
+                                        value_parts.append(temp_val)
+                                        temp_val = ""
+                            elif in_string_literal:
+                                temp_val += char_val
+                        
+                        if len(columns) == len(value_parts):
+                            parsed_data = dict(zip(columns, value_parts))
+                            conn.execute(
+                                "INSERT INTO students (code, class, note, counts_classes) VALUES (?, ?, ?, ?)",
+                                (
+                                    parsed_data.get('code'),
+                                    parsed_data.get('class'),
+                                    parsed_data.get('note'),
+                                    parsed_data.get('counts_classes')
+                                )
+                            )
+        conn.commit()
+    print("Students migrated.")
 
-    with data_lock:
-        if file_existed_initially:
-            try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    for line_num, line in enumerate(f, 1):
-                        parsed = parse_sql_line(line)
-                        if parsed:
-                            class_name, type_val, points, count = parsed
-                            if 0 <= points <= 6 and type_val in ['student', 'teacher']:
-                                temp_data[class_name][type_val][points] = count
-                            else:
-                                print(f"Warning: Invalid data in {file_path} line {line_num}: {line.strip()}")
-                print(f"Loaded counts from {file_path}.")
-            except Exception as e:
-                print(f"!!! ERROR reading or parsing {file_path}: {e}. Data might be incomplete.")
-        else:
-            print(f"Warning: {file_path} not found. Will initialize with defaults.")
-
-        made_changes_to_temp_data = False
-        if not SUPPORTED_CLASSES:
-            print("Warning: SUPPORTED_CLASSES list is empty. Cannot initialize defaults for counts files.")
-        else:
-            for class_name_supported in SUPPORTED_CLASSES:
-                if class_name_supported not in temp_data:
-                    print(f"Initializing default zero counts in {file_path} for missing class: {class_name_supported}")
-                    made_changes_to_temp_data = True
-                    for type_val_supported in ['student', 'teacher']:
-                        for points_val_supported in range(7):
-                            temp_data[class_name_supported][type_val_supported][points_val_supported] = 0
-
-        if not file_existed_initially or made_changes_to_temp_data:
-            print(f"Saving initial/default counts data to {file_path}...")
-            if not save_counts_to_file(file_path, temp_data):
-                 print(f"!!! CRITICAL: Failed to save initial/default counts data to {file_path}.")
-            else:
-                 print(f"Successfully saved initial/default counts to {file_path}.")
-
-    print(f"Counts data loading/initialization complete for {file_path}.")
-    return temp_data
-
-def load_class_data_from_sql():
-    """Loads data from classes.sql into the in-memory class_data_store."""
-    global class_data_store, SUPPORTED_CLASSES
-    print(f"Attempting to load class data from: {CLASSES_SQL_FILE_PATH}")
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-    temp_class_store = []
-    file_exists = CLASSES_SQL_FILE_PATH.exists()
-    classes_loaded_count = 0
-
-    if file_exists:
-        try:
-            with open(CLASSES_SQL_FILE_PATH, 'r', encoding='utf-8') as f:
-                for line_num, line in enumerate(f, 1):
-                    parsed = parse_classes_sql_line(line)
-                    if parsed:
-                        temp_class_store.append(parsed)
-                        classes_loaded_count += 1
-            print(f"Loaded {classes_loaded_count} class(es) from {CLASSES_SQL_FILE_PATH}.")
-        except Exception as e:
-            print(f"!!! ERROR reading or parsing {CLASSES_SQL_FILE_PATH}: {e}. Class data store might be empty or incomplete.")
-            temp_class_store.clear()
-    else:
-        print(f"Warning: {CLASSES_SQL_FILE_PATH} not found. No classes loaded. Class management will start with an empty list.")
-
-    with data_lock:
-        class_data_store = temp_class_store
-        SUPPORTED_CLASSES = sorted([cls['class'] for cls in class_data_store])
-        if SUPPORTED_CLASSES:
-            print(f"SUPPORTED_CLASSES populated: {SUPPORTED_CLASSES}")
-        else:
-            print("Warning: No classes loaded, SUPPORTED_CLASSES is empty.")
-
-    print("Class data loading complete.")
-
-def load_students_data_from_sql():
-    """Loads data from students.sql into the in-memory students_data_store."""
-    global students_data_store
-    print(f"Attempting to load student data from: {STUDENTS_SQL_FILE_PATH}")
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-    temp_students_store = []
-    file_exists = STUDENTS_SQL_FILE_PATH.exists()
-    students_loaded_count = 0
-    codes_were_generated = False
-
-    if file_exists:
-        try:
-            with open(STUDENTS_SQL_FILE_PATH, 'r', encoding='utf-8') as f:
-                for line_num, line in enumerate(f, 1):
-                    parsed = parse_students_sql_line(line)
-                    if parsed:
-                        if not parsed.get('code') or parsed['code'] == "''" or parsed['code'] == "":
-                            parsed['code'] = generate_random_code()
-                            codes_were_generated = True
-                        temp_students_store.append(parsed)
-                        students_loaded_count += 1
-            print(f"Loaded {students_loaded_count} student configuration(s) from {STUDENTS_SQL_FILE_PATH}.")
-        except Exception as e:
-            print(f"!!! ERROR reading or parsing {STUDENTS_SQL_FILE_PATH}: {e}. Student data store might be empty or incomplete.")
-            temp_students_store.clear()
-    else:
-        print(f"Warning: {STUDENTS_SQL_FILE_PATH} not found. No student configurations loaded.")
-
-    with data_lock:
-        students_data_store = temp_students_store
-
-    if codes_were_generated:
-        print("Generated new codes for some students during load. Saving student data...")
-        if not save_students_data_to_sql():
-            print("!!! CRITICAL: Failed to save student data to file after generating new codes.")
-
-    print("Student data loading complete.")
-
-def load_user_data_from_sql():
-    """Loads user data from logins.sql into the in-memory user_password_store."""
+def load_user_data_from_db():
+    """Loads user data from the database into the in-memory user_password_store."""
     global user_password_store
-    print(f"Attempting to load user data from: {LOGINS_SQL_FILE_PATH}")
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-    temp_user_store = {}
-    file_exists = LOGINS_SQL_FILE_PATH.exists()
-    users_loaded_count = 0
-
-    if file_exists:
-        try:
-            with open(LOGINS_SQL_FILE_PATH, 'r', encoding='utf-8') as f:
-                for line_num, line in enumerate(f, 1):
-                    parsed = parse_logins_sql_line(line)
-                    if parsed:
-                        username, password_hash, profile_picture_url, role = parsed
-                        temp_user_store[username] = {
-                            'password_hash': password_hash,
-                            'profile_picture_url': profile_picture_url if profile_picture_url else '_NULL_',
-                            'role': role
-                        }
-                        users_loaded_count += 1
-
-            print(f"Loaded {users_loaded_count} user(s) from {LOGINS_SQL_FILE_PATH}.")
-
-        except Exception as e:
-            print(f"!!! ERROR reading or parsing {LOGINS_SQL_FILE_PATH}: {e}. User data store might be empty or incomplete.")
-            temp_user_store.clear()
-
-    else:
-        print(f"Warning: {LOGINS_SQL_FILE_PATH} not found. No users loaded. Login will not work.")
-
-    user_password_store = temp_user_store
-
-    if users_loaded_count == 0:
-        print("!!! WARNING: No user accounts loaded. Login functionality will be unavailable.")
-        print(f"!!! Ensure {LOGINS_SQL_FILE_PATH} exists, is readable, and contains valid INSERT statements.")
-        print(f"!!! Example INSERT: INSERT INTO users (username, password_hash) VALUES ('admin', '{hash_password('password123')}');")
-
-    print("User data loading complete.")
+    print("Loading user data from database...")
+    with get_db_connection(DATABASE_FILE) as conn:
+        rows = conn.execute("SELECT * FROM users").fetchall()
+        for row in rows:
+            user_password_store[row['username']] = {
+                'password_hash': row['password_hash'],
+                'profile_picture_url': row['profile_picture_url'],
+                'role': row['role']
+            }
+    print("User data loaded.")
     return user_password_store
 
-def save_counts_to_file(file_path, day_data_to_save):
-    """
-    Saves the provided day-specific count data to the specified SQL file.
-    """
-    print(f"Attempting to save counts data to: {file_path}")
-    with data_lock:
-        try:
-            sql_lines = []
-            sql_lines.append(f"-- Data saved on {datetime.datetime.now().isoformat()} --")
-            sql_lines.append(f"-- This file stores counts for: {file_path.name} --")
-            sql_lines.append("")
+def save_user_data_to_db():
+    """Saves the current user_password_store back to the database."""
+    global user_password_store
+    print("Saving user data to database...")
+    with get_db_connection(DATABASE_FILE) as conn:
+        conn.execute("DELETE FROM users")
+        for username, user_data in user_password_store.items():
+            conn.execute(
+                "INSERT INTO users (username, password_hash, role, profile_picture_url) VALUES (?, ?, ?, ?)",
+                (
+                    username,
+                    user_data['password_hash'],
+                    user_data.get('role', DEFAULT_ROLE_FOR_NEW_USERS),
+                    user_data.get('profile_picture_url', '_NULL_')
+                )
+            )
+        conn.commit()
+    print("User data saved.")
 
-            for class_name in sorted(day_data_to_save.keys()):
-                for type_val in sorted(day_data_to_save[class_name].keys()):
-                    for points_val in sorted(day_data_to_save[class_name][type_val].keys()):
-                        count_val = day_data_to_save[class_name][type_val][points_val]
-                        if count_val > 0:
-                            safe_class_name = class_name.replace("'", "''")
-                            insert_statement = f"INSERT INTO counts (class_name, type, points, count) VALUES ('{safe_class_name}', '{type_val}', {points_val}, {count_val});"
-                            sql_lines.append(insert_statement)
-            with open(file_path, 'w', encoding='utf-8') as f:
-                f.write("\n".join(sql_lines))
-                f.write("\n")
-            print(f"Counts data successfully saved to {file_path}")
-            return True
+def load_class_data_from_db():
+    """Loads data from the database into the in-memory class_data_store."""
+    global class_data_store, SUPPORTED_CLASSES
+    print("Loading class data from database...")
+    with get_db_connection(YEAR_DATABASE_FILE) as conn:
+        rows = conn.execute("SELECT * FROM classes").fetchall()
+        for row in rows:
+            class_data_store.append(dict(row))
+        SUPPORTED_CLASSES = sorted([cls['class'] for cls in class_data_store])
+    print("Class data loaded.")
 
-        except PermissionError as e:
-            print(f"!!! PERMISSION ERROR writing to {file_path}: {e}")
-            return False
-        except IOError as e:
-            print(f"!!! IO ERROR writing to {file_path}: {e}")
-            return False
-        except Exception as e:
-            print(f"!!! UNEXPECTED ERROR during save_counts_to_file for {file_path}:")
-            print(traceback.format_exc())
-            return False
-        
-def save_class_data_to_sql():
-    """Saves the current in-memory class_data_store back to classes.sql."""
+def save_class_data_to_db():
+    """Saves the current in-memory class_data_store back to the database."""
     global class_data_store
-    print(f"Attempting to save class data to: {CLASSES_SQL_FILE_PATH}")
-    with data_lock:
-        try:
-            sql_lines = []
-            sql_lines.append(f"-- Class data saved on {datetime.datetime.now().isoformat()} --")
-            sql_lines.append("")
-
-            for class_item in class_data_store:
-                safe_class_name = class_item['class'].replace("'", "''")
-                safe_teacher = class_item['teacher'].replace("'", "''")
-                safe_iscountedby1 = str(class_item.get('iscountedby1', '_NULL_')).replace("'", "''")
-                safe_iscountedby2 = str(class_item.get('iscountedby2', '_NULL_')).replace("'", "''")
-                safe_iscountedby3 = str(class_item.get('iscountedby3', '_NULL_')).replace("'", "''")
-
-                insert_statement = (
-                    f"INSERT INTO classes (class, teacher, counts1, counts2, counts3, iscountedby1, iscountedby2, iscountedby3) VALUES "
-                    f"('{safe_class_name}', '{safe_teacher}', '{class_item['counts1']}', '{class_item['counts2']}', '{class_item['counts3']}', "
-                    f"'{safe_iscountedby1}', '{safe_iscountedby2}', '{safe_iscountedby3}');"
+    print("Saving class data to database...")
+    with get_db_connection(YEAR_DATABASE_FILE) as conn:
+        conn.execute("DELETE FROM classes")
+        for class_item in class_data_store:
+            conn.execute(
+                "INSERT INTO classes (class, teacher, counts1, counts2, counts3, iscountedby1, iscountedby2, iscountedby3) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    class_item['class'],
+                    class_item['teacher'],
+                    class_item['counts1'],
+                    class_item['counts2'],
+                    class_item['counts3'],
+                    class_item['iscountedby1'],
+                    class_item['iscountedby2'],
+                    class_item['iscountedby3']
                 )
-                sql_lines.append(insert_statement)
+            )
+        conn.commit()
+    print("Class data saved.")
 
-            with open(CLASSES_SQL_FILE_PATH, 'w', encoding='utf-8') as f:
-                f.write("\n".join(sql_lines))
-                f.write("\n")
-            print(f"Class data successfully saved to {CLASSES_SQL_FILE_PATH}")
-            return True
-        except Exception as e:
-            print(f"!!! UNEXPECTED ERROR during save_class_data_to_sql:")
-            print(traceback.format_exc())
-            return False
-
-def save_students_data_to_sql():
-    """Saves the current in-memory students_data_store back to students.sql."""
+def load_students_data_from_db():
+    """Loads data from the database into the in-memory students_data_store."""
     global students_data_store
-    print(f"Attempting to save student data to: {STUDENTS_SQL_FILE_PATH}")
-    with data_lock:
-        try:
-            sql_lines = []
-            for student_item in students_data_store:
-                safe_code = student_item.get('code', generate_random_code()).replace("'", "''")
-                safe_class_name = student_item['class'].replace("'", "''")
-                safe_note = student_item['note'].replace("'", "''")
-                counts_classes_value = student_item.get('counts_classes_str', '[]')
-                insert_statement = (
-                    f"INSERT INTO students (code, class, note, counts_classes) VALUES "
-                    f"('{safe_code}', '{safe_class_name}', '{safe_note}', '{counts_classes_value}');"
-                )
-                sql_lines.append(insert_statement)
+    print("Loading student data from database...")
+    with get_db_connection(YEAR_DATABASE_FILE) as conn:
+        rows = conn.execute("SELECT * FROM students").fetchall()
+        for row in rows:
+            students_data_store.append(dict(row))
+    print("Student data loaded.")
 
-            with open(STUDENTS_SQL_FILE_PATH, 'w', encoding='utf-8') as f:
-                f.write("\n".join(sql_lines))
-                f.write("\n")
-            print(f"Student data successfully saved to {STUDENTS_SQL_FILE_PATH}")
-            return True
-        except Exception as e:
-            print(f"!!! UNEXPECTED ERROR during save_students_data_to_sql:")
-            print(traceback.format_exc())
-            return False
+def save_students_data_to_db():
+    """Saves the current in-memory students_data_store back to the database."""
+    global students_data_store
+    print("Saving student data to database...")
+    with get_db_connection(YEAR_DATABASE_FILE) as conn:
+        conn.execute("DELETE FROM students")
+        for student_item in students_data_store:
+            conn.execute(
+                "INSERT INTO students (code, class, note, counts_classes) VALUES (?, ?, ?, ?)",
+                (
+                    student_item['code'],
+                    student_item['class'],
+                    student_item['note'],
+                    student_item['counts_classes']
+                )
+            )
+        conn.commit()
+    print("Student data saved.")
+
+def load_counts_from_db(day):
+    """Loads data from the database for a specific day."""
+    print(f"Loading counts for {day} from database...")
+    with get_db_connection(YEAR_DATABASE_FILE) as conn:
+        rows = conn.execute("SELECT * FROM counts WHERE day = ?", (day,)).fetchall()
+        temp_data = collections.defaultdict(lambda: collections.defaultdict(lambda: collections.defaultdict(int)))
+        for row in rows:
+            temp_data[row['class_name']][row['type']][row['points']] = row['count']
+    print(f"Counts for {day} loaded.")
+    return temp_data
+
+def save_counts_to_db(day, day_data_to_save):
+    """Saves the provided day-specific count data to the database."""
+    print(f"Saving counts for {day} to database...")
+    with get_db_connection(YEAR_DATABASE_FILE) as conn:
+        conn.execute("DELETE FROM counts WHERE day = ?", (day,))
+        for class_name, class_data in day_data_to_save.items():
+            for type_val, type_data in class_data.items():
+                for points_val, count_val in type_data.items():
+                    if count_val > 0:
+                        conn.execute(
+                            "INSERT INTO counts (class_name, type, points, count, day) VALUES (?, ?, ?, ?, ?)",
+                            (class_name, type_val, points_val, count_val, day)
+                        )
+        conn.commit()
+    print(f"Counts for {day} saved.")
 
 def load_main_config_from_json():
     """Loads configuration from config.json into the in-memory server_config."""
@@ -497,69 +401,3 @@ def load_main_config_from_json():
 
     server_config = temp_config
     print("Server configuration loading complete.")
-
-def save_user_data_to_sql():
-    """Saves the current user_password_store back to logins.sql."""
-    global user_password_store
-    print(f"Attempting to save user data to: {LOGINS_SQL_FILE_PATH}")
-    with data_lock:
-        try:
-            sql_lines = []
-            sql_lines.append(f"-- User data saved on {datetime.datetime.now().isoformat()} --")
-            sql_lines.append("")
-
-            for username, user_data in sorted(user_password_store.items()):
-                safe_username = username.replace("'", "''")
-                password_hash = user_data['password_hash']
-                profile_pic_url = user_data.get('profile_picture_url', '_NULL_')
-                role = user_data.get('role', DEFAULT_ROLE_FOR_NEW_USERS)
-                safe_profile_pic_url = profile_pic_url.replace("'", "''") if profile_pic_url else '_NULL_'
-                safe_role = role.replace("'", "''")
-                insert_statement = f"INSERT INTO users (username, password_hash, role, profile_picture_url) VALUES ('{safe_username}', '{password_hash}', '{safe_role}', '{safe_profile_pic_url}');"
-                sql_lines.append(insert_statement)
-
-            with open(LOGINS_SQL_FILE_PATH, 'w', encoding='utf-8') as f:
-                f.write("\n".join(sql_lines))
-                f.write("\n")
-            print(f"User data successfully saved to {LOGINS_SQL_FILE_PATH}")
-            return True
-
-        except PermissionError as e:
-            print(f"!!! PERMISSION ERROR writing to {LOGINS_SQL_FILE_PATH}: {e}")
-            return False
-        except IOError as e:
-            print(f"!!! IO ERROR writing to {LOGINS_SQL_FILE_PATH}: {e}")
-            return False
-        except Exception as e:
-            print(f"!!! UNEXPECTED ERROR during save_user_data_to_sql:")
-            print(traceback.format_exc())
-            return False
-
-def save_main_config_to_json(new_oauth_data):
-    """
-    Reads the existing config.json, updates OAuth specific keys,
-    and writes the entire config back.
-    """
-    config_file_path = DATA_DIR / 'config.json'
-    print(f"Attempting to update OAuth settings in: {config_file_path}")
-
-    with data_lock:
-        try:
-            current_config = {}
-            if config_file_path.exists():
-                with open(config_file_path, 'r', encoding='utf-8') as f:
-                    current_config = json.load(f)
-            
-            current_config.update(new_oauth_data)
-
-            current_config['oauth_eneabled'] = new_oauth_data.get('oauth_eneabled', current_config.get('oauth_eneabled', 'false'))
-
-            with open(config_file_path, 'w', encoding='utf-8') as f:
-                json.dump(current_config, f, indent=4)
-            
-            print(f"OAuth settings successfully updated in {config_file_path}")
-            return True
-        except Exception as e:
-            print(f"!!! UNEXPECTED ERROR during save_main_config_to_json:")
-            print(traceback.format_exc())
-            return False
