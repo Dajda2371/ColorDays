@@ -240,7 +240,7 @@ def migrate_students_to_db():
                                         temp_val = ""
                             elif in_string_literal:
                                 temp_val += char_val
-                        
+
                         if len(columns) == len(value_parts):
                             parsed_data = dict(zip(columns, value_parts))
                             conn.execute(
@@ -254,6 +254,70 @@ def migrate_students_to_db():
                             )
         conn.commit()
     print("Students migrated.")
+
+def migrate_counts_to_db():
+    """Migrates count data from tables-*.sql files to the database."""
+    print("Migrating counts...")
+    day_files = {
+        'monday': CURRENT_YEAR_DIR / 'tables-monday.sql',
+        'tuesday': CURRENT_YEAR_DIR / 'tables-tuesday.sql',
+        'wednesday': CURRENT_YEAR_DIR / 'tables-wednesday.sql'
+    }
+
+    with get_db_connection(YEAR_DATABASE_FILE) as conn:
+        conn.execute("DELETE FROM counts")
+
+        for day_name, file_path in day_files.items():
+            if not file_path.exists():
+                print(f"Warning: {file_path} not found, skipping...")
+                continue
+
+            with open(file_path, 'r') as f:
+                for line in f:
+                    if line.strip() and line.upper().startswith("INSERT INTO COUNTS"):
+                        # Parse: INSERT INTO counts (class_name, type, points, count) VALUES ('1.A', 'student', 0, 1);
+                        match = re.match(r"INSERT INTO counts\s*\((.*?)\)\s*VALUES\s*\((.*?)\);", line, re.IGNORECASE)
+                        if match:
+                            columns_str, values_str = match.groups()
+                            columns = [col.strip().lower() for col in columns_str.split(',')]
+
+                            # Parse values more carefully to handle strings and numbers
+                            value_parts = []
+                            temp_val = ""
+                            in_string_literal = False
+                            for char_idx, char_val in enumerate(values_str):
+                                if char_val == "'":
+                                    if in_string_literal and char_idx + 1 < len(values_str) and values_str[char_idx+1] == "'":
+                                        temp_val += "'"
+                                    else:
+                                        in_string_literal = not in_string_literal
+                                        if not in_string_literal:
+                                            value_parts.append(temp_val)
+                                            temp_val = ""
+                                elif char_val == ',' and not in_string_literal:
+                                    if temp_val.strip():
+                                        value_parts.append(temp_val.strip())
+                                        temp_val = ""
+                                elif in_string_literal or char_val not in [' ', ',']:
+                                    temp_val += char_val
+
+                            # Don't forget the last value
+                            if temp_val.strip():
+                                value_parts.append(temp_val.strip())
+
+                            if len(value_parts) >= 4:  # class_name, type, points, count
+                                conn.execute(
+                                    "INSERT INTO counts (class_name, type, points, count, day) VALUES (?, ?, ?, ?, ?)",
+                                    (
+                                        value_parts[0],  # class_name
+                                        value_parts[1],  # type
+                                        int(value_parts[2]),  # points
+                                        int(value_parts[3]),  # count
+                                        day_name  # day
+                                    )
+                                )
+        conn.commit()
+    print("Counts migrated.")
 
 def load_user_data_from_db():
     """Loads user data from the database into the in-memory user_password_store."""

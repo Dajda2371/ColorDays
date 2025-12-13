@@ -96,13 +96,20 @@ pip install --upgrade google-auth-oauthlib google-api-python-client requests
 
 The server will attempt to auto-install missing Google OAuth dependencies on startup if not present.
 
-### Database Schema
+### Database Schema and Migration
 
 Schema files define the database structure:
 - `backend/data/schema.sql` - Users and tokens tables
 - `backend/data/{year}/schema.sql` - Classes, students, and counts tables
 
-Migration functions in `data_manager.py` handle conversion from legacy .sql files to SQLite databases.
+Migration functions in `data_manager.py` handle conversion from legacy .sql files to SQLite databases:
+- `migrate_logins_to_db()` - Migrates logins.sql to data.db
+- `migrate_tokens_to_db()` - Migrates tokens.sql to data.db
+- `migrate_classes_to_db()` - Migrates classes.sql to {year}.db
+- `migrate_students_to_db()` - Migrates students.sql to {year}.db
+- `migrate_counts_to_db()` - Migrates tables-*.sql (count data) to {year}.db
+
+To run migrations: `python3 backend/migrate_to_db.py`
 
 ## Key API Endpoints
 
