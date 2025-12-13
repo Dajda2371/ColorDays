@@ -67,8 +67,11 @@ Special password states in the database:
 - `counts_classes` field stores a string like `[Class1,Class2]` listing which classes this student counts
 - `note` field typically contains student name or identifier
 
-**Counts Table:**
-- Stores point counts per class, per day, per type (student/teacher), per points (0-6)
+**Counts Tables (3 separate tables):**
+- `counts_monday` - Monday's point counts
+- `counts_tuesday` - Tuesday's point counts
+- `counts_wednesday` - Wednesday's point counts
+- Each stores: class_name, type (student/teacher), points (0-6), count
 
 ### Threading & Concurrency
 

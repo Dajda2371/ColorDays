@@ -256,7 +256,7 @@ def migrate_students_to_db():
     print("Students migrated.")
 
 def migrate_counts_to_db():
-    """Migrates count data from tables-*.sql files to the database."""
+    """Migrates count data from tables-*.sql files to separate day tables in the database."""
     print("Migrating counts...")
     day_files = {
         'monday': CURRENT_YEAR_DIR / 'tables-monday.sql',
@@ -265,9 +265,14 @@ def migrate_counts_to_db():
     }
 
     with get_db_connection(YEAR_DATABASE_FILE) as conn:
-        conn.execute("DELETE FROM counts")
+        # Clear all day tables
+        conn.execute("DELETE FROM counts_monday")
+        conn.execute("DELETE FROM counts_tuesday")
+        conn.execute("DELETE FROM counts_wednesday")
 
         for day_name, file_path in day_files.items():
+            table_name = f"counts_{day_name}"
+
             if not file_path.exists():
                 print(f"Warning: {file_path} not found, skipping...")
                 continue
@@ -307,13 +312,12 @@ def migrate_counts_to_db():
 
                             if len(value_parts) >= 4:  # class_name, type, points, count
                                 conn.execute(
-                                    "INSERT INTO counts (class_name, type, points, count, day) VALUES (?, ?, ?, ?, ?)",
+                                    f"INSERT INTO {table_name} (class_name, type, points, count) VALUES (?, ?, ?, ?)",
                                     (
                                         value_parts[0],  # class_name
                                         value_parts[1],  # type
                                         int(value_parts[2]),  # points
                                         int(value_parts[3]),  # count
-                                        day_name  # day
                                     )
                                 )
         conn.commit()
@@ -419,8 +423,9 @@ def save_students_data_to_db():
 def load_counts_from_db(day):
     """Loads data from the database for a specific day."""
     print(f"Loading counts for {day} from database...")
+    table_name = f"counts_{day.lower()}"
     with get_db_connection(YEAR_DATABASE_FILE) as conn:
-        rows = conn.execute("SELECT * FROM counts WHERE day = ?", (day,)).fetchall()
+        rows = conn.execute(f"SELECT * FROM {table_name}").fetchall()
         temp_data = collections.defaultdict(lambda: collections.defaultdict(lambda: collections.defaultdict(int)))
         for row in rows:
             temp_data[row['class_name']][row['type']][row['points']] = row['count']
@@ -430,15 +435,16 @@ def load_counts_from_db(day):
 def save_counts_to_db(day, day_data_to_save):
     """Saves the provided day-specific count data to the database."""
     print(f"Saving counts for {day} to database...")
+    table_name = f"counts_{day.lower()}"
     with get_db_connection(YEAR_DATABASE_FILE) as conn:
-        conn.execute("DELETE FROM counts WHERE day = ?", (day,))
+        conn.execute(f"DELETE FROM {table_name}")
         for class_name, class_data in day_data_to_save.items():
             for type_val, type_data in class_data.items():
                 for points_val, count_val in type_data.items():
                     if count_val > 0:
                         conn.execute(
-                            "INSERT INTO counts (class_name, type, points, count, day) VALUES (?, ?, ?, ?, ?)",
-                            (class_name, type_val, points_val, count_val, day)
+                            f"INSERT INTO {table_name} (class_name, type, points, count) VALUES (?, ?, ?, ?)",
+                            (class_name, type_val, points_val, count_val)
                         )
         conn.commit()
     print(f"Counts for {day} saved.")
