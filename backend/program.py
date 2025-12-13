@@ -1237,6 +1237,9 @@ def handle_decrement_module(handler_instance, data, request_path):
 # --- HTTP Request Handler ---
 class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
+    # --- In-memory session store for active sessions ---
+    self.__class__.active_sessions = {}  # Maps session_token -> username
+
     def get_cookies(self):
         cookies = SimpleCookie()
         cookie_header = self.headers.get('Cookie')
@@ -1248,7 +1251,7 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
     def is_logged_in(self):
         cookies = self.get_cookies()
         session_cookie = cookies.get(SESSION_COOKIE_NAME)
-        if session_cookie and session_cookie.value == VALID_SESSION_VALUE:
+        if session_cookie and session_cookie.value in self.__class__.active_sessions:
             return True
         return False
 
@@ -2119,7 +2122,18 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                     
                     # Use cleaned_username for the cookie
                     user_cookie_headers = create_cookies(USERNAME_COOKIE_NAME, cleaned_username, path='/', httponly=False)
-                    session_cookie_headers = create_cookies(SESSION_COOKIE_NAME, VALID_SESSION_VALUE, path='/')
+
+                    # ...inside the login success block in do_POST...
+
+                    # Generate a secure session token
+                    session_token = generate_token(64)
+                    # Optionally store the token in tokens.sql for tracking/auditing
+                    store_token(username, session_token, self.client_address[0] if hasattr(self, 'client_address') else '_NULL_')
+                    # Register the session token in the in-memory session store
+                    self.__class__.active_sessions[session_token] = username
+                    # Set the session cookie to the generated token
+                    session_cookie_headers = create_cookies(SESSION_COOKIE_NAME, session_token, path='/')
+
                     sql_user_cookie_headers = create_cookies(SQL_COOKIE_NAME, username, path='/', httponly=False) # Set the SQL auth cookie
 
                     # --- COMBINE standard cookies with any extra ones returned ---
@@ -3015,6 +3029,49 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
 # --- End of ColorDaysHandler modifications ---
 
+# --- Token Generation and Storage ---
+
+TOKENS_SQL_FILE_PATH = DATA_DIR / 'tokens.sql'  # Path to the tokens data file
+
+def generate_token(length=128):
+    """Generates a secure random alphanumeric token of a given length."""
+    characters = string.ascii_letters + string.digits
+    return ''.join(random.SystemRandom().choice(characters) for _ in range(length))
+
+def store_token(user, token_value, ip='_NULL_'):
+    """
+    Stores a token in data/tokens.sql as an INSERT statement.
+    Args:
+        user (str): Username for whom the token is generated.
+        token_value (str): The generated token value.
+        ip (str): IP address (optional, default '_NULL_').
+    Returns:
+        bool: True if stored successfully, False otherwise.
+    """
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        TOKENS_SQL_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        safe_user = user.replace("'", "''")
+        safe_token = token_value.replace("'", "''")
+        safe_ip = ip.replace("'", "''") if ip else '_NULL_'
+        insert_line = f"INSERT INTO tokens (user, value, ip) VALUES ('{safe_user}', '{safe_token}', '{safe_ip}');\n"
+        with open(TOKENS_SQL_FILE_PATH, 'a', encoding='utf-8') as f:
+            f.write(insert_line)
+        print(f"Token stored for user '{user}'.")
+        return True
+    except Exception as e:
+        print(f"Error storing token for user '{user}': {e}")
+        return False
+
+def create_and_store_token(user, ip='_NULL_', length=128):
+    """
+    Generates a token and stores it in tokens.sql.
+    Returns the token value if successful, else None.
+    """
+    token = generate_token(length)
+    if store_token(user, token, ip):
+        return token
+    return None
 
 # --- Main Execution ---
 if __name__ == "__main__":
