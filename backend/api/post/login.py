@@ -2,10 +2,8 @@
 import json
 import traceback
 
-from auth import store_token
-from utils import create_cookies, generate_token
+from utils import store_token, create_cookies, generate_token, verify_password
 from data_manager import user_password_store
-from auth import verify_password
 from config import (
     USERNAME_COOKIE_NAME,
     SESSION_COOKIE_NAME,

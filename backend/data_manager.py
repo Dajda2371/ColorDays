@@ -471,3 +471,17 @@ def load_main_config_from_json():
 
     server_config = temp_config
     print("Server configuration loading complete.")
+
+def save_main_config_to_json(config_data):
+    """Saves the main configuration dictionary to config.json."""
+    config_file_path = DATA_DIR / 'config.json'
+    print(f"Attempting to save server configuration to: {config_file_path}")
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(config_file_path, 'w', encoding='utf-8') as f:
+            json.dump(config_data, f, indent=4)
+        print(f"Server configuration saved to {config_file_path}.")
+        return True
+    except Exception as e:
+        print(f"!!! ERROR saving {config_file_path}: {e}")
+        return False

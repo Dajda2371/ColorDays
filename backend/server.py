@@ -203,16 +203,38 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         handler = POST_ROUTES.get(path)
         if handler:
             content_length = int(self.headers.get('Content-Length', 0))
-            post_data = self.rfile.read(content_length)
-            
-            # endpoints that don't require a json body
-            if path == '/logout':
-                handler(self)
-                return
+            post_body_bytes = b'' # Read raw bytes
+            if content_length > 0:
+                post_body_bytes = self.rfile.read(content_length)
 
+            # Routes that do not require a JSON body or 'data' argument (or handle it internally)
+            if path in ['/login', '/login/student', '/logout']:
+                if path == '/logout': # Logout does not need a body
+                    handler(self)
+                    return
+                # Login/login_student expects a body, but handler doesn't take 'data' arg explicitly as an argument
+                try:
+                    # Attempt to parse even if not directly passed to handler, as handler might read it
+                    data = json.loads(post_body_bytes)
+                    # Pass handler if it's login/login_student
+                    handler(self)
+                    return
+                except json.JSONDecodeError:
+                    self._send_response(400, {"error": "Invalid JSON payload for login/student login"})
+                    return
+                except Exception as e:
+                    print(f"Error during {path} processing: {e}")
+                    traceback.print_exc()
+                    self._send_response(500, {"error": f"Server error during {path}"})
+                    return
+            
+            # All other routes expect a JSON body and 'data' argument
+            if not post_body_bytes:
+                self._send_response(400, {"error": "Missing JSON payload for this endpoint"})
+                return
             try:
-                data = json.loads(post_data)
-                handler(self, data)
+                data = json.loads(post_body_bytes)
+                handler(self, data) # Call with 'self' and 'data'
             except json.JSONDecodeError:
                 self._send_response(400, {"error": "Invalid JSON payload"})
         else:

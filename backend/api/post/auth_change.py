@@ -1,9 +1,9 @@
 
 import json
 
-from auth import get_current_user_info, is_user_using_oauth, verify_password
+from auth import get_current_user_info, is_user_using_oauth
 from data_manager import user_password_store, data_lock, save_user_data_to_db
-from utils import hash_password, create_cookie_clear_headers
+from utils import hash_password, create_cookie_clear_headers, verify_password
 from config import CHANGE_PASSWORD_COOKIE_NAME
 
 
