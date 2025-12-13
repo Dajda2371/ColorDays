@@ -4,8 +4,7 @@ from config import (
     USERNAME_COOKIE_NAME,
     DEFAULT_ROLE_FOR_NEW_USERS
 )
-
-user_password_store = {}
+from data_manager import user_password_store
 
 def get_current_user_info(handler_instance):
     """
