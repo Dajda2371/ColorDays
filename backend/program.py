@@ -57,9 +57,29 @@ def main():
     load_students_data_from_sql()
     load_user_data_from_sql()
 
-    with socketserver.TCPServer(("", PORT), ColorDaysHandler) as httpd:
-        print(f"Serving at port {PORT}")
-        httpd.serve_forever()
+    httpd = socketserver.TCPServer(("", PORT), ColorDaysHandler)
+    server_thread = threading.Thread(target=httpd.serve_forever)
+    server_thread.daemon = True
+    server_thread.start()
 
+    print(f"Serving at port {PORT}")
+    print("Type 'stop' and press Enter to stop the server.")
+
+    while True:
+        try:
+            if input().strip().lower() == 'stop':
+                print("Stopping server...")
+                httpd.shutdown()
+                server_thread.join()
+                print("Server stopped.")
+                break
+        except KeyboardInterrupt:
+            print("Stopping server...")
+            httpd.shutdown()
+            server_thread.join()
+            print("Server stopped.")
+            break
+    
 if __name__ == "__main__":
+    import threading
     main()
