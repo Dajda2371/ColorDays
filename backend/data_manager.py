@@ -436,18 +436,23 @@ def save_counts_to_db(day, day_data_to_save):
     """Saves the provided day-specific count data to the database."""
     print(f"Saving counts for {day} to database...")
     table_name = f"counts_{day.lower()}"
-    with get_db_connection(YEAR_DATABASE_FILE) as conn:
-        conn.execute(f"DELETE FROM {table_name}")
-        for class_name, class_data in day_data_to_save.items():
-            for type_val, type_data in class_data.items():
-                for points_val, count_val in type_data.items():
-                    if count_val > 0:
-                        conn.execute(
-                            f"INSERT INTO {table_name} (class_name, type, points, count) VALUES (?, ?, ?, ?)",
-                            (class_name, type_val, points_val, count_val)
-                        )
-        conn.commit()
-    print(f"Counts for {day} saved.")
+    try:
+        with get_db_connection(YEAR_DATABASE_FILE) as conn:
+            conn.execute(f"DELETE FROM {table_name}")
+            for class_name, class_data in day_data_to_save.items():
+                for type_val, type_data in class_data.items():
+                    for points_val, count_val in type_data.items():
+                        if count_val > 0:
+                            conn.execute(
+                                f"INSERT INTO {table_name} (class_name, type, points, count) VALUES (?, ?, ?, ?)",
+                                (class_name, type_val, points_val, count_val)
+                            )
+            conn.commit()
+        print(f"Counts for {day} saved.")
+        return True
+    except Exception as e:
+        print(f"Error saving counts for {day}: {e}")
+        return False
 
 def load_main_config_from_json():
     """Loads configuration from config.json into the in-memory server_config."""
