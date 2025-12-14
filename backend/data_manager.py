@@ -342,20 +342,25 @@ def save_user_data_to_db():
     """Saves the current user_password_store back to the database."""
     global user_password_store
     print("Saving user data to database...")
-    with get_db_connection(DATABASE_FILE) as conn:
-        conn.execute("DELETE FROM users")
-        for username, user_data in user_password_store.items():
-            conn.execute(
-                "INSERT INTO users (username, password_hash, role, profile_picture_url) VALUES (?, ?, ?, ?)",
-                (
-                    username,
-                    user_data['password_hash'],
-                    user_data.get('role', DEFAULT_ROLE_FOR_NEW_USERS),
-                    user_data.get('profile_picture_url', '_NULL_')
+    try:
+        with get_db_connection(DATABASE_FILE) as conn:
+            conn.execute("DELETE FROM users")
+            for username, user_data in user_password_store.items():
+                conn.execute(
+                    "INSERT INTO users (username, password_hash, role, profile_picture_url) VALUES (?, ?, ?, ?)",
+                    (
+                        username,
+                        user_data['password_hash'],
+                        user_data.get('role', DEFAULT_ROLE_FOR_NEW_USERS),
+                        user_data.get('profile_picture_url', '_NULL_')
+                    )
                 )
-            )
-        conn.commit()
-    print("User data saved.")
+            conn.commit()
+        print("User data saved.")
+        return True
+    except Exception as e:
+        print(f"Error saving user data: {e}")
+        return False
 
 def load_class_data_from_db():
     """Loads data from the database into the in-memory class_data_store."""
@@ -372,24 +377,29 @@ def save_class_data_to_db():
     """Saves the current in-memory class_data_store back to the database."""
     global class_data_store
     print("Saving class data to database...")
-    with get_db_connection(YEAR_DATABASE_FILE) as conn:
-        conn.execute("DELETE FROM classes")
-        for class_item in class_data_store:
-            conn.execute(
-                "INSERT INTO classes (class, teacher, counts1, counts2, counts3, iscountedby1, iscountedby2, iscountedby3) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    class_item['class'],
-                    class_item['teacher'],
-                    class_item['counts1'],
-                    class_item['counts2'],
-                    class_item['counts3'],
-                    class_item['iscountedby1'],
-                    class_item['iscountedby2'],
-                    class_item['iscountedby3']
+    try:
+        with get_db_connection(YEAR_DATABASE_FILE) as conn:
+            conn.execute("DELETE FROM classes")
+            for class_item in class_data_store:
+                conn.execute(
+                    "INSERT INTO classes (class, teacher, counts1, counts2, counts3, iscountedby1, iscountedby2, iscountedby3) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        class_item['class'],
+                        class_item['teacher'],
+                        class_item['counts1'],
+                        class_item['counts2'],
+                        class_item['counts3'],
+                        class_item['iscountedby1'],
+                        class_item['iscountedby2'],
+                        class_item['iscountedby3']
+                    )
                 )
-            )
-        conn.commit()
-    print("Class data saved.")
+            conn.commit()
+        print("Class data saved.")
+        return True
+    except Exception as e:
+        print(f"Error saving class data: {e}")
+        return False
 
 def load_students_data_from_db():
     """Loads data from the database into the in-memory students_data_store."""
@@ -405,20 +415,25 @@ def save_students_data_to_db():
     """Saves the current in-memory students_data_store back to the database."""
     global students_data_store
     print("Saving student data to database...")
-    with get_db_connection(YEAR_DATABASE_FILE) as conn:
-        conn.execute("DELETE FROM students")
-        for student_item in students_data_store:
-            conn.execute(
-                "INSERT INTO students (code, class, note, counts_classes) VALUES (?, ?, ?, ?)",
-                (
-                    student_item['code'],
-                    student_item['class'],
-                    student_item['note'],
-                    student_item['counts_classes']
+    try:
+        with get_db_connection(YEAR_DATABASE_FILE) as conn:
+            conn.execute("DELETE FROM students")
+            for student_item in students_data_store:
+                conn.execute(
+                    "INSERT INTO students (code, class, note, counts_classes) VALUES (?, ?, ?, ?)",
+                    (
+                        student_item['code'],
+                        student_item['class'],
+                        student_item['note'],
+                        student_item['counts_classes']
+                    )
                 )
-            )
-        conn.commit()
-    print("Student data saved.")
+            conn.commit()
+        print("Student data saved.")
+        return True
+    except Exception as e:
+        print(f"Error saving student data: {e}")
+        return False
 
 def load_counts_from_db(day):
     """Loads data from the database for a specific day."""
