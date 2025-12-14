@@ -95,8 +95,10 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
     def is_logged_in(self):
         cookies = self.get_cookies()
         session_cookie = cookies.get(SESSION_COOKIE_NAME)
-        if session_cookie and session_cookie.value in self.active_sessions:
-            return True
+        if session_cookie:
+            # Check if it's in active_sessions (teacher/admin login) or matches the student session value
+            if session_cookie.value in self.active_sessions or session_cookie.value == VALID_SESSION_VALUE:
+                return True
         return False
 
     def _send_response(self, status_code, data=None, content_type='application/json', headers=None):
