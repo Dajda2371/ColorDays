@@ -83,4 +83,19 @@ document.addEventListener('DOMContentLoaded', function () {
             displayError(serverErrorMessage || error.message || `An unexpected error occurred during ${userType.toLowerCase()} login.`);
         });
     }
+
+    // --- Auto-login with code from URL parameter ---
+    const urlParams = new URLSearchParams(window.location.search);
+    const codeParam = urlParams.get('code');
+
+    if (codeParam) {
+        console.log('Auto-login: Code parameter detected:', codeParam);
+        // Fill in the student code field
+        if (studentLoginForm && studentLoginForm.code) {
+            studentLoginForm.code.value = codeParam;
+        }
+        // Automatically attempt login
+        clearError();
+        fetchWithCredentials('/login/student', { code: codeParam }, 'Student');
+    }
 });
