@@ -2,3 +2,4 @@ backend/data/*
 __pycache__/
 *DS_Store
 *Desktop.ini
+backend/old_program.py

@@ -86,7 +86,9 @@ def handle_auth_change(handler, data):
 
         handler.send_response(status_code)
         handler.send_header('Content-type', 'application/json')
-        handler.send_header('Access-Control-Allow-Origin', '*')
+        # Get the origin from the request, or use localhost as fallback
+        origin = handler.headers.get('Origin', 'http://localhost:8000')
+        handler.send_header('Access-Control-Allow-Origin', origin)
         handler.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         handler.send_header('Access-Control-Allow-Headers', 'Content-Type, Cookie')
         handler.send_header('Access-Control-Allow-Credentials', 'true')

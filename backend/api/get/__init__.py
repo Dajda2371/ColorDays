@@ -4,13 +4,13 @@ This module aggregates all GET endpoint handlers from individual files
 organized by category.
 """
 
-from api.get.users import handle_api_users
-from api.get.classes import handle_api_classes
-from api.get.students import handle_api_students, handle_api_student_counting_details
-from api.get.counts import handle_api_counts
-from api.get.config import handle_api_data_config
-from api.get.translations import handle_api_translations
-from api.get.oauth import handle_login_google, handle_oauth2callback, set_oauth_dependencies
+from .users import handle_api_users
+from .classes import handle_api_classes
+from .students import handle_api_students, handle_api_student_counting_details
+from .counts import handle_api_counts
+from .config import handle_api_data_config
+from .translations import handle_api_translations
+from .oauth import handle_login_google, handle_oauth2callback, set_oauth_dependencies
 
 # Route mapping dictionary
 GET_ROUTES = {

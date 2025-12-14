@@ -5,9 +5,9 @@ for easy integration with server.py.
 """
 
 # Import GET routes from the get/ directory
-from api.get import GET_ROUTES
+from .get import GET_ROUTES
 
 # Import POST routes from the post/ directory
-from api.post import POST_ROUTES
+from .post import POST_ROUTES
 
 __all__ = ['GET_ROUTES', 'POST_ROUTES']

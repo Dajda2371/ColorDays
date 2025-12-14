@@ -17,7 +17,7 @@ try:
     print("Google OAuth libraries found and imported.")
 except ImportError:
     print("One or more Google OAuth libraries not found, attempting to install...")
-    install_cmd = 'pip install --upgrade google-auth-oauthlib google-api-python-client requests'
+    install_cmd = 'pip3 install --upgrade google-auth-oauthlib google-api-python-client requests'
     print(f"Running: {install_cmd}")
     return_code = os.system(install_cmd)
     if return_code == 0:
@@ -103,7 +103,9 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
         try:
             self.send_response(status_code)
             self.send_header('Content-type', content_type)
-            self.send_header('Access-Control-Allow-Origin', '*')
+            # Get the origin from the request, or use localhost as fallback
+            origin = self.headers.get('Origin', 'http://localhost:8000')
+            self.send_header('Access-Control-Allow-Origin', origin)
             self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
             self.send_header('Access-Control-Allow-Headers', 'Content-Type, Cookie')
             self.send_header('Access-Control-Allow-Credentials', 'true')
@@ -160,13 +162,24 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             return
 
+        # Protected pages that require authentication
+        protected_pages = ['/menu.html', '/index.html', '/classes.html', '/config.html', '/students.html', '/change-password.html']
+
+        if path in protected_pages or path == '/':
+            if not is_logged_in_flag:
+                # Redirect to login if not authenticated
+                self.send_response(302)
+                self.send_header('Location', '/login.html')
+                self.end_headers()
+                return
+
+        # Additional check for admin/teacher-only pages
         if path == '/classes.html' or path == '/config.html':
-            if self.is_logged_in():
-                cookies = self.get_cookies()
-                if cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME):
-                    self._send_response(403, {"error": "Forbidden: Access to this page is restricted for your account type."})
-                    return
-        
+            cookies = self.get_cookies()
+            if cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME):
+                self._send_response(403, {"error": "Forbidden: Access to this page is restricted for your account type."})
+                return
+
         # File serving logic
         if path == '/':
             path = '/index.html'
@@ -202,31 +215,22 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
 
         handler = POST_ROUTES.get(path)
         if handler:
-            content_length = int(self.headers.get('Content-Length', 0))
-            post_body_bytes = b'' # Read raw bytes
-            if content_length > 0:
-                post_body_bytes = self.rfile.read(content_length)
-
-            # Routes that do not require a JSON body or 'data' argument (or handle it internally)
+            # Routes that read their own request body (don't pre-read the body for these)
             if path in ['/login', '/login/student', '/logout']:
-                if path == '/logout': # Logout does not need a body
-                    handler(self)
-                    return
-                # Login/login_student expects a body, but handler doesn't take 'data' arg explicitly as an argument
                 try:
-                    # Attempt to parse even if not directly passed to handler, as handler might read it
-                    data = json.loads(post_body_bytes)
-                    # Pass handler if it's login/login_student
                     handler(self)
-                    return
-                except json.JSONDecodeError:
-                    self._send_response(400, {"error": "Invalid JSON payload for login/student login"})
                     return
                 except Exception as e:
                     print(f"Error during {path} processing: {e}")
                     traceback.print_exc()
                     self._send_response(500, {"error": f"Server error during {path}"})
                     return
+
+            # For all other routes, read and parse the body
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_body_bytes = b''
+            if content_length > 0:
+                post_body_bytes = self.rfile.read(content_length)
             
             # All other routes expect a JSON body and 'data' argument
             if not post_body_bytes:

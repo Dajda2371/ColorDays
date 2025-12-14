@@ -25,7 +25,9 @@ def handle_api_language_set(handler, data):
 
     handler.send_response(200)
     handler.send_header('Content-type', 'application/json')
-    handler.send_header('Access-Control-Allow-Origin', '*')
+    # Get the origin from the request, or use localhost as fallback
+    origin = handler.headers.get('Origin', 'http://localhost:8000')
+    handler.send_header('Access-Control-Allow-Origin', origin)
     handler.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
     handler.send_header('Access-Control-Allow-Headers', 'Content-Type, Cookie')
     handler.send_header('Access-Control-Allow-Credentials', 'true')

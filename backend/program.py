@@ -4,6 +4,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 import http.server
 import socketserver
+import threading
 
 from config import HOST, PORT, LOG_FILENAME, LOG_PATH
 from data_manager import (
@@ -60,8 +61,13 @@ def main():
     load_students_data_from_db()
     load_user_data_from_db()
 
-    httpd = socketserver.TCPServer(("", PORT), ColorDaysHandler)
-    server_thread = threading.Thread(target=httpd.serve_forever)
+    # Use ThreadingTCPServer for better performance with multiple connections
+    httpd = socketserver.ThreadingTCPServer(("", PORT), ColorDaysHandler)
+    httpd.allow_reuse_address = True
+    # Set socket timeout to allow shutdown to complete faster
+    httpd.socket.settimeout(1.0)
+
+    server_thread = threading.Thread(target=httpd.serve_forever, kwargs={'poll_interval': 0.5})
     server_thread.daemon = True
     server_thread.start()
 
@@ -70,19 +76,37 @@ def main():
 
     while True:
         try:
-            if input().strip().lower() == 'stop':
+            user_input = input().strip().lower()
+            if user_input == 'stop':
                 print("Stopping server...")
                 httpd.shutdown()
-                server_thread.join()
+                server_thread.join(timeout=5)
+                if server_thread.is_alive():
+                    print("Warning: Server thread did not stop gracefully")
+                httpd.server_close()
                 print("Server stopped.")
                 break
         except KeyboardInterrupt:
-            print("Stopping server...")
+            print("\nStopping server...")
             httpd.shutdown()
-            server_thread.join()
+            server_thread.join(timeout=5)
+            if server_thread.is_alive():
+                print("Warning: Server thread did not stop gracefully")
+            httpd.server_close()
             print("Server stopped.")
             break
-    
+        except EOFError:
+            # Handle case when running without stdin (e.g., in background)
+            print("No input available (running in background?). Server will continue running.")
+            # Keep the server running if there's no stdin
+            try:
+                server_thread.join()
+            except KeyboardInterrupt:
+                print("\nStopping server...")
+                httpd.shutdown()
+                httpd.server_close()
+                print("Server stopped.")
+            break
+
 if __name__ == "__main__":
-    import threading
     main()
