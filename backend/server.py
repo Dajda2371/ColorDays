@@ -175,8 +175,16 @@ class ColorDaysHandler(http.server.BaseHTTPRequestHandler):
                 self.end_headers()
                 return
 
-        # Additional check for admin/teacher-only pages
-        if path == '/classes.html' or path == '/config.html':
+        # Additional check for admin-only and teacher-restricted pages
+        if path == '/config.html':
+            # Config page is admin-only
+            user_key, user_role = get_current_user_info(self)
+            if user_role != ADMIN_ROLE:
+                self._send_response(403, {"error": "Forbidden: Administrator access required."})
+                return
+
+        if path == '/classes.html':
+            # Classes page blocks students only
             cookies = self.get_cookies()
             if cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME):
                 self._send_response(403, {"error": "Forbidden: Access to this page is restricted for your account type."})

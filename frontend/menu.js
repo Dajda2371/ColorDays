@@ -264,6 +264,36 @@ function manageStudentButtonVisibility() {
     console.log("--- End manageStudentButtonVisibility ---");
 }
 
+// --- Function to manage visibility of Config button for non-admins ---
+async function manageConfigButtonVisibility() {
+    console.log("--- manageConfigButtonVisibility ---");
+
+    // Students are already handled by manageStudentButtonVisibility
+    const studentAuthCookie = getCookie("SQLAuthUserStudent");
+    if (studentAuthCookie) {
+        console.log("Student session - config button already hidden.");
+        return;
+    }
+
+    // Check if user is admin by trying to access an admin-only endpoint
+    try {
+        const response = await fetch('/api/users', { credentials: 'include' });
+        if (response.status === 403) {
+            // User is not an admin (likely a teacher)
+            console.log("User is not an admin. Hiding Config button.");
+            if (configButton) configButton.style.display = 'none';
+        } else if (response.ok) {
+            // User is an admin
+            console.log("User is an admin. Config button remains visible.");
+        } else {
+            console.warn("Unexpected response when checking admin status:", response.status);
+        }
+    } catch (error) {
+        console.error("Error checking admin status:", error);
+    }
+    console.log("--- End manageConfigButtonVisibility ---");
+}
+
 // --- Function to manage visibility of Change Password button based on SQLAuthUser cookie ---
 function manageChangePasswordButtonVisibility() {
   console.log("--- manageChangePasswordButtonVisibility ---");
@@ -369,5 +399,6 @@ document.addEventListener('DOMContentLoaded', () => {
         displayLoggedInUser();
         manageStudentButtonVisibility();
         manageChangePasswordButtonVisibility();
+        manageConfigButtonVisibility(); // Check if user is admin and hide config button if not
     });
 });
