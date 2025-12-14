@@ -16,7 +16,7 @@ def handle_auth_change(handler, data):
         handler._send_response(401, {"error": "Authentication error: User identity not found."})
         return
 
-    if is_user_using_oauth(user_key_for_rbac, handler):
+    if is_user_using_oauth(user_key_for_rbac):
         handler._send_response(403, {"error": "Password change not allowed for Google OAuth users."})
         return
 
