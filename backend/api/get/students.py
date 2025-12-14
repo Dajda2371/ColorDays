@@ -32,13 +32,13 @@ def handle_api_students(handler):
             if found_student_data_item:
                 counting_classes_list = []
                 try:
-                    s_str = found_student_data_item.get('counts_classes_str', '[]')
+                    s_str = found_student_data_item.get('counts_classes', '[]')
                     if s_str.startswith('[') and s_str.endswith(']'):
                         s_content = s_str[1:-1]
                         if s_content.strip():
                             counting_classes_list = [item.strip() for item in s_content.split(',')]
                 except Exception as e:
-                    print(f"Error parsing counts_classes_str: {e}")
+                    print(f"Error parsing counts_classes: {e}")
 
                 response_payload.append({**found_student_data_item, "counting_classes": counting_classes_list})
 
@@ -50,13 +50,13 @@ def handle_api_students(handler):
             for student_data_item in students_data_store:
                 counting_classes_list = []
                 try:
-                    s_str = student_data_item.get('counts_classes_str', '[]')
+                    s_str = student_data_item.get('counts_classes', '[]')
                     if s_str.startswith('[') and s_str.endswith(']'):
                         s_content = s_str[1:-1]
                         if s_content.strip():
                             counting_classes_list = [item.strip() for item in s_content.split(',')]
                 except Exception as e:
-                    print(f"Error parsing counts_classes_str: {e}")
+                    print(f"Error parsing counts_classes: {e}")
                 response_payload.append({**student_data_item, "counting_classes": counting_classes_list})
 
     handler._send_response(200, response_payload)
@@ -104,7 +104,7 @@ def handle_api_student_counting_details(handler):
         is_counted_by_field = f"iscountedby{day_param_str}"
         response_payload = []
 
-        target_student_personal_counts_str = target_student_config.get('counts_classes_str', '[]')
+        target_student_personal_counts_str = target_student_config.get('counts_classes', '[]')
         student_personal_counts_set = set()
         try:
             if target_student_personal_counts_str.startswith('[') and target_student_personal_counts_str.endswith(']'):
@@ -122,7 +122,7 @@ def handle_api_student_counting_details(handler):
                 for other_student_config in students_data_store:
                     if other_student_config.get('code') == student_code_param:
                         continue
-                    other_student_counts_classes_str = other_student_config.get('counts_classes_str', '[]')
+                    other_student_counts_classes_str = other_student_config.get('counts_classes', '[]')
                     try:
                         if other_student_counts_classes_str.startswith('[') and other_student_counts_classes_str.endswith(']'):
                             other_content = other_student_counts_classes_str[1:-1]

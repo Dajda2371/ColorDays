@@ -48,7 +48,7 @@ def is_student_allowed(student_code_from_cookie, requested_class_name, requested
         print(f"Security Check Failed: Student '{student_code_from_cookie}' has no main class assigned.")
         return False
 
-    student_personal_counting_list_str = current_student_data.get('counts_classes_str', '[]')
+    student_personal_counting_list_str = current_student_data.get('counts_classes', '[]')
     student_personal_counting_set = set()
     if student_personal_counting_list_str.startswith('[') and student_personal_counting_list_str.endswith(']'):
         content = student_personal_counting_list_str[1:-1]
