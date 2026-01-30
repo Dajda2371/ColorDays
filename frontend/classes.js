@@ -107,17 +107,32 @@ document.addEventListener('DOMContentLoaded', function () {
                 clearAssignmentsBtn.addEventListener('click', () => {
                     if (!confirm("Are you sure you want to CLEAR ALL counting assignments? This cannot be undone.")) return;
 
-                    const updates = [];
-                    classes.forEach(cls => {
-                        ['1', '2', '3'].forEach(day => {
-                            updates.push({
-                                class: cls.class,
-                                dayIdentifier: day,
-                                value: '_NULL_'
-                            });
+                    // Show loading state
+                    clearAssignmentsBtn.disabled = true;
+                    if (splitEvenlyBtn) splitEvenlyBtn.disabled = true;
+                    if (splitRandomlyBtn) splitRandomlyBtn.disabled = true;
+
+                    fetch('/api/classes/assignments', {
+                        method: 'DELETE'
+                    })
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data.success) {
+                                alert(data.message);
+                                window.location.reload();
+                            } else {
+                                alert("Error: " + (data.error || data.message || "Unknown error"));
+                            }
+                        })
+                        .catch(err => {
+                            console.error(err);
+                            alert("Error clearing assignments: " + err.message);
+                        })
+                        .finally(() => {
+                            if (clearAssignmentsBtn) clearAssignmentsBtn.disabled = false;
+                            if (splitEvenlyBtn) splitEvenlyBtn.disabled = false;
+                            if (splitRandomlyBtn) splitRandomlyBtn.disabled = false;
                         });
-                    });
-                    sendBatchUpdates(updates);
                 });
             }
 

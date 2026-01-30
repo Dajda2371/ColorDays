@@ -363,3 +363,43 @@ def update_iscountedby_batch(data: ClassUpdateIsCountedByBatchRequest, request: 
                 raise HTTPException(status_code=500, detail="Failed to save data.")
         else:
             return {"success": True, "message": "No changes made."}
+
+@router.delete("/api/classes/assignments")
+def clear_all_assignments(request: Request, user_info=Depends(get_current_user_info)):
+    user_key, user_role = user_info
+
+    # Check session
+    session_cookie = request.cookies.get(SESSION_COOKIE_NAME)
+    is_logged_in = False
+    if session_cookie:
+        if session_cookie == VALID_SESSION_VALUE:
+            is_logged_in = True
+        elif session_cookie in active_sessions:
+            is_logged_in = True
+
+    if not is_logged_in:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    if user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
+         raise HTTPException(status_code=403, detail="Forbidden: Administrator or Teacher access required.")
+
+    with data_lock:
+        updated_count = 0
+        for cls_item in class_data_store:
+            # Check if any value is actually being cleared (optimization)
+            if (cls_item.get('iscountedby1') != '_NULL_' or
+                cls_item.get('iscountedby2') != '_NULL_' or
+                cls_item.get('iscountedby3') != '_NULL_'):
+                
+                cls_item['iscountedby1'] = '_NULL_'
+                cls_item['iscountedby2'] = '_NULL_'
+                cls_item['iscountedby3'] = '_NULL_'
+                updated_count += 1
+        
+        if updated_count > 0:
+            if save_class_data_to_db():
+                return {"success": True, "message": f"Cleared assignments for {updated_count} classes."}
+            else:
+                raise HTTPException(status_code=500, detail="Failed to save data.")
+        else:
+            return {"success": True, "message": "No assignments to clear."}
