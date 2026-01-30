@@ -35,8 +35,9 @@ document.addEventListener('DOMContentLoaded', function () {
             // --- Auto Assign Logic ---
             const splitEvenlyBtn = document.getElementById('split-evenly-btn');
             const splitRandomlyBtn = document.getElementById('split-randomly-btn');
+            const clearAssignmentsBtn = document.getElementById('clear-assignments-btn');
 
-            if (splitEvenlyBtn && splitRandomlyBtn) {
+            if (splitEvenlyBtn && splitRandomlyBtn && clearAssignmentsBtn) {
                 splitEvenlyBtn.addEventListener('click', () => {
                     if (!confirm("Are you sure you want to split counting duties evenly? This will overwrite existing assignments.")) return;
 
@@ -102,6 +103,22 @@ document.addEventListener('DOMContentLoaded', function () {
                     });
                     sendBatchUpdates(updates);
                 });
+
+                clearAssignmentsBtn.addEventListener('click', () => {
+                    if (!confirm("Are you sure you want to CLEAR ALL counting assignments? This cannot be undone.")) return;
+
+                    const updates = [];
+                    classes.forEach(cls => {
+                        ['1', '2', '3'].forEach(day => {
+                            updates.push({
+                                class: cls.class,
+                                dayIdentifier: day,
+                                value: '_NULL_'
+                            });
+                        });
+                    });
+                    sendBatchUpdates(updates);
+                });
             }
 
             function sendBatchUpdates(updates) {
@@ -113,6 +130,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 // Show loading state
                 if (splitEvenlyBtn) splitEvenlyBtn.disabled = true;
                 if (splitRandomlyBtn) splitRandomlyBtn.disabled = true;
+                if (clearAssignmentsBtn) clearAssignmentsBtn.disabled = true;
 
                 fetch('/api/classes/update_iscountedby_batch', {
                     method: 'POST',
@@ -135,6 +153,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     .finally(() => {
                         if (splitEvenlyBtn) splitEvenlyBtn.disabled = false;
                         if (splitRandomlyBtn) splitRandomlyBtn.disabled = false;
+                        if (clearAssignmentsBtn) clearAssignmentsBtn.disabled = false;
                     });
             }
             // --- End Auto Assign Logic ---
