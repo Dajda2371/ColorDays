@@ -226,6 +226,7 @@ function cancelAddClass() {
   if (row) row.remove();
 }
 
+
 function prefillClasses() {
   if (!confirm("Are you sure you want to scrape classes from the school website? This will add any new classes found.")) return;
 
@@ -533,7 +534,27 @@ async function saveGoogleOauth() {
   }
 }
 
-// Load user list on page load
-loadUsers();
-loadClasses(); // Load class list on page load
-loadOauthConfig(); // Load OAuth configuration on page load
+// --- Initialization ---
+
+document.addEventListener("DOMContentLoaded", () => {
+  loadUsers();
+  loadClasses();
+  loadOauthConfig();
+});
+
+// Make functions available globally for HTML onclick attributes
+window.renderClasses = renderClasses;
+window.handleAddClassRow = handleAddClassRow;
+window.cancelAddClass = cancelAddClass;
+window.prefillClasses = prefillClasses;
+window.loadClasses = loadClasses;
+window.saveNewClass = saveNewClass;
+window.promptRemoveClass = promptRemoveClass;
+window.addClass = handleAddClassRow; // Alias for backward compatibility
+window.changePassword = changePassword;
+window.addUser = addUser;
+window.removeUser = removeUser;
+window.setPassword = setPassword;
+window.resetPassword = resetPassword;
+window.addGoogleOauthDomain = addGoogleOauthDomain;
+window.saveGoogleOauth = saveGoogleOauth;
