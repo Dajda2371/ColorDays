@@ -46,10 +46,10 @@ document.addEventListener('DOMContentLoaded', function () {
                         const countingClasses = classes.filter(c => c[`counts${day}`] === 'T').map(c => c.class).sort();
                         if (countingClasses.length === 0) return;
 
-                        let rrIndex = 0;
                         classes.forEach(cls => {
-                            let counterName;
+                            // "Split Evenly" only affects the classes that are counting
                             if (countingClasses.includes(cls.class)) {
+                                let counterName;
                                 const idx = countingClasses.indexOf(cls.class);
                                 // Cycle: shift left by 1 (or count by previous)
                                 const counterIdx = (idx - 1 + countingClasses.length) % countingClasses.length;
@@ -58,16 +58,14 @@ document.addEventListener('DOMContentLoaded', function () {
                                 if (!canStudentsCountOwnClass && countingClasses.length === 1 && counterName === cls.class) {
                                     counterName = '_NULL_';
                                 }
-                            } else {
-                                counterName = countingClasses[rrIndex % countingClasses.length];
-                                rrIndex++;
-                            }
 
-                            updates.push({
-                                class: cls.class,
-                                dayIdentifier: day,
-                                value: counterName
-                            });
+                                updates.push({
+                                    class: cls.class,
+                                    dayIdentifier: day,
+                                    value: counterName
+                                });
+                            }
+                            // Non-counting classes are NOT affected by Split Evenly
                         });
                     });
                     sendBatchUpdates(updates);
