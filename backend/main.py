@@ -15,8 +15,10 @@ from data_manager import (
     ensure_year_data_directory_exists,
     create_tables
 )
-from routers import auth, users, classes, students, counts, config as config_router
 from dependencies import get_current_user_info, active_sessions
+import importlib.util
+import os
+from pathlib import Path
 
 # Setup startup tasks
 @asynccontextmanager
@@ -60,12 +62,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth.router)
-app.include_router(users.router)
-app.include_router(classes.router)
-app.include_router(students.router)
-app.include_router(counts.router)
-app.include_router(config_router.router)
+def include_routers_recursively(app: FastAPI, directory: Path):
+    print(f"Loading routers from {directory}...")
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            if file.endswith(".py") and file != "__init__.py":
+                file_path = Path(root) / file
+                # Generate a unique module name
+                module_name = "api_dynamic_" + str(file_path.relative_to(directory)).replace(os.sep, "_").replace(".", "_")
+
+                try:
+                    spec = importlib.util.spec_from_file_location(module_name, file_path)
+                    if spec and spec.loader:
+                        module = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(module)
+                        if hasattr(module, "router"):
+                            print(f"Including router from {file_path}")
+                            app.include_router(module.router)
+                except Exception as e:
+                    print(f"Error loading router from {file_path}: {e}")
+
+include_routers_recursively(app, BACKEND_DIR / "api")
 
 # Protected pages
 @app.get("/")
