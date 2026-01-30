@@ -3,3 +3,4 @@ __pycache__/
 *DS_Store
 *Desktop.ini
 backend/old_program.py
+.venv/

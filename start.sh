@@ -1,9 +1,9 @@
-alias python=python3
-alias pip=pip3
+#!/bin/bash
 
-if command -v python &> /dev/null
-then
-    python ./backend/program.py
-else
-    ./setup/setup.sh
+# Activate virtual environment if it exists
+if [ -d ".venv" ]; then
+    source .venv/bin/activate
 fi
+
+cd backend
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload

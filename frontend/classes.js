@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     const mondaySection = document.getElementById('monday-classes');
     const tuesdaySection = document.getElementById('tuesday-classes');
     const wednesdaySection = document.getElementById('wednesday-classes');
@@ -25,12 +25,12 @@ document.addEventListener('DOMContentLoaded', function() {
             return response.json();
         })
     ])
-    .then(([classes, config]) => { // Destructure the results from Promise.all
-        // Convert the config string to a boolean for easier use
-        // If config.can_students_count_their_own_class is "false", then canStudentsCountOwnClass will be false.
-        // If it's "true" (or anything else, or missing), it defaults to true (allowing self-count).
-        const canStudentsCountOwnClass = config.can_students_count_their_own_class !== "false";
-        console.log("Can students count their own class:", canStudentsCountOwnClass, "(raw config value:", config.can_students_count_their_own_class, ")");
+        .then(([classes, config]) => { // Destructure the results from Promise.all
+            // Convert the config string to a boolean for easier use
+            // If config.can_students_count_their_own_class is "false", then canStudentsCountOwnClass will be false.
+            // If it's "true" (or anything else, or missing), it defaults to true (allowing self-count).
+            const canStudentsCountOwnClass = config.can_students_count_their_own_class !== "false";
+            console.log("Can students count their own class:", canStudentsCountOwnClass, "(raw config value:", config.can_students_count_their_own_class, ")");
 
             // Prepare lists of classes that count for each day
             const mondayCountingClasses = classes.filter(c => c.counts1 === 'T').map(c => c.class);
@@ -49,6 +49,49 @@ document.addEventListener('DOMContentLoaded', function() {
                 cell.colSpan = 4; // Span across all columns
                 cell.textContent = 'No class counting data available.';
                 cell.style.textAlign = 'center';
+
+                // Add "Prefill Classes" button
+                const prefillContainer = document.createElement('div');
+                prefillContainer.style.textAlign = 'center';
+                prefillContainer.style.marginTop = '2rem';
+
+                const prefillButton = document.createElement('button');
+                prefillButton.textContent = 'Prefill Classes from Website';
+                prefillButton.className = 'button'; // Re-use existing button class
+                prefillButton.style.backgroundColor = '#4CAF50'; // Green color to indicate action
+
+                prefillButton.onclick = function () {
+                    prefillButton.disabled = true;
+                    prefillButton.textContent = 'Scraping...';
+
+                    fetch('/api/classes/prefill', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({})
+                    })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                alert(data.message);
+                                window.location.reload();
+                            } else {
+                                alert('Error: ' + (data.error || 'Unknown error'));
+                                prefillButton.disabled = false;
+                                prefillButton.textContent = 'Prefill Classes from Website';
+                            }
+                        })
+                        .catch(err => {
+                            console.error(err);
+                            alert('Error contacting server.');
+                            prefillButton.disabled = false;
+                            prefillButton.textContent = 'Prefill Classes from Website';
+                        });
+                };
+
+                prefillContainer.appendChild(prefillButton);
+                document.querySelector('body > section').insertAdjacentElement('afterend', prefillContainer);
             }
             classes.forEach(cls => {
                 // cls.class is the class name, e.g., '1.A'
@@ -145,7 +188,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         // Add event listener to save changes
-        select.addEventListener('change', function() {
+        select.addEventListener('change', function () {
             const changedClass = this.dataset.class;
             const changedDayIdentifier = this.dataset.day;
             const newValue = this.value;
@@ -163,26 +206,26 @@ document.addEventListener('DOMContentLoaded', function() {
                     value: newValue
                 }),
             })
-            .then(response => {
-                if (!response.ok) {
-                    return response.json().then(err => { throw new Error(err.error || `HTTP error! status: ${response.status}`) });
-                }
-                return response.json();
-            })
-            .then(data => {
-                if (data.success) {
-                    console.log(data.message);
-                    // Optionally, provide user feedback (e.g., a small temporary "Saved!" message)
-                } else {
-                    // This case should ideally be caught by the !response.ok check above
-                    console.error('Failed to save:', data.error || 'Unknown error');
-                    alert(`Error saving change: ${data.error || 'Unknown error'}`);
-                }
-            })
-            .catch(error => {
-                console.error('Error updating class counting value:', error);
-                alert(`Error updating: ${error.message}`);
-            });
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => { throw new Error(err.error || `HTTP error! status: ${response.status}`) });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        console.log(data.message);
+                        // Optionally, provide user feedback (e.g., a small temporary "Saved!" message)
+                    } else {
+                        // This case should ideally be caught by the !response.ok check above
+                        console.error('Failed to save:', data.error || 'Unknown error');
+                        alert(`Error saving change: ${data.error || 'Unknown error'}`);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error updating class counting value:', error);
+                    alert(`Error updating: ${error.message}`);
+                });
         });
 
         return select;

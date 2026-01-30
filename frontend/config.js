@@ -12,7 +12,7 @@ async function fetchUsers() {
     userList.appendChild(li);
   });
 }
-  
+
 function renderUsers() {
   const tbody = document.getElementById("userTableBody");
   tbody.innerHTML = "";
@@ -29,7 +29,7 @@ function renderUsers() {
     } else if (info.password === "set") {
       status = "set";
     } else if (info.password === "google_auth_user") {
-        status = "Google Auth";
+      status = "Google Auth";
     } else {
       status = info.password;
     }
@@ -38,18 +38,16 @@ function renderUsers() {
       <td>${username}</td>
       <td>${status}</td>
       <td>
-        ${
-          status === "not set" && status !== "Google Auth" // || /^[a-zA-Z0-9]{10}$/.test(info.password)
-            ? `<button onclick="setPassword('${username}')">Set Password</button>`
-            : status === "Google Auth"
-              ? ``
-              : `<button onclick="resetPassword('${username}')">Reset Password</button>`
-        }
-        ${
-          username !== "admin"
-            ? `<button onclick="removeUser('${username}')">Remove</button>`
-            : ""
-        }
+        ${status === "not set" && status !== "Google Auth" // || /^[a-zA-Z0-9]{10}$/.test(info.password)
+        ? `<button onclick="setPassword('${username}')">Set Password</button>`
+        : status === "Google Auth"
+          ? ``
+          : `<button onclick="resetPassword('${username}')">Reset Password</button>`
+      }
+        ${username !== "admin"
+        ? `<button onclick="removeUser('${username}')">Remove</button>`
+        : ""
+      }
       </td>
     `;
 
@@ -115,8 +113,8 @@ async function addUser() {
       alert(errorMessage + ` (Status: ${res.status})`);
     }
   } catch (error) {
-      console.error("Network or other error adding user:", error);
-      alert("An error occurred while trying to add the user. Check the console.");
+    console.error("Network or other error adding user:", error);
+    alert("An error occurred while trying to add the user. Check the console.");
   }
 }
 
@@ -157,7 +155,7 @@ async function resetPassword(username) {
   if (res.ok) loadUsers();
   else alert("Failed to reset password");
 }
-  
+
 async function changePassword() {
   const username = document.getElementById('changeUsername').value.trim();
   const password = document.getElementById('changePassword').value;
@@ -180,6 +178,27 @@ function renderClasses() {
   const tbody = document.getElementById("classTableBody");
   tbody.innerHTML = ""; // Clear existing rows
 
+  if (currentClasses.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 4;
+    td.style.textAlign = "center";
+    td.innerHTML = "No classes found. <br><br>";
+
+    const prefillBtn = document.createElement("button");
+    prefillBtn.textContent = "Prefill Classes from Website";
+    prefillBtn.onclick = prefillClasses;
+    prefillBtn.style.backgroundColor = '#4CAF50';
+    prefillBtn.style.color = 'white';
+    prefillBtn.style.padding = '10px 20px';
+    prefillBtn.style.cursor = 'pointer';
+
+    td.appendChild(prefillBtn);
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+
   currentClasses.forEach(cls => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
@@ -196,6 +215,38 @@ function renderClasses() {
     `;
     tbody.appendChild(tr);
   });
+}
+
+async function prefillClasses(event) {
+  if (!confirm("Are you sure you want to scrape classes from the school website?")) return;
+
+  const btn = event.target;
+  const originalText = btn.textContent;
+  btn.textContent = "Scraping...";
+  btn.disabled = true;
+
+  try {
+    const res = await fetch("/api/classes/prefill", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    });
+    const data = await res.json();
+
+    if (res.ok && data.success) {
+      alert(data.message);
+      loadClasses(); // Reload the classes to show them in the table
+    } else {
+      alert("Error: " + (data.error || "Unknown error"));
+      btn.textContent = originalText;
+      btn.disabled = false;
+    }
+  } catch (e) {
+    console.error(e);
+    alert("Error contacting server.");
+    btn.textContent = originalText;
+    btn.disabled = false;
+  }
 }
 
 async function loadClasses() {
@@ -312,10 +363,10 @@ async function updateClassCount(className, countField, isChecked) {
 // --- Debounce Utility ---
 function debounce(func, delay) {
   let timeout;
-  return function(...args) {
-      const context = this;
-      clearTimeout(timeout);
-      timeout = setTimeout(() => func.apply(context, args), delay);
+  return function (...args) {
+    const context = this;
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func.apply(context, args), delay);
   };
 }
 
@@ -327,58 +378,58 @@ const debouncedSaveGoogleOauth = debounce(saveGoogleOauth, 1000);
 
 async function loadOauthConfig() {
   try {
-      // Adjust the path if your frontend and backend are served differently
-      // Assuming config.html is in /frontend/ and config.json is in /backend/data/
-      const response = await fetch('api/data/config');
-      if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+    // Adjust the path if your frontend and backend are served differently
+    // Assuming config.html is in /frontend/ and config.json is in /backend/data/
+    const response = await fetch('api/data/config');
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const config = await response.json();
+
+    // Populate Google OAuth settings
+    const googleOauthCheckbox = document.getElementById('googleOauth');
+    if (googleOauthCheckbox) {
+      // The JSON stores "true" as a string, so we compare it.
+      googleOauthCheckbox.checked = config.oauth_eneabled === "true";
+      googleOauthCheckbox.addEventListener('change', debouncedSaveGoogleOauth); // Auto-save on change
+    }
+
+    const googleOauthTableBody = document.getElementById('googleOauthTableBody');
+    if (googleOauthTableBody) {
+      // Clear existing rows (if any, though HTML is now empty)
+      googleOauthTableBody.innerHTML = '';
+
+      if (config.allowed_oauth_domains && Array.isArray(config.allowed_oauth_domains)) {
+        config.allowed_oauth_domains.forEach((domain, index) => {
+          const row = googleOauthTableBody.insertRow();
+
+          const domainCell = row.insertCell();
+          const domainInput = document.createElement('input');
+          domainInput.type = 'text';
+          domainInput.id = `domain-${index}`; // Unique ID for each domain input
+          domainInput.value = domain;
+          domainInput.placeholder = 'domain.com';
+          domainInput.addEventListener('blur', debouncedSaveGoogleOauth); // Auto-save on blur
+          domainCell.appendChild(domainInput);
+
+          const actionsCell = row.insertCell();
+          const removeButton = document.createElement('button');
+          removeButton.textContent = 'remove';
+          removeButton.onclick = function () {
+            row.remove(); // Removes the current row from the table
+            debouncedSaveGoogleOauth(); // Auto-save after removal
+          };
+          actionsCell.appendChild(removeButton);
+        });
       }
-      const config = await response.json();
-
-      // Populate Google OAuth settings
-      const googleOauthCheckbox = document.getElementById('googleOauth');
-      if (googleOauthCheckbox) {
-          // The JSON stores "true" as a string, so we compare it.
-          googleOauthCheckbox.checked = config.oauth_eneabled === "true";
-          googleOauthCheckbox.addEventListener('change', debouncedSaveGoogleOauth); // Auto-save on change
-      }
-
-      const googleOauthTableBody = document.getElementById('googleOauthTableBody');
-      if (googleOauthTableBody) {
-          // Clear existing rows (if any, though HTML is now empty)
-          googleOauthTableBody.innerHTML = '';
-
-          if (config.allowed_oauth_domains && Array.isArray(config.allowed_oauth_domains)) {
-              config.allowed_oauth_domains.forEach((domain, index) => {
-                  const row = googleOauthTableBody.insertRow();
-                  
-                  const domainCell = row.insertCell();
-                  const domainInput = document.createElement('input');
-                  domainInput.type = 'text';
-                  domainInput.id = `domain-${index}`; // Unique ID for each domain input
-                  domainInput.value = domain;
-                  domainInput.placeholder = 'domain.com';
-                  domainInput.addEventListener('blur', debouncedSaveGoogleOauth); // Auto-save on blur
-                  domainCell.appendChild(domainInput);
-
-                  const actionsCell = row.insertCell();
-                  const removeButton = document.createElement('button');
-                  removeButton.textContent = 'remove';
-                  removeButton.onclick = function() {
-                      row.remove(); // Removes the current row from the table
-                      debouncedSaveGoogleOauth(); // Auto-save after removal
-                  };
-                  actionsCell.appendChild(removeButton);
-              });
-          }
-      }
+    }
   } catch (error) {
-      console.error('Failed to load OAuth configuration:', error);
-      // Optionally display an error message to the user in the UI
-      const googleOauthTableBody = document.getElementById('googleOauthTableBody');
-      if (googleOauthTableBody) {
-        googleOauthTableBody.innerHTML = '<tr><td colspan="2">Error loading OAuth config.</td></tr>';
-      }
+    console.error('Failed to load OAuth configuration:', error);
+    // Optionally display an error message to the user in the UI
+    const googleOauthTableBody = document.getElementById('googleOauthTableBody');
+    if (googleOauthTableBody) {
+      googleOauthTableBody.innerHTML = '<tr><td colspan="2">Error loading OAuth config.</td></tr>';
+    }
   }
 }
 
@@ -388,7 +439,7 @@ function addGoogleOauthDomain() {
     const googleOauthTableBody = document.getElementById('googleOauthTableBody');
     if (googleOauthTableBody) {
       const row = googleOauthTableBody.insertRow();
-      
+
       const domainCell = row.insertCell();
       const domainInput = document.createElement('input');
       domainInput.type = 'text';
@@ -401,9 +452,9 @@ function addGoogleOauthDomain() {
       const actionsCell = row.insertCell();
       const removeButton = document.createElement('button');
       removeButton.textContent = 'remove';
-      removeButton.onclick = function() {
-          row.remove(); // Removes the current row from the table
-          debouncedSaveGoogleOauth(); // Auto-save after removal
+      removeButton.onclick = function () {
+        row.remove(); // Removes the current row from the table
+        debouncedSaveGoogleOauth(); // Auto-save after removal
       };
       actionsCell.appendChild(removeButton);
       debouncedSaveGoogleOauth(); // Auto-save after adding a new domain row

@@ -17,6 +17,7 @@ from .increment import handle_api_increment
 from .decrement import handle_api_decrement
 from .data_save_config import handle_api_data_save_config
 from .language_set import handle_api_language_set
+from .classes_prefill import handle_api_classes_prefill
 
 POST_ROUTES = {
     '/login': handle_login,
@@ -28,6 +29,7 @@ POST_ROUTES = {
     '/api/users/set': handle_api_users_set,
     '/api/users/reset': handle_api_users_set,  # Alias
     '/api/classes/add': handle_api_classes_add,
+    '/api/classes/prefill': handle_api_classes_prefill,
     '/api/classes/remove': handle_api_classes_remove,
     '/api/classes/update_counts': handle_api_classes_update_counts,
     '/api/classes/update_iscountedby': handle_api_classes_update_iscountedby,
