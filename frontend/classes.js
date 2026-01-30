@@ -91,23 +91,79 @@ document.addEventListener('DOMContentLoaded', function () {
                         const countingClasses = classes.filter(c => c[`counts${day}`] === 'T').map(c => c.class);
                         if (countingClasses.length === 0) return;
 
-                        classes.forEach(cls => {
-                            let possible = countingClasses;
-                            if (!canStudentsCountOwnClass) {
-                                possible = countingClasses.filter(c => c !== cls.class);
-                            }
+                        const totalTargets = classes.length;
+                        const baseCount = Math.floor(totalTargets / countingClasses.length);
+                        const remainder = totalTargets % countingClasses.length;
 
-                            let counterName;
-                            if (possible.length === 0) {
-                                counterName = '_NULL_';
-                            } else {
-                                counterName = possible[Math.floor(Math.random() * possible.length)];
-                            }
+                        // Create a pool of counters
+                        let counterPool = [];
 
+                        // Fill base counts
+                        countingClasses.forEach(c => {
+                            for (let i = 0; i < baseCount; i++) counterPool.push(c);
+                        });
+
+                        // Fill remainder randomly
+                        // Shuffle countingClasses first to pick random ones for the remainder slots
+                        const shuffledForRemainder = [...countingClasses].sort(() => Math.random() - 0.5);
+                        for (let i = 0; i < remainder; i++) {
+                            counterPool.push(shuffledForRemainder[i]);
+                        }
+
+                        // Shuffle the entire pool to distribute counters randomly
+                        counterPool.sort(() => Math.random() - 0.5);
+
+                        // Assign counters to classes
+                        const initialAssignments = classes.map((cls, index) => ({
+                            cls: cls,
+                            counter: counterPool[index]
+                        }));
+
+                        // Resolve conflicts (classes counting themselves) if needed
+                        if (!canStudentsCountOwnClass) {
+                            for (let i = 0; i < initialAssignments.length; i++) {
+                                if (initialAssignments[i].cls.class === initialAssignments[i].counter) {
+                                    // Conflict found. Try to swap with another assignment.
+                                    let swapped = false;
+                                    // Try to find a suitable swap partner j
+                                    // Randomized start index for swapping to avoid patterns
+                                    const startIndex = Math.floor(Math.random() * initialAssignments.length);
+
+                                    for (let k = 0; k < initialAssignments.length; k++) {
+                                        const j = (startIndex + k) % initialAssignments.length;
+                                        if (i === j) continue;
+
+                                        const counterAtI = initialAssignments[i].counter;
+                                        const counterAtJ = initialAssignments[j].counter;
+                                        const targetI = initialAssignments[i].cls.class;
+                                        const targetJ = initialAssignments[j].cls.class;
+
+                                        // Valid swap condition:
+                                        // 1. The counter from j (counterAtJ) must not be targetI
+                                        // 2. The counter from i (counterAtI) must not be targetJ
+                                        if (counterAtJ !== targetI && counterAtI !== targetJ) {
+                                            initialAssignments[i].counter = counterAtJ;
+                                            initialAssignments[j].counter = counterAtI;
+                                            swapped = true;
+                                            break;
+                                        }
+                                    }
+
+                                    if (!swapped) {
+                                        // If we simply cannot resolve the conflict (e.g., only 1 counting class exists and it's this one),
+                                        // assign _NULL_
+                                        initialAssignments[i].counter = '_NULL_';
+                                    }
+                                }
+                            }
+                        }
+
+                        // Add final assignments to updates
+                        initialAssignments.forEach(assignment => {
                             updates.push({
-                                class: cls.class,
+                                class: assignment.cls.class,
                                 dayIdentifier: day,
-                                value: counterName
+                                value: assignment.counter
                             });
                         });
                     });
