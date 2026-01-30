@@ -1,23 +1,23 @@
 
-from .login import handle_login
-from .login_student import handle_login_student
-from .logout import handle_logout
-from .auth_change import handle_auth_change
-from .users import handle_api_users_post
-from .users_remove import handle_api_users_remove
-from .users_set import handle_api_users_set
-from .classes_add import handle_api_classes_add
-from .classes_remove import handle_api_classes_remove
-from .classes_update_counts import handle_api_classes_update_counts
-from .classes_update_iscountedby import handle_api_classes_update_iscountedby
-from .students_add import handle_api_students_add
-from .students_remove import handle_api_students_remove
-from .student_update_counting_class import handle_api_student_update_counting_class
-from .increment import handle_api_increment
-from .decrement import handle_api_decrement
-from .data_save_config import handle_api_data_save_config
-from .language_set import handle_api_language_set
-from .classes_prefill import handle_api_classes_prefill
+from .auth.login import handle_login
+from .auth.login_student import handle_login_student
+from .auth.logout import handle_logout
+from .auth.auth_change import handle_auth_change
+from .users.users import handle_api_users_post
+from .users.users_remove import handle_api_users_remove
+from .users.users_set import handle_api_users_set
+from .classes.classes_add import handle_api_classes_add
+from .classes.classes_remove import handle_api_classes_remove
+from .classes.classes_update_counts import handle_api_classes_update_counts
+from .classes.classes_update_iscountedby import handle_api_classes_update_iscountedby
+from .students.students_add import handle_api_students_add
+from .students.students_remove import handle_api_students_remove
+from .students.student_update_counting_class import handle_api_student_update_counting_class
+from .counts.increment import handle_api_increment
+from .counts.decrement import handle_api_decrement
+from .config.data_save_config import handle_api_data_save_config
+from .config.language_set import handle_api_language_set
+from .classes.classes_prefill import handle_api_classes_prefill
 
 POST_ROUTES = {
     '/login': handle_login,

@@ -5,7 +5,7 @@ from config import (
     GOOGLE_SCOPES,
     GOOGLE_REDIRECT_URI,
 )
-import backend.api.get.oauth as oauth_mod
+import backend.api.get.auth.oauth as oauth_mod
 
 def handle_login_google(handler):
     """GET /login/google - Initiate Google OAuth flow."""

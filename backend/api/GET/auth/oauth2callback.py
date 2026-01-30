@@ -14,7 +14,7 @@ from config import (
 )
 from data_manager import user_password_store, data_lock, save_user_data_to_db
 from utils import create_cookies, create_cookie_clear_headers
-import backend.api.get.oauth as oauth_mod
+import backend.api.get.auth.oauth as oauth_mod
 
 
 def handle_oauth2callback(handler):
