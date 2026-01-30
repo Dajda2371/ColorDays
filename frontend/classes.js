@@ -46,8 +46,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         const countingClasses = classes.filter(c => c[`counts${day}`] === 'T').map(c => c.class).sort();
                         if (countingClasses.length === 0) return;
 
-                        let rrIndex = 0;
-                        classes.forEach(cls => {
+                        classes.forEach((cls, index) => {
                             // "Split Evenly" only affects the classes that are counting
                             if (countingClasses.includes(cls.class)) {
                                 let counterName;
@@ -66,9 +65,9 @@ document.addEventListener('DOMContentLoaded', function () {
                                     value: counterName
                                 });
                             } else {
-                                // Generate the rest: distribute non-counting classes evenly
-                                let counterName = countingClasses[rrIndex % countingClasses.length];
-                                rrIndex++;
+                                // Generate the rest: distribute non-counting classes evenly based on their position
+                                const counterIdx = index % countingClasses.length;
+                                const counterName = countingClasses[counterIdx];
 
                                 updates.push({
                                     class: cls.class,
