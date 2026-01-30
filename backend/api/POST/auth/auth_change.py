@@ -33,9 +33,21 @@ def change_password(request: Request, response: Response, payload: ChangePasswor
         if not stored_user_data:
             raise HTTPException(status_code=404, detail=f"User '{username_for_messages}' not found.")
             
-        is_old_valid, _ = verify_password(stored_user_data, old_password, user_key_for_rbac)
-        if not is_old_valid:
-            raise HTTPException(status_code=401, detail="Old password verification failed.")
+        # Check if we can bypass the old password check
+        # This occurs if the user is in a "must change password" state (indicated by cookie and hash format)
+        bypass_old_pw_check = False
+        password_hash = stored_user_data.get('password_hash', '')
+        
+        has_force_change_cookie = request.cookies.get(CHANGE_PASSWORD_COOKIE_NAME)
+        is_temp_password = password_hash.startswith('_') and password_hash.endswith('_')
+        
+        if has_force_change_cookie and is_temp_password:
+             bypass_old_pw_check = True
+
+        if not bypass_old_pw_check:
+            is_old_valid, _ = verify_password(stored_user_data, old_password, user_key_for_rbac)
+            if not is_old_valid:
+                raise HTTPException(status_code=401, detail="Old password verification failed.")
 
         try:
             hashed_pw = hash_password(new_password)
