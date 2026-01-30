@@ -195,6 +195,18 @@ function renderClasses() {
     `;
     tbody.appendChild(tr);
   });
+
+  // Add the "Add Class" input row
+  const addRow = document.createElement("tr");
+  addRow.id = "addClassRow";
+  addRow.innerHTML = `
+    <td><input type="text" id="newClassName" placeholder="New Class (e.g. 1.A)" /></td>
+    <td><input type="text" id="newClassTeacher" placeholder="Teacher Name" /></td>
+    <td colspan="2" style="text-align: center;">
+      <button onclick="addClass()">Add Class</button>
+    </td>
+  `;
+  tbody.appendChild(addRow);
 }
 
 function prefillClasses() {
@@ -236,23 +248,36 @@ async function loadClasses() {
     renderClasses();
   } catch (error) {
     console.error("Error loading classes:", error);
-    alert(`Error loading classes: ${error.message}`);
+    // Show error in a non-blocking way if possible, or keep alert if critical for now.
+    // Ideally we'd have a status div. 
+    console.log(`Error loading classes: ${error.message}`);
     // Optionally clear the table or show an error message in the table
     document.getElementById("classTableBody").innerHTML = '<tr><td colspan="4">Error loading classes.</td></tr>';
   }
 }
 
 async function addClass() {
-  const className = prompt("Enter new class name (e.g., 2.A):");
-  if (!className) return; // User cancelled or entered empty
+  const nameInput = document.getElementById("newClassName");
+  const teacherInput = document.getElementById("newClassTeacher");
 
-  const teacher = prompt("Enter teacher's name for class " + className + ":");
-  if (!teacher) return; // User cancelled or entered empty
+  const className = nameInput.value.trim();
+  const teacher = teacherInput.value.trim();
+
+  if (!className) {
+    alert("Please enter a class name.");
+    return;
+  }
+  // Teacher is optional? Original prompt implied it was needed, but let's allow empty if user wants.
+  // Actually original code checked: if (!teacher) return;
+  if (!teacher) {
+    alert("Please enter a teacher's name.");
+    return;
+  }
 
   // For simplicity, new classes default to all counts 'F'
   const newClassData = {
-    class: className.trim(),
-    teacher: teacher.trim(),
+    class: className,
+    teacher: teacher,
     counts1: 'F',
     counts2: 'F', // Ensure key matches backend/SQL ('counts2')
     counts3: 'F'  // Ensure key matches backend/SQL ('counts3')
@@ -265,16 +290,25 @@ async function addClass() {
       body: JSON.stringify(newClassData)
     });
 
-    const result = await res.json();
-    if (res.ok) {
-      alert(result.message || "Class added successfully!");
-      loadClasses(); // Refresh the class list
+    const data = await res.json();
+
+    if (res.ok && data.success) {
+      // Clear inputs
+      nameInput.value = "";
+      teacherInput.value = "";
+
+      // Reload classes to update table
+      loadClasses();
+
+      // Optional: Show a subtle toast or status message instead of alert
+      // For now, we just don't alert "Success".
+      console.log(data.message);
     } else {
-      alert(`Failed to add class: ${result.error || `Server error (Status: ${res.status})`}`);
+      alert("Error: " + (data.error || data.detail || "Failed to add class"));
     }
   } catch (error) {
     console.error("Error adding class:", error);
-    alert("An error occurred while trying to add the class. Check the console.");
+    alert("Error adding class. See console for details.");
   }
 }
 
@@ -288,12 +322,13 @@ async function promptRemoveClass(className) {
       body: JSON.stringify({ class: className })
     });
 
-    const result = await res.json();
-    if (res.ok) {
-      alert(result.message || "Class removed successfully!");
-      loadClasses(); // Refresh the class list
+    const data = await res.json();
+
+    if (res.ok && data.success) {
+      loadClasses();
+      console.log(data.message);
     } else {
-      alert(`Failed to remove class: ${result.error || `Server error (Status: ${res.status})`}`);
+      alert("Error: " + (data.error || data.detail || "Failed to remove class"));
     }
   } catch (error) {
     console.error("Error removing class:", error);
