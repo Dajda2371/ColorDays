@@ -186,7 +186,7 @@ function renderClasses() {
       <td>${cls.teacher}</td>
       <td>
         <input type="checkbox" ${cls.counts1 === 'T' ? 'checked' : ''} onchange="updateClassCount('${cls.class}', 'counts1', this.checked)" />
-        <input type="checkbox" ${cls.counts2 === 'T' ? 'checked' : ''} onchange="updateClassCount('${cls.class}', 'counts2', this.checked)" /> 
+        <input type="checkbox" ${cls.counts2 === 'T' ? 'checked' : ''} onchange="updateClassCount('${cls.class}', 'counts2', this.checked)" />
         <input type="checkbox" ${cls.counts3 === 'T' ? 'checked' : ''} onchange="updateClassCount('${cls.class}', 'counts3', this.checked)" />
       </td>
       <td>
@@ -195,18 +195,35 @@ function renderClasses() {
     `;
     tbody.appendChild(tr);
   });
+}
 
-  // Add the "Add Class" input row
+function handleAddClassRow() {
+  const tbody = document.getElementById("classTableBody");
+  // Check if adding row already exists
+  if (document.getElementById("addClassRow")) return;
+
   const addRow = document.createElement("tr");
   addRow.id = "addClassRow";
   addRow.innerHTML = `
-    <td><input type="text" id="newClassName" placeholder="New Class (e.g. 1.A)" /></td>
-    <td><input type="text" id="newClassTeacher" placeholder="Teacher Name" /></td>
-    <td colspan="2" style="text-align: center;">
-      <button onclick="addClass()">Add Class</button>
-    </td>
-  `;
+      <td><input type="text" id="newClassName" placeholder="New Class (e.g. 1.A)" /></td>
+      <td><input type="text" id="newClassTeacher" placeholder="Teacher Name" /></td>
+      <td>
+        <!-- Counts are always F initially, saved on click later if needed, but here we just create class -->
+        <input type="checkbox" disabled />
+        <input type="checkbox" disabled />
+        <input type="checkbox" disabled />
+      </td>
+      <td>
+        <button onclick="saveNewClass()">Save</button>
+        <button onclick="cancelAddClass()">Cancel</button>
+      </td>
+    `;
   tbody.appendChild(addRow);
+}
+
+function cancelAddClass() {
+  const row = document.getElementById("addClassRow");
+  if (row) row.remove();
 }
 
 function prefillClasses() {
@@ -249,14 +266,14 @@ async function loadClasses() {
   } catch (error) {
     console.error("Error loading classes:", error);
     // Show error in a non-blocking way if possible, or keep alert if critical for now.
-    // Ideally we'd have a status div. 
+    // Ideally we'd have a status div.
     console.log(`Error loading classes: ${error.message}`);
     // Optionally clear the table or show an error message in the table
     document.getElementById("classTableBody").innerHTML = '<tr><td colspan="4">Error loading classes.</td></tr>';
   }
 }
 
-async function addClass() {
+async function saveNewClass() {
   const nameInput = document.getElementById("newClassName");
   const teacherInput = document.getElementById("newClassTeacher");
 
@@ -267,12 +284,7 @@ async function addClass() {
     alert("Please enter a class name.");
     return;
   }
-  // Teacher is optional? Original prompt implied it was needed, but let's allow empty if user wants.
-  // Actually original code checked: if (!teacher) return;
-  if (!teacher) {
-    alert("Please enter a teacher's name.");
-    return;
-  }
+  // Allow empty teacher
 
   // For simplicity, new classes default to all counts 'F'
   const newClassData = {
@@ -294,14 +306,14 @@ async function addClass() {
 
     if (res.ok && data.success) {
       // Clear inputs
-      nameInput.value = "";
-      teacherInput.value = "";
+      // nameInput.value = ""; // No need to clear, row is removed
+      // teacherInput.value = ""; // No need to clear, row is removed
 
-      // Reload classes to update table
+      // Remove the add row and reload
+      cancelAddClass();
       loadClasses();
 
-      // Optional: Show a subtle toast or status message instead of alert
-      // For now, we just don't alert "Success".
+      // No success alert as requested
       console.log(data.message);
     } else {
       alert("Error: " + (data.error || data.detail || "Failed to add class"));
@@ -311,6 +323,9 @@ async function addClass() {
     alert("Error adding class. See console for details.");
   }
 }
+
+// Kept for backward compatibility if onclick still points to addClass
+const addClass = handleAddClassRow;
 
 async function promptRemoveClass(className) {
   if (!confirm(`Are you sure you want to remove class "${className}"?`)) return;
