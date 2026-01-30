@@ -43,6 +43,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
                     const updates = [];
                     ['1', '2', '3'].forEach(day => {
+                        // Ensure classes are sorted alphabetically by class name
+                        classes.sort((a, b) => a.class.localeCompare(b.class, undefined, { numeric: true, sensitivity: 'base' }));
+
                         const countingClasses = classes.filter(c => c[`counts${day}`] === 'T').map(c => c.class).sort();
                         if (countingClasses.length === 0) return;
 
