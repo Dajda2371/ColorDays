@@ -200,14 +200,19 @@ def update_iscountedby(data: ClassUpdateIsCountedByRequest, request: Request, us
 @router.post("/api/classes/prefill")
 def prefill_classes(admin_user: dict = Depends(get_current_admin_user)):
     """
-    Scrape website for classes and prefill the database.
+    Scrape website for classes and teachers, and prefill the database.
     Merge with existing classes.
     """
+    import html
+    
     with data_lock:
         scrape_url = server_config.get('scrape_classes_url')
         if not scrape_url:
             raise HTTPException(status_code=400, detail="Scrape URL not configured.")
 
+        # Create a snapshot for rollback
+        snapshot = [c.copy() for c in class_data_store]
+        
         try:
             logger.info(f"Scraping classes from {scrape_url}")
             headers = {
@@ -217,50 +222,71 @@ def prefill_classes(admin_user: dict = Depends(get_current_admin_user)):
             response.raise_for_status()
             content = response.text
 
-            # Regex to find classes like 1.A, 9.B.
-            found_classes = sorted(list(set(re.findall(r'\b\d+\.[A-Z]\b', content))))
+            # Regex to find classes and teachers in table structure
+            # Structure matches: <td width="76">1.A</td><td width="253">Mgr. Kateřina Freislebenová</td>
+            pattern = r'<td[^>]*>\s*(\d+\.[A-Z])\s*</td>\s*<td[^>]*>\s*(.*?)\s*</td>'
             
-            if not found_classes:
-                 raise HTTPException(status_code=404, detail="No classes matching format 'N.X' found at the URL.")
-
-            # Get set of existing class names
-            existing_class_names = {c['class'] for c in class_data_store}
+            matches = re.findall(pattern, content, re.IGNORECASE | re.DOTALL)
             
-            # Filter found classes to only new ones
-            new_classes_to_add = [c for c in found_classes if c not in existing_class_names]
+            if not matches:
+                # Fallback: Try finding just classes if table structure fails
+                found_classes_simple = sorted(list(set(re.findall(r'\b\d+\.[A-Z]\b', content))))
+                if not found_classes_simple:
+                     raise HTTPException(status_code=404, detail="No classes found at the URL.")
+                matches = [(c, "") for c in found_classes_simple]
 
-            if not new_classes_to_add:
-                 return {"success": True, "message": "No new classes found to add.", "classes": []}
+            classes_updated_count = 0
+            classes_added_count = 0
 
-            new_class_entries = []
-            for cls_name in new_classes_to_add:
-                new_class_entries.append({
-                    "class": cls_name,
-                    "teacher": "", 
-                    "counts1": "F",
-                    "counts2": "F",
-                    "counts3": "F",
-                    "iscountedby1": "_NULL_",
-                    "iscountedby2": "_NULL_",
-                    "iscountedby3": "_NULL_"
-                })
+            # Filter duplicates and clean data
+            scraped_data = {}
+            for cls_name, teacher_raw in matches:
+                teacher_clean = re.sub(r'<[^>]+>', '', teacher_raw)
+                teacher_clean = html.unescape(teacher_clean).strip()
+                scraped_data[cls_name] = teacher_clean
             
-            class_data_store.extend(new_class_entries)
-            class_data_store.sort(key=lambda x: x['class']) # Keep sorted
+            classes_found_count = len(scraped_data)
+
+            existing_class_map = {c['class']: c for c in class_data_store}
+            
+            for cls_name, teacher in scraped_data.items():
+                if cls_name in existing_class_map:
+                    # Update teacher if currently empty
+                    current_entry = existing_class_map[cls_name]
+                    if not current_entry.get('teacher'):
+                        current_entry['teacher'] = teacher
+                        classes_updated_count += 1
+                else:
+                    new_class = {
+                        "class": cls_name,
+                        "teacher": teacher, 
+                        "counts1": "F",
+                        "counts2": "F",
+                        "counts3": "F",
+                        "iscountedby1": "_NULL_",
+                        "iscountedby2": "_NULL_",
+                        "iscountedby3": "_NULL_"
+                    }
+                    class_data_store.append(new_class)
+                    classes_added_count += 1
+
+            if classes_updated_count == 0 and classes_added_count == 0:
+                 return {"success": True, "message": "No new classes or teacher updates found.", "classes": class_data_store}
+
+            class_data_store.sort(key=lambda x: x['class'])
 
             if save_class_data_to_db():
-                return {"success": True, "message": f"Successfully added {len(new_class_entries)} new classes.", "classes": new_class_entries}
+                msg = f"Found {classes_found_count} classes. Added {classes_added_count} new, updated {classes_updated_count} teachers."
+                return {"success": True, "message": msg, "classes": class_data_store}
             else:
-                 # Rollback memory change if DB save fails
-                # Only remove the classes we just added
-                new_class_names = {c['class'] for c in new_class_entries}
-                class_data_store[:] = [c for c in class_data_store if c['class'] not in new_class_names]
-                
-                raise HTTPException(status_code=500, detail="Failed to save data to database.")
+                # Rollback
+                class_data_store[:] = snapshot
+                raise HTTPException(status_code=500, detail="Failed to save data.")
 
         except requests.RequestException as e:
             logger.error(f"Network error scraping classes: {e}")
-            raise HTTPException(status_code=500, detail=f"Network error during scrape: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Network error: {str(e)}")
         except Exception as e:
             logger.error(f"Error scraping classes: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to scrape classes: {str(e)}")
+            class_data_store[:] = snapshot
+            raise HTTPException(status_code=500, detail=f"Scrape failed: {str(e)}")
