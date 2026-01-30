@@ -1,4 +1,4 @@
-backend/data/*
+backend/data/
 __pycache__/
 *DS_Store
 *Desktop.ini
