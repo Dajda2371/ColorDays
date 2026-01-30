@@ -162,3 +162,9 @@ def create_cookie_clear_headers(name, path='/'):
 
     header_value = cookie[name].output(header='').strip()
     return [('Set-Cookie', header_value)]
+
+def set_cookie_headers(response, headers: list):
+    """Helper to append Set-Cookie headers from utils to FastAPI response."""
+    for header_name, header_value in headers:
+        if header_name.lower() == 'set-cookie':
+            response.headers.append('set-cookie', header_value)

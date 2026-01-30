@@ -506,3 +506,8 @@ def save_main_config_to_json(config_data):
     except Exception as e:
         print(f"!!! ERROR saving {config_file_path}: {e}")
         return False
+def is_user_using_oauth(username: str) -> bool:
+    user_data = user_password_store.get(username)
+    if user_data and user_data.get('password_hash') == '_GOOGLE_AUTH_USER_':
+        return True
+    return False
