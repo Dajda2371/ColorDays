@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from typing import Optional
 from config import ADMIN_ROLE, TEACHER_ROLE, SQL_AUTH_USER_STUDENT_COOKIE_NAME, DATA_DIR, SESSION_COOKIE_NAME, VALID_SESSION_VALUE
-from data_manager import class_data_store, data_lock, save_class_data_to_db, load_class_data_from_db, server_config
+from data_manager import class_data_store, data_lock, save_class_data_to_db, load_class_data_from_db, server_config, students_data_store, save_students_data_to_db
 from dependencies import get_current_admin_user, get_current_user_info, active_sessions
 import json
 import requests
@@ -83,6 +83,16 @@ def clear_all_assignments(request: Request, user_info=Depends(get_current_user_i
 
         if updated_count > 0:
             if save_class_data_to_db():
+                # Also reset all student assignments since no class counts anyone
+                students_modified = False
+                for student in students_data_store:
+                    if student.get('counts_classes') != '[]':
+                        student['counts_classes'] = '[]'
+                        students_modified = True
+                
+                if students_modified:
+                    save_students_data_to_db()
+
                 return {"success": True, "message": f"Cleared assignments for {updated_count} classes."}
             else:
                 raise HTTPException(status_code=500, detail="Failed to save data.")
