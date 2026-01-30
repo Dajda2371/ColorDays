@@ -64,8 +64,17 @@ document.addEventListener('DOMContentLoaded', function () {
                                     dayIdentifier: day,
                                     value: counterName
                                 });
+                            } else {
+                                // Generate the rest: distribute non-counting classes evenly
+                                let counterName = countingClasses[rrIndex % countingClasses.length];
+                                rrIndex++;
+
+                                updates.push({
+                                    class: cls.class,
+                                    dayIdentifier: day,
+                                    value: counterName
+                                });
                             }
-                            // Non-counting classes are NOT affected by Split Evenly
                         });
                     });
                     sendBatchUpdates(updates);
