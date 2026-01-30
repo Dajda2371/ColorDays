@@ -3,7 +3,7 @@ from .login import handle_login
 from .login_student import handle_login_student
 from .logout import handle_logout
 from .auth_change import handle_auth_change
-from .users_post import handle_api_users_post
+from .users import handle_api_users_post
 from .users_remove import handle_api_users_remove
 from .users_set import handle_api_users_set
 from .classes_add import handle_api_classes_add

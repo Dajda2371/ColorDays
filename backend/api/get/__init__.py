@@ -6,11 +6,14 @@ organized by category.
 
 from .users import handle_api_users
 from .classes import handle_api_classes
-from .students import handle_api_students, handle_api_student_counting_details
+from .students import handle_api_students
+from .student_counting_details import handle_api_student_counting_details
 from .counts import handle_api_counts
-from .config import handle_api_data_config
+from .data_config import handle_api_data_config
 from .translations import handle_api_translations
-from .oauth import handle_login_google, handle_oauth2callback, set_oauth_dependencies
+from .login_google import handle_login_google
+from .oauth2callback import handle_oauth2callback
+from .oauth import set_oauth_dependencies
 
 # Route mapping dictionary
 GET_ROUTES = {
