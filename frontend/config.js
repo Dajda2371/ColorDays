@@ -174,30 +174,10 @@ async function changePassword() {
 
 // --- Class Management Functions ---
 
+
 function renderClasses() {
   const tbody = document.getElementById("classTableBody");
   tbody.innerHTML = ""; // Clear existing rows
-
-  if (currentClasses.length === 0) {
-    const tr = document.createElement("tr");
-    const td = document.createElement("td");
-    td.colSpan = 4;
-    td.style.textAlign = "center";
-    td.innerHTML = "No classes found. <br><br>";
-
-    const prefillBtn = document.createElement("button");
-    prefillBtn.textContent = "Prefill Classes from Website";
-    prefillBtn.onclick = prefillClasses;
-    prefillBtn.style.backgroundColor = '#4CAF50';
-    prefillBtn.style.color = 'white';
-    prefillBtn.style.padding = '10px 20px';
-    prefillBtn.style.cursor = 'pointer';
-
-    td.appendChild(prefillBtn);
-    tr.appendChild(td);
-    tbody.appendChild(tr);
-    return;
-  }
 
   currentClasses.forEach(cls => {
     const tr = document.createElement("tr");
@@ -217,36 +197,32 @@ function renderClasses() {
   });
 }
 
-async function prefillClasses(event) {
-  if (!confirm("Are you sure you want to scrape classes from the school website?")) return;
+function prefillClasses() {
+  if (!confirm("Are you sure you want to scrape classes from the school website? This will add any new classes found.")) return;
 
-  const btn = event.target;
-  const originalText = btn.textContent;
-  btn.textContent = "Scraping...";
-  btn.disabled = true;
+  // Find the button if clicked, or just do general logic
+  // Since we call this from onclick in HTML, we don't necessarily have the event object passed automatically unless we pass it.
+  // Let's assume we find it by text or just show global loading.
+  // Simpler: Just allow it to run.
 
-  try {
-    const res = await fetch("/api/classes/prefill", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({})
+  fetch("/api/classes/prefill", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        alert(data.message);
+        loadClasses();
+      } else {
+        alert("Error: " + (data.error || "Unknown error"));
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      alert("Error contacting server.");
     });
-    const data = await res.json();
-
-    if (res.ok && data.success) {
-      alert(data.message);
-      loadClasses(); // Reload the classes to show them in the table
-    } else {
-      alert("Error: " + (data.error || "Unknown error"));
-      btn.textContent = originalText;
-      btn.disabled = false;
-    }
-  } catch (e) {
-    console.error(e);
-    alert("Error contacting server.");
-    btn.textContent = originalText;
-    btn.disabled = false;
-  }
 }
 
 async function loadClasses() {

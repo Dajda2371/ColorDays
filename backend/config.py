@@ -56,4 +56,4 @@ LANGUAGE_COOKIE_NAME = "language"
 TRANSLATIONS_FILE_PATH = DATA_DIR / 'language_translations.json'
 
 DATABASE_FILE = DATA_DIR / 'data.db'
-YEAR_DATABASE_FILE = CURRENT_YEAR_DIR / '2025.db'
+YEAR_DATABASE_FILE = DATA_DIR / f"{datetime.datetime.now().year}.db"

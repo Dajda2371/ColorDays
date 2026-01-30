@@ -489,7 +489,8 @@ def load_main_config_from_json():
     else:
         print(f"Warning: {config_file_path} not found. Using default server configuration.")
 
-    server_config = temp_config
+    server_config.clear()
+    server_config.update(temp_config)
     print("Server configuration loading complete.")
 
 def save_main_config_to_json(config_data):

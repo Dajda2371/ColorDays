@@ -11,10 +11,6 @@ def handle_api_classes_prefill(handler, data):
     Only works if the class list is currently empty.
     """
     with data_lock:
-        if class_data_store:
-            handler._send_response(400, {"error": "Classes list must be empty to prefill."})
-            return
-
         scrape_url = server_config.get('scrape_classes_url')
         if not scrape_url:
             handler._send_response(400, {"error": "Scrape URL not configured."})
@@ -30,20 +26,25 @@ def handle_api_classes_prefill(handler, data):
             content = response.text
 
             # Regex to find classes like 1.A, 9.B.
-            # \b matches word boundary.
-            # \d+ matches one or more digits.
-            # \. matches a literal dot.
-            # [A-Z] matches a single uppercase letter.
-            # We assume classes are like 1.A, 2.B, ... 9.C
             found_classes = sorted(list(set(re.findall(r'\b\d+\.[A-Z]\b', content))))
             
             if not found_classes:
                  handler._send_response(404, {"error": "No classes matching format 'N.X' found at the URL."})
                  return
 
-            new_classes = []
-            for cls_name in found_classes:
-                new_classes.append({
+            # Get set of existing class names
+            existing_class_names = {c['class'] for c in class_data_store}
+            
+            # Filter found classes to only new ones
+            new_classes_to_add = [c for c in found_classes if c not in existing_class_names]
+
+            if not new_classes_to_add:
+                 handler._send_response(200, {"success": True, "message": "No new classes found to add.", "classes": []})
+                 return
+
+            new_class_entries = []
+            for cls_name in new_classes_to_add:
+                new_class_entries.append({
                     "class": cls_name,
                     "teacher": "", 
                     "counts1": "F",
@@ -54,12 +55,15 @@ def handle_api_classes_prefill(handler, data):
                     "iscountedby3": "_NULL_"
                 })
             
-            class_data_store.extend(new_classes)
+            class_data_store.extend(new_class_entries)
             if save_class_data_to_db():
-                handler._send_response(200, {"success": True, "message": f"Successfully prefilled {len(new_classes)} classes.", "classes": new_classes})
+                handler._send_response(200, {"success": True, "message": f"Successfully added {len(new_class_entries)} new classes.", "classes": new_class_entries})
             else:
                  # Rollback memory change if DB save fails
-                class_data_store.clear()
+                # Note: This is a simple rollback, removing the last N items. 
+                # Ideally we should be more robust, but for this simpler script:
+                for _ in range(len(new_class_entries)):
+                    class_data_store.pop() 
                 handler._send_response(500, {"error": "Failed to save data to database."})
 
         except requests.RequestException as e:
