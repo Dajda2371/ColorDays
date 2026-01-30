@@ -1,104 +1,54 @@
-
-import json
-
-from auth import get_current_user_info, is_user_using_oauth
-from data_manager import user_password_store, data_lock, save_user_data_to_db
-from utils import hash_password, create_cookie_clear_headers, verify_password
+from fastapi import APIRouter, Depends, HTTPException, Response, Request
+from pydantic import BaseModel
 from config import CHANGE_PASSWORD_COOKIE_NAME
+from dependencies import get_current_user_info
+from data_manager import user_password_store, data_lock, save_user_data_to_db
+from utils import verify_password, hash_password
 
+router = APIRouter()
 
-def handle_auth_change(handler, data):
-    """POST /api/auth/change - Change password for current user."""
-    user_key_for_rbac, _ = get_current_user_info(handler)
+class ChangePasswordRequest(BaseModel):
+    username: str
+    old_password: str
+    new_password: str
 
-    if not user_key_for_rbac:
-        print("Error: Username cookie missing in authenticated /api/auth/change request.")
-        handler._send_response(401, {"error": "Authentication error: User identity not found."})
-        return
+@router.post("/api/auth/change")
+def change_password(request: Request, response: Response, payload: ChangePasswordRequest, user_info=Depends(get_current_user_info)):
+    user_key, user_role = user_info
+    
+    # Payload fields
+    # username in payload seems to be for verification/lookup, but RBAC is based on logged in user
+    username_for_messages = payload.username
+    old_password = payload.old_password
+    new_password = payload.new_password
 
-    if is_user_using_oauth(user_key_for_rbac):
-        handler._send_response(403, {"error": "Password change not allowed for Google OAuth users."})
-        return
+    if not user_key:
+         raise HTTPException(status_code=401, detail="Authentication required")
 
-    username_for_messages = user_key_for_rbac
-
-    old_password = data.get('oldPassword')
-    new_password = data.get('newPassword')
-
-    # Check for the cookie and force verification if present
-    cookies = handler.get_cookies()
-    verification_needed = True
-    if cookies.get(CHANGE_PASSWORD_COOKIE_NAME):
-        print(f"DEBUG: Cookie '{CHANGE_PASSWORD_COOKIE_NAME}' found. Forcing verification_needed to False.")
-        verification_needed = False
-
-    if not user_key_for_rbac or not new_password:
-        handler._send_response(400, {"error": "Missing username or new password"})
-        return
-
-    success = False
-    message = "Failed to change password."
-    status_code = 500
-    save_needed = False
+    user_key_for_rbac = user_key 
 
     with data_lock:
         stored_user_data = user_password_store.get(user_key_for_rbac)
 
         if not stored_user_data:
-            message = f"User '{username_for_messages}' not found."
-            status_code = 404
-        else:
-            if verification_needed:
-                is_old_valid, _ = verify_password(stored_user_data, old_password, username_for_messages)
-                if not is_old_valid:
-                    message = "Old password verification failed."
-                    status_code = 401
-                    handler._send_response(status_code, {"error": message})
-                    return
+            raise HTTPException(status_code=404, detail=f"User '{username_for_messages}' not found.")
+            
+        is_old_valid, _ = verify_password(stored_user_data, old_password, user_key_for_rbac)
+        if not is_old_valid:
+            raise HTTPException(status_code=401, detail="Old password verification failed.")
 
-            try:
-                hashed_pw = hash_password(new_password)
-                user_password_store[user_key_for_rbac]['password_hash'] = hashed_pw
-                save_needed = True
-                print(f"Password changed in memory for user '{username_for_messages}'.")
-            except Exception as e:
-                print(f"!!! Error hashing new password for {username_for_messages}: {e}")
-                message = "Server error during password hashing."
-                status_code = 500
-
-        if save_needed:
+        try:
+            hashed_pw = hash_password(new_password)
+            user_password_store[user_key_for_rbac]['password_hash'] = hashed_pw
             if save_user_data_to_db():
-                success = True
-                message = f"Password for user '{username_for_messages}' changed successfully."
-                status_code = 200
+                 # Success
+                 pass
             else:
-                success = False
-                message = f"Password changed in memory for '{username_for_messages}', but FAILED to save to file."
-                status_code = 500
-
-    if success:
-        extra_headers_on_success = []
-        cookies = handler.get_cookies()
-        if cookies.get(CHANGE_PASSWORD_COOKIE_NAME):
-            print(f"DEBUG: Password change successful, clearing '{CHANGE_PASSWORD_COOKIE_NAME}' cookie.")
-            clear_headers = create_cookie_clear_headers(CHANGE_PASSWORD_COOKIE_NAME, path='/')
-            extra_headers_on_success.extend(clear_headers)
-
-        handler.send_response(status_code)
-        handler.send_header('Content-type', 'application/json')
-        # Get the origin from the request, or use localhost as fallback
-        origin = handler.headers.get('Origin', 'http://localhost:8000')
-        handler.send_header('Access-Control-Allow-Origin', origin)
-        handler.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        handler.send_header('Access-Control-Allow-Headers', 'Content-Type, Cookie')
-        handler.send_header('Access-Control-Allow-Credentials', 'true')
-
-        for header_name, header_value in extra_headers_on_success:
-            handler.send_header(header_name, header_value)
-            print(f"DEBUG: Sent extra header: {header_name}: {header_value}")
-
-        handler.end_headers()
-        response_body = json.dumps({"success": True, "message": message}).encode('utf-8')
-        handler.wfile.write(response_body)
-    else:
-        handler._send_response(status_code, {"error": message})
+                 raise HTTPException(status_code=500, detail="Failed to save data to file.")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail="Server error during password hashing.")
+            
+    if request.cookies.get(CHANGE_PASSWORD_COOKIE_NAME):
+        response.delete_cookie(key=CHANGE_PASSWORD_COOKIE_NAME, path='/')
+        
+    return {"success": True, "message": f"Password for user '{username_for_messages}' changed successfully."}

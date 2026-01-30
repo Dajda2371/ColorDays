@@ -1,46 +1,36 @@
-
-from auth import get_current_user_info
+from fastapi import APIRouter, Depends, HTTPException, Body
+from pydantic import BaseModel, Field
+from dependencies import get_current_admin_user
 from data_manager import students_data_store, data_lock, save_students_data_to_db
 from utils import generate_random_code
-from config import ADMIN_ROLE, TEACHER_ROLE
 
+router = APIRouter()
 
-def handle_api_students_add(handler, data):
-    """POST /api/students/add - Add student."""
-    user_key, user_role = get_current_user_info(handler)
+class StudentAddRequest(BaseModel):
+    class_: str = Field(..., alias="class")
+    note: str
 
-    if not handler.is_logged_in() or user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
-        handler._send_response(403, {"error": "Forbidden: Administrator access required."})
-        return
+@router.post("/api/students/add")
+def add_student(payload: StudentAddRequest, admin_user: dict = Depends(get_current_admin_user)):
+    class_name = payload.class_
+    note = payload.note
+    
+    if not class_name:
+        raise HTTPException(status_code=400, detail="Class name required.")
 
-    student_class = data.get('class')
-    note = data.get('note', '')
-
-    if not student_class:
-        handler._send_response(400, {"error": "Missing 'class' for the new student configuration."})
-        return
-
-    success = False
-    message = "Failed to add student configuration."
-    status_code = 500
+    code = generate_random_code(15) 
 
     with data_lock:
-        new_student_config = {
-            "code": generate_random_code(),
-            "class": student_class,
+        new_student = {
+            "code": code,
+            "class": class_name,
             "note": note,
-            "counts_classes_str": "[]"
+            "counts_classes": "[]"
         }
-        students_data_store.append(new_student_config)
-        students_data_store.sort(key=lambda x: (x['class'], x.get('note', '')))
-
+        students_data_store.append(new_student)
+        
         if save_students_data_to_db():
-            success = True
-            message = f"Student configuration for class '{student_class}' (Note: '{note}') added successfully."
-            status_code = 201
+            return {"success": True, "message": "Student added.", "code": code}
         else:
             students_data_store.pop()
-            message = f"Failed to save new student configuration for '{student_class}' (Note: '{note}') to file."
-            status_code = 500
-
-    handler._send_response(status_code, {"success": success, "message": message} if success else {"error": message})
+            raise HTTPException(status_code=500, detail="Failed to save student data.")

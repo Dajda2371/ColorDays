@@ -1,19 +1,12 @@
-"""GET /api/data/config endpoint handler."""
-
 import json
-
+from fastapi import APIRouter, Depends, HTTPException
 from config import DATA_DIR, DOMAIN, PORT, ADMIN_ROLE
-from auth import get_current_user_info
+from dependencies import get_current_admin_user
 
+router = APIRouter()
 
-def handle_api_data_config(handler):
-    """GET /api/data/config - Get server configuration."""
-    user_key, user_role = get_current_user_info(handler)
-
-    if not handler.is_logged_in() or user_role != ADMIN_ROLE:
-        handler._send_response(403, {"error": "Forbidden: Administrator access required."})
-        return
-
+@router.get("/api/data/config")
+def get_data_config(admin_user: dict = Depends(get_current_admin_user)):
     config_file_path = DATA_DIR / 'config.json'
     config_json = {}
     if config_file_path.is_file():
@@ -24,4 +17,4 @@ def handle_api_data_config(handler):
             pass
     config_json['DOMAIN'] = DOMAIN
     config_json['PORT'] = PORT
-    handler._send_response(200, data=config_json)
+    return config_json

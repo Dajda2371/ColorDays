@@ -1,28 +1,24 @@
-"""GET /api/students and /api/student/counting-details endpoint handlers."""
-
-import urllib.parse
-
+from fastapi import APIRouter, Depends, HTTPException, Request
 from config import ADMIN_ROLE, TEACHER_ROLE, SQL_AUTH_USER_STUDENT_COOKIE_NAME
-from auth import get_current_user_info
-from data_manager import students_data_store, class_data_store, data_lock
+from dependencies import get_current_user_info
+from data_manager import students_data_store, data_lock
 
+router = APIRouter()
 
-def handle_api_students(handler):
-    """GET /api/students - List all students."""
-    user_key, user_role = get_current_user_info(handler)
-    cookies = handler.get_cookies()
-
-    if not handler.is_logged_in():
-        handler._send_response(401, {"error": "Authentication required"})
-        return
-
-    student_auth_cookie = cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME)
+@router.get("/api/students")
+def get_students(request: Request, user_info=Depends(get_current_user_info)):
+    user_key, user_role = user_info
+    
+    student_auth_cookie = request.cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME)
     is_student_user_session = student_auth_cookie is not None
+
+    if not user_key and not is_student_user_session:
+         raise HTTPException(status_code=401, detail="Authentication required")
 
     response_payload = []
     with data_lock:
         if is_student_user_session:
-            student_code_from_cookie = student_auth_cookie.value
+            student_code_from_cookie = student_auth_cookie
             found_student_data_item = None
             for s_data_item in students_data_store:
                 if s_data_item.get('code') == student_code_from_cookie:
@@ -44,8 +40,7 @@ def handle_api_students(handler):
 
         else:
             if user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
-                handler._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
-                return
+                raise HTTPException(status_code=403, detail="Forbidden: Administrator or Teacher access required.")
 
             for student_data_item in students_data_store:
                 counting_classes_list = []
@@ -59,6 +54,4 @@ def handle_api_students(handler):
                     print(f"Error parsing counts_classes: {e}")
                 response_payload.append({**student_data_item, "counting_classes": counting_classes_list})
 
-    handler._send_response(200, response_payload)
-
-
+    return response_payload

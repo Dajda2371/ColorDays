@@ -1,23 +1,12 @@
-"""GET /api/users endpoint handler."""
-
-from config import ADMIN_ROLE, DEFAULT_ROLE_FOR_NEW_USERS
+from fastapi import APIRouter, Depends
+from config import DEFAULT_ROLE_FOR_NEW_USERS
 from data_manager import user_password_store, data_lock
-from auth import get_current_user_info
+from dependencies import get_current_admin_user
 
+router = APIRouter()
 
-def handle_api_users(handler):
-    """GET /api/users - List all users with details."""
-    if not handler.is_logged_in():
-        handler._send_response(401, {"error": "Authentication required"})
-        return
-
-    # RBAC Check
-    _user_key, user_role = get_current_user_info(handler)
-    if user_role != ADMIN_ROLE:
-        handler._send_response(403, {"error": "Forbidden: Administrator access required."})
-        return
-
-    # Build user list with password status and role
+@router.get("/api/users")
+def get_users(admin_user: dict = Depends(get_current_admin_user)):
     user_list = []
     with data_lock:
         for username_key, user_data_val in user_password_store.items():
@@ -42,5 +31,4 @@ def handle_api_users(handler):
                 "password": status,  # 'password' field name for frontend compatibility
                 "role": role
             })
-
-    handler.send_json(user_list)
+    return user_list

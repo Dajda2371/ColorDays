@@ -1,6 +1,5 @@
-"""GET /oauth2callback endpoint handler."""
-
-import urllib.parse
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import RedirectResponse
 from config import (
     CLIENT_SECRETS_FILE,
     GOOGLE_SCOPES,
@@ -13,24 +12,18 @@ from config import (
     DEFAULT_ROLE_FOR_NEW_USERS,
 )
 from data_manager import user_password_store, data_lock, save_user_data_to_db
-from utils import create_cookies, create_cookie_clear_headers
 import backend.api.get.auth.oauth as oauth_mod
 
+router = APIRouter()
 
-def handle_oauth2callback(handler):
-    """GET /oauth2callback - Handle Google OAuth callback."""
-    parsed_path = urllib.parse.urlparse(handler.path)
-    query = urllib.parse.parse_qs(parsed_path.query)
-
+@router.get("/oauth2callback")
+def oauth2callback(code: str = None):
     try:
-        code = query.get('code', [None])[0]
         if not code:
-            handler._send_response(400, {"error": "Missing authorization code from Google."})
-            return
+            raise HTTPException(status_code=400, detail="Missing authorization code from Google.")
 
         if oauth_mod.InstalledAppFlow is None or oauth_mod.google_discovery_service is None:
-            handler._send_response(500, {"error": "Google OAuth components missing on server."})
-            return
+            raise HTTPException(status_code=500, detail="Google OAuth components missing on server.")
 
         flow = oauth_mod.InstalledAppFlow.from_client_secrets_file(
             CLIENT_SECRETS_FILE, scopes=GOOGLE_SCOPES, redirect_uri=GOOGLE_REDIRECT_URI
@@ -54,8 +47,7 @@ def handle_oauth2callback(handler):
             name_for_cookie = user_name_from_google_raw.strip('"')
 
         if not user_email:
-            handler._send_response(400, {"error": "Could not retrieve email from Google."})
-            return
+             raise HTTPException(status_code=400, detail="Could not retrieve email from Google.")
 
         with data_lock:
             if user_email not in user_password_store:
@@ -66,23 +58,16 @@ def handle_oauth2callback(handler):
                 }
                 save_user_data_to_db()
 
-        all_cookies = create_cookies(USERNAME_COOKIE_NAME, name_for_cookie, path='/', httponly=False) + \
-                      create_cookies(SESSION_COOKIE_NAME, VALID_SESSION_VALUE, path='/') + \
-                      create_cookie_clear_headers(CHANGE_PASSWORD_COOKIE_NAME, path='/') + \
-                      create_cookies(GOOGLE_COOKIE_NAME, user_email, path='/', httponly=False)
+        response = RedirectResponse(url='/menu.html')
+        
+        response.set_cookie(key=USERNAME_COOKIE_NAME, value=name_for_cookie, path='/', httponly=False)
+        response.set_cookie(key=SESSION_COOKIE_NAME, value=VALID_SESSION_VALUE, path='/', httponly=True)
+        response.delete_cookie(key=CHANGE_PASSWORD_COOKIE_NAME, path='/')
+        response.set_cookie(key=GOOGLE_COOKIE_NAME, value=user_email, path='/', httponly=False)
 
-        handler.send_response(302)
-        handler.send_header('Location', '/menu.html')
-        # Get the origin from the request, or use localhost as fallback
-        origin = handler.headers.get('Origin', 'http://localhost:8000')
-        handler.send_header('Access-Control-Allow-Origin', origin)
-        handler.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        handler.send_header('Access-Control-Allow-Headers', 'Content-Type, Cookie')
-        handler.send_header('Access-Control-Allow-Credentials', 'true')
+        return response
 
-        for header_name, header_value in all_cookies:
-            handler.send_header(header_name, header_value)
-
-        handler.end_headers()
+    except HTTPException:
+        raise
     except Exception as e:
-        handler._send_response(500, {"error": "Google OAuth callback failed."})
+        raise HTTPException(status_code=500, detail="Google OAuth callback failed.")

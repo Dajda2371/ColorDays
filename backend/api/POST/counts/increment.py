@@ -1,61 +1,58 @@
-
-import traceback
 import collections
-
+import traceback
+from fastapi import APIRouter, HTTPException, Request, Body
+from pydantic import BaseModel
 from config import SQL_AUTH_USER_STUDENT_COOKIE_NAME
 from data_manager import load_counts_from_db, save_counts_to_db, is_student_allowed
 
+router = APIRouter()
 
-def handle_api_increment(handler, data):
-    """POST /api/increment - Increment count."""
-    class_name = data.get('className')
-    type_val = data.get('type')
-    points_val = data.get('points')
-    day_identifier = data.get('day')
+class IncrementRequest(BaseModel):
+    className: str
+    type: str # 'student' or 'teacher'
+    points: int
+    day: str
 
-    # Basic validation
-    if not all([class_name, type_val, points_val is not None, day_identifier]):
-        handler._send_response(400, {"error": "Missing data: className, type, points, or day"})
-        return
+@router.post("/api/increment")
+def increment_count(request: Request, payload: IncrementRequest):
+    class_name = payload.className
+    type_val = payload.type
+    points_val = payload.points
+    day_identifier = payload.day
+
     if type_val not in ['student', 'teacher']:
-        handler._send_response(400, {"error": "Invalid type"})
-        return
-    if not isinstance(points_val, int) or not (0 <= points_val <= 6):
-        handler._send_response(400, {"error": "Invalid points value"})
-        return
+         raise HTTPException(status_code=400, detail="Invalid type")
+    if not (0 <= points_val <= 6):
+         raise HTTPException(status_code=400, detail="Invalid points value")
     if day_identifier.lower() not in ['monday', 'tuesday', 'wednesday']:
-        handler._send_response(400, {"error": "Invalid day. Must be one of monday, tuesday, wednesday"})
-        return
+         raise HTTPException(status_code=400, detail="Invalid day. Must be one of monday, tuesday, wednesday")
 
-    # Student Authorization Check
-    cookies = handler.get_cookies()
-    student_auth_cookie = cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME)
+    # Authorization Check
+    student_auth_cookie = request.cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME)
     if student_auth_cookie:
-        student_code = student_auth_cookie.value
+        student_code = student_auth_cookie
         if not is_student_allowed(student_code, class_name, day_identifier.lower()):
-            handler._send_response(403, {"error": "Forbidden: You are not authorized to modify counts for this class/day."})
-            return
+             raise HTTPException(status_code=403, detail="Forbidden: You are not authorized to modify counts for this class/day.")
 
     try:
         day_specific_data = load_counts_from_db(day_identifier.lower())
 
-        # Initialize if needed
         if class_name not in day_specific_data:
             day_specific_data[class_name] = collections.defaultdict(lambda: collections.defaultdict(int))
+            # Just mimicking original logic structure for init, though defaultdict handles it
             for t in ['student', 'teacher']:
                 for p in range(7):
                     day_specific_data[class_name][t][p] = 0
 
-        # Increment
+        # Note: relying on data structure being compatible with [points_val] int key or auto-string conversion if JSON
         current_count = day_specific_data[class_name][type_val][points_val]
         day_specific_data[class_name][type_val][points_val] = current_count + 1
 
-        # Save
         if save_counts_to_db(day_identifier.lower(), day_specific_data):
-            handler._send_response(200, {"success": True, "message": f"Count incremented for {day_identifier}"})
+            return {"success": True, "message": f"Count incremented for {day_identifier}"}
         else:
-            handler._send_response(500, {"error": "Failed to save to database"})
+             raise HTTPException(status_code=500, detail="Failed to save to database")
     except Exception as e:
         print(f"Error during increment: {e}")
         traceback.print_exc()
-        handler._send_response(500, {"error": "Internal server error"})
+        raise HTTPException(status_code=500, detail="Internal server error")

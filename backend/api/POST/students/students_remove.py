@@ -1,40 +1,26 @@
-
-from auth import get_current_user_info
+from fastapi import APIRouter, Depends, HTTPException, Body
+from pydantic import BaseModel
+from dependencies import get_current_admin_user
 from data_manager import students_data_store, data_lock, save_students_data_to_db
-from config import ADMIN_ROLE, TEACHER_ROLE
 
+router = APIRouter()
 
-def handle_api_students_remove(handler, data):
-    """POST /api/students/remove - Remove student."""
-    user_key, user_role = get_current_user_info(handler)
+class StudentRemoveRequest(BaseModel):
+    code: str
 
-    if not handler.is_logged_in() or user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
-        handler._send_response(403, {"error": "Forbidden: Administrator or Teacher access required."})
-        return
-
-    student_code_to_remove = data.get('code')
-    if not student_code_to_remove:
-        handler._send_response(400, {"error": "Missing 'code' of student configuration to remove"})
-        return
-
-    success = False
-    message = "Failed to remove student configuration."
-    status_code = 500
-
+@router.post("/api/students/remove")
+def remove_student(payload: StudentRemoveRequest, admin_user: dict = Depends(get_current_admin_user)):
+    code = payload.code
+    
     with data_lock:
-        original_len = len(students_data_store)
-        students_data_store[:] = [s_config for s_config in students_data_store if s_config.get('code') != student_code_to_remove]
-
-        if len(students_data_store) < original_len:
-            if save_students_data_to_db():
-                success = True
-                message = f"Student configuration with code '{student_code_to_remove}' removed successfully."
-                status_code = 200
-            else:
-                message = f"Student configuration with code '{student_code_to_remove}' removed from memory, but FAILED to save to file."
-                status_code = 500
+        found_student = next((s for s in students_data_store if s['code'] == code), None)
+        if not found_student:
+             raise HTTPException(status_code=404, detail="Student not found.")
+        
+        students_data_store.remove(found_student)
+        
+        if save_students_data_to_db():
+            return {"success": True, "message": "Student removed."}
         else:
-            message = f"Student configuration with code '{student_code_to_remove}' not found."
-            status_code = 404
-
-    handler._send_response(status_code, {"success": success, "message": message} if success else {"error": message})
+            students_data_store.append(found_student)
+            raise HTTPException(status_code=500, detail="Failed to save student removal.")
