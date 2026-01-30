@@ -46,6 +46,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         const countingClasses = classes.filter(c => c[`counts${day}`] === 'T').map(c => c.class).sort();
                         if (countingClasses.length === 0) return;
 
+                        let rrIndex = 0;
                         classes.forEach(cls => {
                             // "Split Evenly" only affects the classes that are counting
                             if (countingClasses.includes(cls.class)) {
