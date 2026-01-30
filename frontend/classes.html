@@ -1,17 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Classes</title>
   <link rel="stylesheet" href="style.css" />
 </head>
+
 <body>
   <h1>Classes</h1>
-  
+
   <section style="margin-top: 3rem;">
     <h2>Days</h2>
-    
+
     <section id="monday-classes">
       <h3>Monday</h3>
       <!-- Buttons for Monday classes will be dynamically added here -->
@@ -30,6 +32,10 @@
 
   <section style="margin-top: 3rem;">
     <h2>Class Counting List</h2>
+    <div id="auto-assign-controls" style="margin-bottom: 1rem;">
+      <button id="split-evenly-btn" class="button" style="margin-right: 1rem;">Split Evenly</button>
+      <button id="split-randomly-btn" class="button">Split Randomly</button>
+    </div>
     <table>
       <thead>
         <tr>
@@ -49,4 +55,5 @@
   <!-- Ensure classes.js is linked -->
   <script src="classes.js"></script>
 </body>
+
 </html>

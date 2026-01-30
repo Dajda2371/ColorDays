@@ -32,6 +32,114 @@ document.addEventListener('DOMContentLoaded', function () {
             const canStudentsCountOwnClass = config.can_students_count_their_own_class !== "false";
             console.log("Can students count their own class:", canStudentsCountOwnClass, "(raw config value:", config.can_students_count_their_own_class, ")");
 
+            // --- Auto Assign Logic ---
+            const splitEvenlyBtn = document.getElementById('split-evenly-btn');
+            const splitRandomlyBtn = document.getElementById('split-randomly-btn');
+
+            if (splitEvenlyBtn && splitRandomlyBtn) {
+                splitEvenlyBtn.addEventListener('click', () => {
+                    if (!confirm("Are you sure you want to split counting duties evenly? This will overwrite existing assignments.")) return;
+
+                    const updates = [];
+                    ['1', '2', '3'].forEach(day => {
+                        const countingClasses = classes.filter(c => c[`counts${day}`] === 'T').map(c => c.class).sort();
+                        if (countingClasses.length === 0) return;
+
+                        let rrIndex = 0;
+                        classes.forEach(cls => {
+                            let counterName;
+                            if (countingClasses.includes(cls.class)) {
+                                const idx = countingClasses.indexOf(cls.class);
+                                // Cycle: shift left by 1 (or count by previous)
+                                const counterIdx = (idx - 1 + countingClasses.length) % countingClasses.length;
+                                counterName = countingClasses[counterIdx];
+
+                                if (!canStudentsCountOwnClass && countingClasses.length === 1 && counterName === cls.class) {
+                                    counterName = '_NULL_';
+                                }
+                            } else {
+                                counterName = countingClasses[rrIndex % countingClasses.length];
+                                rrIndex++;
+                            }
+
+                            updates.push({
+                                class: cls.class,
+                                dayIdentifier: day,
+                                value: counterName
+                            });
+                        });
+                    });
+                    sendBatchUpdates(updates);
+                });
+
+                splitRandomlyBtn.addEventListener('click', () => {
+                    if (!confirm("Are you sure you want to split counting duties randomly? This will overwrite existing assignments.")) return;
+
+                    const updates = [];
+                    ['1', '2', '3'].forEach(day => {
+                        const countingClasses = classes.filter(c => c[`counts${day}`] === 'T').map(c => c.class);
+                        if (countingClasses.length === 0) return;
+
+                        classes.forEach(cls => {
+                            let possible = countingClasses;
+                            if (!canStudentsCountOwnClass) {
+                                possible = countingClasses.filter(c => c !== cls.class);
+                            }
+
+                            let counterName;
+                            if (possible.length === 0) {
+                                counterName = '_NULL_';
+                            } else {
+                                counterName = possible[Math.floor(Math.random() * possible.length)];
+                            }
+
+                            updates.push({
+                                class: cls.class,
+                                dayIdentifier: day,
+                                value: counterName
+                            });
+                        });
+                    });
+                    sendBatchUpdates(updates);
+                });
+            }
+
+            function sendBatchUpdates(updates) {
+                if (updates.length === 0) {
+                    alert("No updates to apply (maybe no classes are set to count?).");
+                    return;
+                }
+
+                // Show loading state
+                if (splitEvenlyBtn) splitEvenlyBtn.disabled = true;
+                if (splitRandomlyBtn) splitRandomlyBtn.disabled = true;
+
+                fetch('/api/classes/update_iscountedby_batch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ updates: updates })
+                })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            alert(data.message);
+                            window.location.reload();
+                        } else {
+                            alert("Error: " + (data.error || data.message || "Unknown error"));
+                        }
+                    })
+                    .catch(err => {
+                        console.error(err);
+                        alert("Error sending updates: " + err.message);
+                    })
+                    .finally(() => {
+                        if (splitEvenlyBtn) splitEvenlyBtn.disabled = false;
+                        if (splitRandomlyBtn) splitRandomlyBtn.disabled = false;
+                    });
+            }
+            // --- End Auto Assign Logic ---
+
+
             // Prepare lists of classes that count for each day
             const mondayCountingClasses = classes.filter(c => c.counts1 === 'T').map(c => c.class);
             const tuesdayCountingClasses = classes.filter(c => c.counts2 === 'T').map(c => c.class);
