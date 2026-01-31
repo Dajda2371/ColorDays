@@ -217,36 +217,36 @@ async function loadAndDisplayClasses() {
         });
     }
 
-        // Final check if nothing was rendered and no specific error message was already set for students
-        if (!contentRendered && !errorMessage && dynamicClassList.innerHTML === '') {
-            dynamicClassList.innerHTML = `<p>${translations.noClassesScheduledAdminText?.[currentLanguage] || translations.noClassesScheduledAdminText?.['en'] || 'No classes are scheduled...'}</p>`; // Added English fallback
-        }
+    // Final check if nothing was rendered and no specific error message was already set for students
+    if (!contentRendered && !errorMessage && dynamicClassList.innerHTML === '') {
+        dynamicClassList.innerHTML = `<p>${translations.noClassesScheduledAdminText?.[currentLanguage] || translations.noClassesScheduledAdminText?.['en'] || 'No classes are scheduled...'}</p>`; // Added English fallback
     }
+}
 
 // --- Function to display logged-in username ---
 function displayLoggedInUser() {
-  const cookies = document.cookie.split('; ');
-  const usernameCookie = cookies.find(row => row.startsWith('ColorDaysUser='));
-  const usernameTextSpan = document.getElementById('usernameText');
+    const cookies = document.cookie.split('; ');
+    const usernameCookie = cookies.find(row => row.startsWith('ColorDaysUser='));
+    const usernameTextSpan = document.getElementById('usernameText');
 
-  if (usernameCookie) {
-    const username = usernameCookie.split('=')[1];
-    usernameTextSpan.textContent = decodeURIComponent(username);
-  } else { // This branch is for when the ColorDaysUser cookie is missing
-  usernameTextSpan.textContent = translations.usernameNotLoggedIn?.[currentLanguage] || 'Not Logged In';
-  }
+    if (usernameCookie) {
+        const username = usernameCookie.split('=')[1];
+        usernameTextSpan.textContent = decodeURIComponent(username);
+    } else { // This branch is for when the ColorDaysUser cookie is missing
+        usernameTextSpan.textContent = translations.usernameNotLoggedIn?.[currentLanguage] || 'Not Logged In';
+    }
 }
 
 // Helper function to get a specific cookie by name
 function getCookie(name) {
-  const nameEQ = name + "=";
-  const ca = document.cookie.split(';');
-  for(let i = 0; i < ca.length; i++) {
-    let c = ca[i];
-    while (c.charAt(0) === ' ') c = c.substring(1, c.length); // trim leading spaces
-    if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length); // Return cookie value
-  }
-  return null; // Cookie not found
+    const nameEQ = name + "=";
+    const ca = document.cookie.split(';');
+    for (let i = 0; i < ca.length; i++) {
+        let c = ca[i];
+        while (c.charAt(0) === ' ') c = c.substring(1, c.length); // trim leading spaces
+        if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length); // Return cookie value
+    }
+    return null; // Cookie not found
 }
 
 // --- Function to manage visibility of Admin/Teacher buttons for students ---
@@ -294,35 +294,7 @@ async function manageConfigButtonVisibility() {
     console.log("--- End manageConfigButtonVisibility ---");
 }
 
-// --- Function to manage visibility of Change Password button based on SQLAuthUser cookie ---
-function manageChangePasswordButtonVisibility() {
-  console.log("--- manageChangePasswordButtonVisibility ---");
-  console.log("Raw document.cookie:", `'${document.cookie}'`);
 
-  const cookieName = "SQLAuthUser"; // The name of the cookie we're looking for
-  const sqlAuthCookieValue = getCookie(cookieName);
-  const cookieExists = sqlAuthCookieValue !== null;
-
-  console.log(`Cookie '${cookieName}' value (via getCookie): ${sqlAuthCookieValue}`);
-  console.log(`'${cookieName}' cookie exists status (based on getCookie): ${cookieExists}`);
-
-  // Select the button using its new unique ID
-  const changePasswordButton = document.getElementById('changePasswordBtn');
-  console.log("Change Password button element selected by ID:", changePasswordButton);
-
-  if (changePasswordButton) {
-    if (cookieExists) {
-      console.log(`SQLAuthUser cookie IS present (value: ${sqlAuthCookieValue}). Showing Change Password button.`);
-      changePasswordButton.style.display = ''; // Revert to default/stylesheet display (e.g., inline-block)
-    } else { // SQLAuthUser cookie does NOT exist
-      console.log("SQLAuthUser cookie is NOT present. Hiding Change Password button.");
-      changePasswordButton.style.display = 'none';
-    }
-  } else {
-    console.error("ERROR: Change Password button (ID: 'changePasswordBtn') not found in the DOM!");
-  }
-  console.log("--- End manageChangePasswordButtonVisibility ---");
-}
 
 // --- Function to set language preference via backend ---
 async function setLanguagePreference(lang) {
@@ -398,7 +370,7 @@ document.addEventListener('DOMContentLoaded', () => {
         loadAndDisplayClasses();
         displayLoggedInUser();
         manageStudentButtonVisibility();
-        manageChangePasswordButtonVisibility();
+
         manageConfigButtonVisibility(); // Check if user is admin and hide config button if not
     });
 });
