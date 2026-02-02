@@ -87,6 +87,17 @@ async function loadAndDisplayClasses() {
     let relevantClassesForDisplay = []; // Classes to be grouped and shown
     let errorMessage = null;
 
+    let smartSortingEnabled = false;
+    try {
+        const configResponse = await fetch('/api/config/public');
+        if (configResponse.ok) {
+            const configData = await configResponse.json();
+            smartSortingEnabled = configData.smart_sorting === "true";
+        }
+    } catch (e) {
+        console.warn("Failed to fetch public config", e);
+    }
+
     try {
         // Step 1: Fetch all class data (contains counts1/2/3 flags)
         const allClassesResponse = await fetch('/api/classes', { credentials: 'include' });
@@ -197,6 +208,12 @@ async function loadAndDisplayClasses() {
     } else if (!studentCode) {
         // --- Admin/Teacher Logic ---
         // Admins/Teachers see all classes under every day
+
+        // Smart Sorting Logic
+        const classRegex = /^\d+\.[A-Za-z]+$/;
+        const allMatch = allClasses.every(cls => classRegex.test(cls.class));
+        const useSmartSorting = smartSortingEnabled && allMatch;
+
         days.forEach(day => {
             contentRendered = true; // A day section will always be rendered
             const dayDisplayName = translations[day.nameKey]?.[currentLanguage] || translations[day.nameKey]?.['en'] || day.defaultName; // Added English fallback
@@ -204,15 +221,42 @@ async function loadAndDisplayClasses() {
             daySectionDiv.className = 'day-section';
             daySectionDiv.innerHTML = `<h2>${dayDisplayName}</h2>`;
 
-            const ul = document.createElement('ul');
-            ul.className = 'classList';
-            // Display ALL classes from allClasses
-            allClasses.sort((a, b) => a.class.localeCompare(b.class)).forEach(cls => {
-                const listItem = document.createElement('li');
-                listItem.innerHTML = `<a href="index.html?class=${encodeURIComponent(cls.class)}&day=${day.defaultName.toLowerCase()}">${cls.class}</a>`;
-                ul.appendChild(listItem);
-            });
-            daySectionDiv.appendChild(ul);
+            if (useSmartSorting) {
+                const grouped = {};
+                allClasses.forEach(cls => {
+                    const numberPart = cls.class.split('.')[0];
+                    if (!grouped[numberPart]) grouped[numberPart] = [];
+                    grouped[numberPart].push(cls);
+                });
+
+                const sortedGroupKeys = Object.keys(grouped).sort((a, b) => parseInt(a) - parseInt(b));
+
+                sortedGroupKeys.forEach(key => {
+                    const groupDiv = document.createElement('div');
+                    groupDiv.style.marginBottom = "10px";
+
+                    grouped[key].sort((a, b) => a.class.localeCompare(b.class));
+
+                    grouped[key].forEach(cls => {
+                        const link = document.createElement('a');
+                        link.href = `index.html?class=${encodeURIComponent(cls.class)}&day=${day.defaultName.toLowerCase()}`;
+                        link.textContent = cls.class;
+                        link.className = 'class-button';
+                        groupDiv.appendChild(link);
+                    });
+                    daySectionDiv.appendChild(groupDiv);
+                });
+            } else {
+                const ul = document.createElement('ul');
+                ul.className = 'classList';
+                // Display ALL classes from allClasses
+                allClasses.sort((a, b) => a.class.localeCompare(b.class)).forEach(cls => {
+                    const listItem = document.createElement('li');
+                    listItem.innerHTML = `<a href="index.html?class=${encodeURIComponent(cls.class)}&day=${day.defaultName.toLowerCase()}">${cls.class}</a>`;
+                    ul.appendChild(listItem);
+                });
+                daySectionDiv.appendChild(ul);
+            }
             dynamicClassList.appendChild(daySectionDiv);
         });
     }
