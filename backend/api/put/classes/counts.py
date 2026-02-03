@@ -11,7 +11,7 @@ class UpdateCountsRequest(BaseModel):
     countField: str
     value: str
 
-@router.post("/api/classes/update_counts")
+@router.put("/api/classes/counts")
 def update_classes_counts(payload: UpdateCountsRequest, admin_user: dict = Depends(get_current_admin_user)):
     class_name = payload.class_
     count_field = payload.countField

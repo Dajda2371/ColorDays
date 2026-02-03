@@ -1,16 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from dependencies import get_current_admin_user
 from data_manager import user_password_store, data_lock, save_user_data_to_db
 
 router = APIRouter()
 
-class UserRemoveRequest(BaseModel):
-    username: str
 
-@router.post("/api/users/remove")
-def remove_user(payload: UserRemoveRequest, admin_user: dict = Depends(get_current_admin_user)):
-    username = payload.username
+
+@router.delete("/api/users")
+def remove_user(username: str, admin_user: dict = Depends(get_current_admin_user)):
     
     if not username:
         raise HTTPException(status_code=400, detail="Missing username")

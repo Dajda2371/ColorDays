@@ -13,7 +13,7 @@ class IncrementRequest(BaseModel):
     points: int
     day: str
 
-@router.post("/api/decrement")
+@router.put("/api/decrement")
 def decrement_count(request: Request, payload: IncrementRequest): 
     class_name = payload.className
     type_val = payload.type

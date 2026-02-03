@@ -1,16 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from dependencies import get_current_admin_user
 from data_manager import students_data_store, data_lock, save_students_data_to_db
 
 router = APIRouter()
 
-class StudentRemoveRequest(BaseModel):
-    code: str
 
-@router.post("/api/students/remove")
-def remove_student(payload: StudentRemoveRequest, admin_user: dict = Depends(get_current_admin_user)):
-    code = payload.code
+
+@router.delete("/api/students")
+def remove_student(code: str, admin_user: dict = Depends(get_current_admin_user)):
     
     with data_lock:
         found_student = next((s for s in students_data_store if s['code'] == code), None)

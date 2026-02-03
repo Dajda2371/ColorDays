@@ -10,8 +10,7 @@ class UserSetPasswordRequest(BaseModel):
     username: str
     new_password: str
 
-@router.post("/api/users/set")
-@router.post("/api/users/reset")
+@router.put("/api/users")
 def set_user_password(payload: UserSetPasswordRequest, admin_user: dict = Depends(get_current_admin_user)):
     username = payload.username
     new_password = payload.new_password

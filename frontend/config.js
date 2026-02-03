@@ -82,7 +82,7 @@ async function addUser() {
   // const password = null; // Set password to null initially
 
   try { // Added try...catch for fetch errors
-    const res = await fetch("/add_user", { // Target the correct endpoint
+    const res = await fetch("/api/users", { // Target the correct endpoint
       method: "POST",
       headers: { "Content-Type": "application/json" },
       // --- MODIFIED: Include password in the body ---
@@ -120,10 +120,9 @@ async function addUser() {
 
 async function removeUser(username) {
   if (!confirm(`Remove user ${username}?`)) return;
-  const res = await fetch("/api/users/remove", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username })
+  const res = await fetch(`/api/users?username=${encodeURIComponent(username)}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" }
   });
   if (res.ok) loadUsers();
   else alert("Failed to remove user");
@@ -136,8 +135,8 @@ function generatePassword(length = 10) {
 
 async function setPassword(username) {
   const newPassword = generatePassword();
-  const res = await fetch("/api/users/set", {
-    method: "POST",
+  const res = await fetch("/api/users", {
+    method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, new_password: newPassword })
   });
@@ -147,8 +146,8 @@ async function setPassword(username) {
 
 async function resetPassword(username) {
   const newPassword = generatePassword();
-  const res = await fetch("/api/users/reset", {
-    method: "POST",
+  const res = await fetch("/api/users", {
+    method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, new_password: newPassword })
   });
@@ -297,7 +296,7 @@ async function saveNewClass() {
   };
 
   try {
-    const res = await fetch("/api/classes/add", {
+    const res = await fetch("/api/classes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(newClassData)
@@ -332,10 +331,9 @@ async function promptRemoveClass(className) {
   if (!confirm(`Are you sure you want to remove class "${className}"?`)) return;
 
   try {
-    const res = await fetch("/api/classes/remove", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ class: className })
+    const res = await fetch(`/api/classes?class=${encodeURIComponent(className)}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" }
     });
 
     const data = await res.json();
@@ -357,8 +355,8 @@ async function updateClassCount(className, countField, isChecked) {
   console.log(`Updating class: ${className}, field: ${countField}, new value: ${value}`);
 
   try {
-    const res = await fetch("/api/classes/update_counts", {
-      method: "POST",
+    const res = await fetch("/api/classes/counts", {
+      method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ class: className, countField: countField, value: value })
     });

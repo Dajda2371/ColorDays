@@ -12,7 +12,7 @@ class UpdateIsCountedByRequest(BaseModel):
     dayIdentifier: str
     value: str
 
-@router.post("/api/classes/update_iscountedby")
+@router.put("/api/classes/iscountedby")
 def update_classes_iscountedby(payload: UpdateIsCountedByRequest, user_info=Depends(get_current_user_info)):
     user_key, user_role = user_info
 

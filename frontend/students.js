@@ -118,10 +118,8 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
-        fetch('/api/students/remove', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code: studentCode }) // Send the student's code
+        fetch(`/api/students?code=${encodeURIComponent(studentCode)}`, {
+            method: 'DELETE',
         })
             .then(response => response.json().then(data => ({ ok: response.ok, data })))
             .then(({ ok, data }) => {
@@ -190,7 +188,7 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
-        fetch('/api/students/add', {
+        fetch('/api/students', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

@@ -11,7 +11,7 @@ class StudentUpdateCountingRequest(BaseModel):
     class_name: str
     is_counting: bool
 
-@router.post("/api/student/update-counting-class")
+@router.put("/api/student/counting-class")
 def update_student_counting_class(payload: StudentUpdateCountingRequest, user_info=Depends(get_current_user_info)):
     user_key, user_role = user_info
     

@@ -213,8 +213,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (splitRandomlyBtn) splitRandomlyBtn.disabled = true;
                 if (clearAssignmentsBtn) clearAssignmentsBtn.disabled = true;
 
-                fetch('/api/classes/update_iscountedby_batch', {
-                    method: 'POST',
+                fetch('/api/classes/iscountedby/batch', {
+                    method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ updates: updates })
                 })
@@ -403,8 +403,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
             // console.log(`Change detected: Class ${changedClass}, Day ${changedDayIdentifier}, New Value: ${newValue}`);
 
-            fetch('/api/classes/update_iscountedby', {
-                method: 'POST',
+            fetch('/api/classes/iscountedby', {
+                method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
                 },

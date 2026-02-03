@@ -89,46 +89,46 @@ function updateTable(data) {
     } else {
         console.error("Data received for table update is not an array:", data);
     }
-     console.log("Table update complete.");
+    console.log("Table update complete.");
 }
 
 // --- Calculate and update total counts ---
 function updateTotals(data) {
-  // Update console log to reflect weighted calculation
-  console.log("Updating totals (with teacher points doubled)...");
-  let studentScoreTotal = 0; // Use a name that reflects score, not just count
-  let teacherScoreTotal = 0; // Use a name that reflects score, not just count
+    // Update console log to reflect weighted calculation
+    console.log("Updating totals (with teacher points doubled)...");
+    let studentScoreTotal = 0; // Use a name that reflects score, not just count
+    let teacherScoreTotal = 0; // Use a name that reflects score, not just count
 
-  if (Array.isArray(data)) {
-      data.forEach(item => {
-          // item has { type: 'student'/'teacher', points: number, count: number }
-          if (item.type === 'student') {
-              // Student score = points * count
-              studentScoreTotal += item.points * item.count;
-          } else if (item.type === 'teacher') {
-              // Teacher score = points * count * 2 (doubled)
-              teacherScoreTotal += item.points * item.count * 2;
-          }
-      });
-  } else {
-       console.error("Data received for totals update is not an array:", data);
-  }
+    if (Array.isArray(data)) {
+        data.forEach(item => {
+            // item has { type: 'student'/'teacher', points: number, count: number }
+            if (item.type === 'student') {
+                // Student score = points * count
+                studentScoreTotal += item.points * item.count;
+            } else if (item.type === 'teacher') {
+                // Teacher score = points * count * 2 (doubled)
+                teacherScoreTotal += item.points * item.count * 2;
+            }
+        });
+    } else {
+        console.error("Data received for totals update is not an array:", data);
+    }
 
-  const studentTotalCell = document.getElementById('studentTotal');
-  const teacherTotalCell = document.getElementById('teacherTotal');
+    const studentTotalCell = document.getElementById('studentTotal');
+    const teacherTotalCell = document.getElementById('teacherTotal');
 
-  // Update the footer cells with the calculated SCORES
-  if (studentTotalCell) studentTotalCell.textContent = studentScoreTotal;
-  if (teacherTotalCell) teacherTotalCell.textContent = teacherScoreTotal;
+    // Update the footer cells with the calculated SCORES
+    if (studentTotalCell) studentTotalCell.textContent = studentScoreTotal;
+    if (teacherTotalCell) teacherTotalCell.textContent = teacherScoreTotal;
 
-  // Update console log
-  console.log("Totals update complete (weighted):", { studentScoreTotal, teacherScoreTotal });
+    // Update console log
+    console.log("Totals update complete (weighted):", { studentScoreTotal, teacherScoreTotal });
 }
 
 // --- Reset table and totals (e.g., on error) ---
 function resetTableAndTotals() {
     console.warn("Resetting table and totals to 0.");
-     for (let i = 0; i <= 6; i++) {
+    for (let i = 0; i <= 6; i++) {
         const studentCell = document.getElementById(`student${i}`);
         const teacherCell = document.getElementById(`teacher${i}`);
         if (studentCell) studentCell.textContent = '0';
@@ -209,7 +209,7 @@ async function handleCountChange(action, type, points) {
 
     try {
         const response = await fetch(apiUrl, {
-            method: 'POST',
+            method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
                 // 'Credentials': 'include' // Often handled by browser for same-origin, or add if needed
@@ -219,11 +219,11 @@ async function handleCountChange(action, type, points) {
 
         // Check for specific "already zero" error on decrement
         if (action === 'decrement' && response.status === 400) {
-             const errorData = await response.json().catch(() => ({})); // Try to parse error message
-             console.warn(`Cannot decrement: ${errorData.message || errorData.error || 'Count is already zero.'}`);
-             // Optionally provide subtle feedback to the user
-             // e.g., briefly flash the button red
-             return; // Stop processing, don't refetch data
+            const errorData = await response.json().catch(() => ({})); // Try to parse error message
+            console.warn(`Cannot decrement: ${errorData.message || errorData.error || 'Count is already zero.'}`);
+            // Optionally provide subtle feedback to the user
+            // e.g., briefly flash the button red
+            return; // Stop processing, don't refetch data
         }
 
         if (!response.ok) {

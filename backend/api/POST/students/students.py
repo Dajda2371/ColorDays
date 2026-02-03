@@ -10,7 +10,7 @@ class StudentAddRequest(BaseModel):
     class_: str = Field(..., alias="class")
     note: str
 
-@router.post("/api/students/add")
+@router.post("/api/students")
 def add_student(payload: StudentAddRequest, admin_user: dict = Depends(get_current_admin_user)):
     class_name = payload.class_
     note = payload.note

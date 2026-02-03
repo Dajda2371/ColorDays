@@ -17,7 +17,7 @@ class ClassAddRequest(BaseModel):
     iscountedby2: Optional[str] = '_NULL_'
     iscountedby3: Optional[str] = '_NULL_'
 
-@router.post("/api/classes/add")
+@router.post("/api/classes")
 def add_class(payload: ClassAddRequest, admin_user: dict = Depends(get_current_admin_user)):
     class_name = payload.class_
     teacher = payload.teacher

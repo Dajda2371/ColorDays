@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from config import ADMIN_ROLE
 from dependencies import get_current_admin_user
@@ -7,12 +7,10 @@ import json
 
 router = APIRouter()
 
-class ClassRemoveRequest(BaseModel):
-    class_: str = Field(..., alias="class")
 
-@router.post("/api/classes/remove")
-def remove_class(payload: ClassRemoveRequest, admin_user: dict = Depends(get_current_admin_user)):
-    class_name = payload.class_
+
+@router.delete("/api/classes")
+def remove_class(class_name: str = Query(..., alias="class"), admin_user: dict = Depends(get_current_admin_user)):
     
     with data_lock:
         found_class = next((c for c in class_data_store if c['class'] == class_name), None)

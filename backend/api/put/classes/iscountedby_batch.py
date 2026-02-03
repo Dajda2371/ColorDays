@@ -16,7 +16,7 @@ class UpdateIsCountedByRequest(BaseModel):
 class BatchUpdateIsCountedByRequest(BaseModel):
     updates: List[UpdateIsCountedByRequest]
 
-@router.post("/api/classes/update_iscountedby_batch")
+@router.put("/api/classes/iscountedby/batch")
 def update_classes_iscountedby_batch(payload: BatchUpdateIsCountedByRequest, user_info=Depends(get_current_user_info)):
     user_key, user_role = user_info
 
