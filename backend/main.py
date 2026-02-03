@@ -64,6 +64,16 @@ app.add_middleware(
 
 def include_routers_recursively(app: FastAPI, directory: Path):
     print(f"Loading routers from {directory}...")
+    routers_to_include = []
+
+    method_priority = {
+        "GET": 0,
+        "POST": 1,
+        "PATCH": 2,
+        "PUT": 3,
+        "DELETE": 4
+    }
+
     for root, dirs, files in os.walk(directory):
         for file in files:
             if file.endswith(".py") and file != "__init__.py":
@@ -77,10 +87,51 @@ def include_routers_recursively(app: FastAPI, directory: Path):
                         module = importlib.util.module_from_spec(spec)
                         spec.loader.exec_module(module)
                         if hasattr(module, "router"):
-                            print(f"Including router from {file_path}")
-                            app.include_router(module.router)
+                            # Determine metadata for sorting
+                            router = module.router
+
+                            # Determine Category
+                            category = file_path.parent.name
+                            if category.upper() in ["GET", "POST", "PUT", "DELETE", "PATCH", "API"]:
+                                category = "General"
+
+                            # Determine Path and Method
+                            path = ""
+                            method_rank = 10
+
+                            if router.routes:
+                                route = router.routes[0]
+                                path = getattr(route, "path", "")
+                                methods = getattr(route, "methods", set())
+                                if methods:
+                                    # Find the method with the highest priority (lowest rank)
+                                    best_rank = 10
+                                    for m in methods:
+                                        rank = method_priority.get(m, 5)
+                                        if rank < best_rank:
+                                            best_rank = rank
+                                    method_rank = best_rank
+
+                            routers_to_include.append({
+                                "module": module,
+                                "category": category,
+                                "path": path,
+                                "method_rank": method_rank
+                            })
+
                 except Exception as e:
                     print(f"Error loading router from {file_path}: {e}")
+
+    # Sort the routers
+    def sort_key(item):
+        return (item["category"], item["path"], item["method_rank"])
+
+    routers_to_include.sort(key=sort_key)
+
+    # Include them
+    for item in routers_to_include:
+        print(f"Including router from {item['module'].__file__} (Category: {item['category']})")
+        app.include_router(item['module'].router, tags=[item['category']])
 
 include_routers_recursively(app, BACKEND_DIR / "api")
 
