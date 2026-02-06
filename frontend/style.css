@@ -131,3 +131,23 @@ button:hover {
     font-weight: bold;
     /* text-align: center; is inherited from body style */
 }
+
+@media (max-width: 768px) {
+  body {
+    padding: 1rem;
+  }
+
+  #login-sections-container {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  #login-sections-container section {
+    width: 100%;
+    max-width: 320px;
+  }
+
+  input, button, .class-button {
+    min-height: 44px; /* Ensure sufficient touch target size */
+  }
+}

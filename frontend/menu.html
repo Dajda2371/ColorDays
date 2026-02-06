@@ -149,6 +149,32 @@
           border-radius: 50%; /* Makes it a circle */
           margin-right: 15px; /* Space between circle and username */
         }
+
+        @media (max-width: 768px) {
+            #leftSideContainer {
+                position: static;
+                margin-bottom: 1rem;
+                width: 100%;
+                box-sizing: border-box;
+            }
+            #headerButtons {
+                position: static;
+                flex-wrap: wrap;
+                justify-content: center;
+                width: 100%;
+                margin-bottom: 1rem;
+            }
+            #mainContent {
+                position: static;
+                transform: none;
+                width: 100%;
+                padding: 10px;
+                text-align: center;
+            }
+            body {
+                padding-top: 10px;
+            }
+        }
     </style>
 </head>
 <body>
