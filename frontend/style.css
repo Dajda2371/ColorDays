@@ -291,43 +291,64 @@ input[type="checkbox"] {
     margin-left: -0.5rem;
     margin-right: -0.5rem;
     width: calc(100% + 1rem);
-    /* Full width bleed */
+    /* Full width bleed to maximize space */
     border-radius: 0;
     box-shadow: none;
     border-top: 1px solid #eee;
     border-bottom: 1px solid #eee;
+    overflow-x: auto;
+    /* Ensure scrolling is enabled */
   }
 
   table {
     font-size: 13px;
     /* Smaller font for dense data */
+    width: 100%;
+    /* Ensure table uses full width */
+    table-layout: auto;
+    /* Let columns adjust naturally, or use fixed if strictly needed */
+    /* table-layout: fixed; Only use if we want to FORCE column widths */
   }
 
   th,
   td {
-    padding: 8px 4px;
-    /* Much tighter padding */
+    padding: 8px 3px;
+    /* Even tighter padding */
     white-space: normal;
     /* Allow text wrapping */
-    word-wrap: break-word;
-    /* Break long words if needed */
+    word-break: break-word;
+    /* Break long words */
+    max-width: 150px;
+    /* Prevent any single cell from getting too wide by default */
+  }
+
+  /* Specific override for very long content like codes */
+  td:first-child,
+  /* Assuming code is often first */
+  td.long-text {
+    word-break: break-all;
   }
 
   /* specific adjustments for form elements inside tables */
   td input[type="text"],
   td select {
-    padding: 6px;
+    padding: 4px;
     font-size: 13px;
-    min-height: 32px;
-    /* Slightly smaller than global touch target inside dense tables */
+    min-height: 30px;
+    max-width: 100%;
+    /* Ensure inputs don't overflow cells */
+    box-sizing: border-box;
   }
 
   td button {
-    padding: 6px 10px;
+    padding: 6px 8px;
     font-size: 12px;
-    margin: 2px;
+    margin: 2px 0;
+    width: 100%;
+    /* Stack buttons fully */
+    display: block;
+    /* Force block to stack vertically */
   }
-
 
   h1 {
     font-size: 1.5rem;
@@ -343,13 +364,17 @@ input[type="checkbox"] {
   /* Table Actions Column: distinct styling for the last column (Actions) to allow button stacking */
   td:last-child {
     text-align: center;
-    /* Center content in the last column (usually actions or counts) */
+    width: 1%;
+    /* Shrink to fit content */
+    white-space: nowrap;
+    /* Keep actions somewhat together if possible, or allow wrap if constrained */
+    min-width: 70px;
+    /* Ensure enough touch width */
   }
 
-  td:last-child button {
-    display: inline-block;
-    min-width: 60px;
-    margin: 2px;
+  /* Allow actions column to wrap elements if needed */
+  td:last-child {
+    white-space: normal;
   }
 }
 
@@ -358,11 +383,11 @@ input[type="checkbox"] {
 #studentButtons,
 #teacherButtons {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 15px;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 12px;
   margin-top: 1rem;
   margin-bottom: 2rem;
-  padding: 0 10px;
+  padding: 0 5px;
 }
 
 .point-control-group {
@@ -378,22 +403,19 @@ input[type="checkbox"] {
   flex: 1;
   border: none;
   font-weight: 700;
-  font-size: 1.1rem;
-  padding: 15px 0;
+  font-size: 1rem;
+  /* Slightly smaller for mobile */
+  padding: 12px 0;
   cursor: pointer;
   transition: all 0.2s ease;
   margin: 0 !important;
-  /* Override generic button margin */
   border-radius: 0 !important;
-  /* Override generic button radius */
-  min-height: 50px;
+  min-height: 48px;
 }
 
 .btn-add {
   background-color: #e6fcf5;
-  /* Light green */
   color: #0ca678;
-  /* Dark green */
   border-right: 1px solid #dee2e6;
 }
 
@@ -409,9 +431,7 @@ input[type="checkbox"] {
 
 .btn-remove {
   background-color: #fff5f5;
-  /* Light red */
   color: #fa5252;
-  /* Red */
 }
 
 .btn-remove:hover {
@@ -424,33 +444,19 @@ input[type="checkbox"] {
   color: white;
 }
 
-/* Specific styling for 0 points buttons to make them less prominent? 
-   Or consistent. Consistent is better for muscle memory. */
-
-/* Mobile adjustments handled by grid auto-fill, but let's ensure small screens form nice rows */
+/* Mobile adjustments */
 @media (max-width: 400px) {
-  .btn-count {
-    padding: 12px 0;
-    font-size: 1rem;
-  }
-}
-
-/* === Desktop/General Button Grids for Index === */
-/* Ensure they look good on desktop too */
-@media (min-width: 769px) {
 
   #studentButtons,
   #teacherButtons {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 5px;
-    max-width: 800px;
-    margin: 0 auto;
+    grid-template-columns: repeat(2, 1fr);
+    /* Force 2 columns */
+    gap: 8px;
   }
 
-  #studentButtons button,
-  #teacherButtons button {
-    min-width: 60px;
+  .btn-count {
+    padding: 10px 0;
+    font-size: 0.95rem;
+    min-height: 44px;
   }
 }
