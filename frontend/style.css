@@ -93,12 +93,15 @@ button:active,
 
 /* === Login Page Styles === */
 
+/* === Login Page Styles === */
+
 #login-sections-container {
   display: flex;
   justify-content: center;
   gap: 30px;
   margin-top: 2rem;
-  margin-bottom: 1rem;
+  margin-bottom: 3rem;
+  /* More bottom space */
   flex-wrap: wrap;
 }
 
@@ -109,7 +112,15 @@ button:active,
   border-radius: 12px;
   width: 350px;
   text-align: left;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
+  /* Deeper shadow */
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+#login-sections-container section:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
+  /* Lift effect */
 }
 
 #login-sections-container h2 {
@@ -118,6 +129,7 @@ button:active,
   margin-bottom: 1.5rem;
   font-size: 1.5em;
   color: #2c3e50;
+  font-weight: 700;
 }
 
 #login-sections-container form div {
@@ -128,6 +140,7 @@ button:active,
   display: block;
   margin-bottom: 0.5rem;
   font-weight: 600;
+  color: #495057;
   font-size: 0.95rem;
 }
 
@@ -140,7 +153,7 @@ select {
   border-radius: 6px;
   font-size: 16px;
   /* Prevents zoom on iOS */
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s;
   background-color: white;
   /* Ensure background is white for selects */
 }
@@ -166,6 +179,83 @@ input[type="checkbox"] {
   margin-top: 15px;
   margin-left: 0;
   margin-right: 0;
+  /* Ensure styles override generic button defaults */
+  font-weight: 600;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  padding: 12px;
+}
+
+.btn-primary {
+  background-color: #007bff;
+  color: white;
+  transition: background-color 0.2s;
+}
+
+.btn-primary:hover {
+  background-color: #0056b3;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.btn-primary:active {
+  background-color: #004494;
+  transform: translateY(0);
+}
+
+.btn-google {
+  background-color: white;
+  color: #333;
+  border: 1px solid #ddd !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: Roboto, sans-serif;
+}
+
+.btn-google::before {
+  content: "";
+  /* A simplistic Google 'G' icon placeholder or we can use an SVG if available. 
+     For now, just a colored G using text or background would be complex. 
+     Let's stick to text or SVG if provided. 
+     Alternatively, use a multicolored border left? No, keep it simple. */
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  margin-right: 10px;
+  background: url('https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg') no-repeat center center;
+  background-size: contain;
+}
+
+.btn-google:hover {
+  background-color: #f8f9fa;
+  border-color: #ccc !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.text-separator {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  color: #6c757d;
+  margin: 1rem 0;
+  font-size: 0.9em;
+}
+
+.text-separator::before,
+.text-separator::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.text-separator::before {
+  margin-right: .5em;
+}
+
+.text-separator::after {
+  margin-left: .5em;
 }
 
 #error-message {
@@ -176,7 +266,8 @@ input[type="checkbox"] {
 }
 
 /* === Mobile Optimizations === */
-@media (max-width: 768px) {
+/* Trigger mobile layout sooner (e.g. for tablets in portrait) */
+@media (max-width: 900px) {
   body {
     padding: 1rem 0.5rem;
   }
