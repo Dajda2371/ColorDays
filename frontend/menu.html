@@ -1,182 +1,213 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Color Days - Menu</title>
-    <link rel="stylesheet" href="style.css"> <!-- Assuming you have a style.css -->
-    <style>
-        /* Existing styles */
-        .classList {
-          list-style: none;
-          padding: 0;
-          margin-top: 1rem;
-        }
-        .classList li {
-          margin-bottom: 10px;
-        }
-        .classList a {
-          display: inline-block;
-          padding: 8px 15px;             /* Adapted from .header-button */
-          background-color: #f0f0f0;     /* Adapted from .header-button */
-          border: 1px solid #ccc;
-          text-decoration: none;
-          color: #333;
-          border-radius: 4px;            /* Adapted from .header-button */
-          cursor: pointer;               /* Added for button-like feel */
-          transition: background-color 0.2s ease, border-color 0.2s ease; /* Added border-color to transition */
-        }
-        .classList a:hover {
-          /* Hover style moved to style.css */
-        }
-        /* Add focus style for the highlight */
-        .classList a:focus {
-          outline: 2px solid #007bff; /* Example blue outline */
-          outline-offset: 2px;       /* Add some space between border and outline */
-        }
-        .day-section {
-        }
-        .day-section h2 {
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Color Days - Menu</title>
+  <link rel="stylesheet" href="style.css"> <!-- Assuming you have a style.css -->
+  <style>
+    /* Reuse global styles where possible, override for specific layout needs */
 
-        /* --- Style for the Left-Side Container (for User and Language) --- */
-        #leftSideContainer {
-            position: fixed;   /* Position container relative to the viewport */
-            top: 15px;         /* Distance from the top edge */
-            left: 15px;        /* Distance from the left edge */
-            margin-bottom: 20px;
-            padding: 10px;
-            border: 1px solid #e0e0e0;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05); /* Optional: subtle shadow for sections */
-            border-radius: 5px;
-            background-color: #f9f9f9;
-        }
-        /* --- End Left-Side Container Style --- */
+    .classList {
+      list-style: none;
+      padding: 0;
+      margin-top: 1rem;
+    }
 
-        /* Style for the Language Buttons Container on the Left */
-        #languageButtonsLeft {
-            display: flex;     /* Arrange buttons horizontally */
-            gap: 5px;          /* Space between the buttons */
-            margin-bottom: 10px; /* Space below language buttons */
-            padding-bottom: 10px; /* Padding below language buttons */
-            padding-bottom: 5px;
-        }
+    .classList li {
+      margin-bottom: 10px;
+    }
 
-        /* --- Style for the Language Toggle --- */
-        #languageToggle {
-            display: flex; /* Arrange language options horizontally */
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            overflow: hidden; /* Ensures rounded corners apply to children */
-            margin-bottom: 10px; /* Space below the toggle */
-            background-color: #fff; /* White background for the toggle */
-        }
+    .classList a {
+      display: inline-block;
+      padding: 12px 20px;
+      background-color: #f8f9fa;
+      border: 1px solid #ccc;
+      text-decoration: none;
+      color: #333;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      width: 100%;
+      box-sizing: border-box;
+      max-width: 300px;
+      /* Prevent them from being too wide on desktop */
+    }
 
-        #languageToggle span {
-            flex-grow: 1; /* Make each span take equal width */
-            text-align: center;
-            padding: 5px 10px; /* Adjust padding as needed */
-            cursor: pointer;
-            background-color: #f0f0f0; /* Default background */
-            color: #333; /* Default text color */
-            transition: background-color 0.2s ease, color 0.2s ease;
-            user-select: none; /* Prevent text selection */
-        }
+    .classList a:hover {
+      background-color: #007bff;
+      color: white;
+      border-color: #0056b3;
+      transform: translateY(-1px);
+    }
 
-        #languageToggle span.active {
-            background-color: #007bff; /* Highlight color for active language */
-            color: white; /* White text for active language */
-            font-weight: bold;
-        }
-        /* Style for the main content container */
-        #mainContent {
-            max-width: 800px; /* Or your preferred max width */
-            /* margin: 0 auto; /* Removed for absolute centering */
-            padding: 20px; /* Add some padding inside the container */
-            position: absolute; /* Position relative to the viewport */
-            left: 50%;          /* Start at the horizontal center */
-            transform: translateX(-50%); /* Shift left by half its own width */
-            text-align: center; /* Center the text content within this block */
-            box-sizing: border-box; /* Include padding in the element's total width */
-        }
-        /* --- End Language Toggle Style --- */
+    .classList a:focus {
+      outline: 2px solid #007bff;
+      outline-offset: 2px;
+    }
 
-        /* --- Style for the Header Buttons Container --- */
-        #headerButtons {
-            position: fixed;   /* Position container relative to the viewport */
-            top: 15px;         /* Distance from the top edge */
-            right: 15px;       /* Distance from the right edge */
-            display: flex;     /* Arrange buttons horizontally */
-            gap: 10px;         /* Space between the buttons */
-            z-index: 1000;     /* Ensure it stays on top of other content */
-        }
-        /* --- End Header Buttons Container Style --- */
+    /* --- Style for the Left-Side Container (for User and Language) --- */
+    #leftSideContainer {
+      position: fixed;
+      top: 15px;
+      left: 15px;
+      padding: 15px;
+      border: 1px solid #e0e0e0;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+      /* Slightly stronger shadow */
+      border-radius: 8px;
+      background-color: white;
+      z-index: 1000;
+    }
 
-        /* --- Common Style for Buttons within the Container --- */
-        .header-button {
-            padding: 8px 15px; /* Adjust padding as needed */
-            cursor: pointer;
-            background-color: #f0f0f0; /* Optional: style it */
-            border: 1px solid #ccc;
-            border-radius: 4px;
-        }
-        /* --- End Common Button Style --- */
+    /* --- Style for the Language Toggle --- */
+    #languageToggle {
+      display: flex;
+      border: 1px solid #ced4da;
+      border-radius: 6px;
+      overflow: hidden;
+      margin-top: 10px;
+      background-color: #fff;
+    }
 
-        /* Remove specific fixed positioning from individual logout button ID */
-        #logoutButton {
-            /* No fixed positioning needed here anymore */
-        }
+    #languageToggle span {
+      flex-grow: 1;
+      text-align: center;
+      padding: 8px 12px;
+      cursor: pointer;
+      background-color: #f8f9fa;
+      color: #495057;
+      transition: all 0.2s ease;
+      user-select: none;
+      font-size: 0.9rem;
+    }
 
-        /* Add some padding to the body so content doesn't start under the fixed buttons */
-        /* Adjust padding-left to accommodate the new left container */
-        body {
-            padding-top: 80px; /* Increased top padding to ensure mainContent is visible below fixed headers */
-            padding-left: 0;   /* Remove left padding as mainContent is now absolutely positioned */
-        }
+    #languageToggle span.active {
+      background-color: #007bff;
+      color: white;
+      font-weight: 600;
+    }
 
-        #loggedInUser {
-          display: flex; /* Arrange circle and username side-by-side */
-          align-items: center; /* Vertically align items in the middle */
-          font-weight: bold;
-          margin-bottom: 10px; /* Space below user info */
-          color: #333; /* Or your preferred color */
-        }
+    /* Style for the main content container */
+    #mainContent {
+      max-width: 800px;
+      padding: 20px;
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      text-align: center;
+      box-sizing: border-box;
+      width: 100%;
+    }
 
-        #profileCircle {
-          width: 30px; /* Adjust size as needed */
-          height: 30px; /* Adjust size as needed */
-          background-color: #ccc; /* Gray color */
-          border-radius: 50%; /* Makes it a circle */
-          margin-right: 15px; /* Space between circle and username */
-        }
+    /* --- Style for the Header Buttons Container --- */
+    #headerButtons {
+      position: fixed;
+      top: 15px;
+      right: 15px;
+      display: flex;
+      gap: 10px;
+      z-index: 1000;
+      flex-wrap: wrap;
+      /* Allow wrapping if needed on medium screens */
+      justify-content: flex-end;
+    }
 
-        @media (max-width: 768px) {
-            #leftSideContainer {
-                position: static;
-                margin-bottom: 1rem;
-                width: 100%;
-                box-sizing: border-box;
-            }
-            #headerButtons {
-                position: static;
-                flex-wrap: wrap;
-                justify-content: center;
-                width: 100%;
-                margin-bottom: 1rem;
-            }
-            #mainContent {
-                position: static;
-                transform: none;
-                width: 100%;
-                padding: 10px;
-                text-align: center;
-            }
-            body {
-                padding-top: 10px;
-            }
-        }
-    </style>
+    .header-button {
+      padding: 10px 15px;
+      cursor: pointer;
+      background-color: #f8f9fa;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      transition: all 0.2s ease;
+      font-size: 0.9rem;
+      min-height: 40px;
+    }
+
+    .header-button:hover {
+      background-color: #e2e6ea;
+    }
+
+    body {
+      padding-top: 100px;
+      /* Ensure content is visible below fixed headers */
+      padding-left: 0;
+      background-color: #fdfdfd;
+    }
+
+    #loggedInUser {
+      display: flex;
+      align-items: center;
+      font-weight: 600;
+      color: #333;
+      font-size: 0.95rem;
+    }
+
+    #profileCircle {
+      width: 32px;
+      height: 32px;
+      background-color: #adb5bd;
+      border-radius: 50%;
+      margin-right: 10px;
+      flex-shrink: 0;
+    }
+
+    @media (max-width: 768px) {
+      #leftSideContainer {
+        position: static;
+        margin: 0 auto 15px auto;
+        width: 90%;
+        /* Center with some margin */
+        max-width: 400px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        /* Center content inside */
+      }
+
+      #loggedInUser {
+        margin-bottom: 10px;
+        width: 100%;
+        justify-content: center;
+      }
+
+      #languageToggle {
+        width: 100%;
+      }
+
+      #headerButtons {
+        position: static;
+        flex-direction: column;
+        /* Stack buttons vertically */
+        width: 90%;
+        margin: 0 auto 20px auto;
+        max-width: 400px;
+        gap: 8px;
+      }
+
+      .header-button {
+        width: 100%;
+        /* Full width buttons */
+        text-align: center;
+        padding: 12px;
+      }
+
+      #mainContent {
+        position: static;
+        transform: none;
+        width: 100%;
+        padding: 10px;
+      }
+
+      body {
+        padding-top: 10px;
+        padding-bottom: 30px;
+      }
+    }
+  </style>
 </head>
+
 <body>
   <!-- Container for Left Side Elements (User Info and Language Toggle) -->
   <div id="leftSideContainer">
@@ -195,10 +226,13 @@
   <!-- Container for Header Buttons -->
   <div id="headerButtons">
     <!-- Classes Button (Links to classes.html) -->
-    <button id="classesButton" class="header-button" onclick="window.location.href='classes.html'" data-translate-key="classesButtonText">Classes</button>
-    <button id="configButton" class="header-button" onclick="window.location.href='config.html'" data-translate-key="configButtonText">Config</button>
+    <button id="classesButton" class="header-button" onclick="window.location.href='classes.html'"
+      data-translate-key="classesButtonText">Classes</button>
+    <button id="configButton" class="header-button" onclick="window.location.href='config.html'"
+      data-translate-key="configButtonText">Config</button>
     <!-- Change Password Button -->
-    <button id="changePasswordBtn" class="header-button" onclick="window.location.href='change-password.html'" data-translate-key="changePasswordButtonText">Change Password</button>
+    <button id="changePasswordBtn" class="header-button" onclick="window.location.href='change-password.html'"
+      data-translate-key="changePasswordButtonText">Change Password</button>
     <!-- Logout Button -->
     <button id="logoutButton" class="header-button" data-translate-key="logoutButtonText">Logout</button>
   </div>
@@ -215,4 +249,5 @@
 
   <script src="menu.js"></script> <!-- Assuming you have a menu.js for the JavaScript logic -->
 </body>
+
 </html>

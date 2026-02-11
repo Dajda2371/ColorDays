@@ -27,37 +27,41 @@
   <section>
     <h2>User Management</h2>
     <ul id="userList"></ul>
-    <table id="userTable" border="1" cellspacing="0" cellpadding="8">
-      <thead>
-        <tr>
-          <th>Username</th>
-          <th>Password Status</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody id="userTableBody">
-        <!-- JS will populate this -->
-      </tbody>
-    </table>
+    <div class="table-wrapper">
+      <table id="userTable" border="0" cellspacing="0" cellpadding="8">
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Password Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="userTableBody">
+          <!-- JS will populate this -->
+        </tbody>
+      </table>
+    </div>
     <button onclick="addUser()">Add User</button>
   </section>
 
   <section>
     <h2>Class Management</h2>
     <ul id="classList"></ul>
-    <table id="classTable" border="1" cellspacing="0" cellpadding="8">
-      <thead>
-        <tr>
-          <th>Class</th>
-          <th>Teacher</th>
-          <th>Counts</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody id="classTableBody">
-        <!-- JS will populate this -->
-      </tbody>
-    </table>
+    <div class="table-wrapper">
+      <table id="classTable" border="0" cellspacing="0" cellpadding="8">
+        <thead>
+          <tr>
+            <th>Class</th>
+            <th>Teacher</th>
+            <th>Counts</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="classTableBody">
+          <!-- JS will populate this -->
+        </tbody>
+      </table>
+    </div>
 
     <button onclick="handleAddClassRow()">Add Class</button>
     <button onclick="prefillClasses()">Prefill Classes from Website</button>
@@ -68,17 +72,19 @@
     <h3>Google</h3>
     <toggle>
       <label for="googleOauth">Enable:</label> <input type="checkbox" id="googleOauth" /> <br>
-      <table>
-        <thead>
-          <tr>
-            <th>domain</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="googleOauthTableBody">
-          <!-- Domains will be populated by config.js -->
-        </tbody>
-      </table>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>domain</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="googleOauthTableBody">
+            <!-- Domains will be populated by config.js -->
+          </tbody>
+        </table>
+      </div>
       <button onclick="addGoogleOauthDomain()">Add Domain</button>
   </section>
 
