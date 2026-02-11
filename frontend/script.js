@@ -156,36 +156,34 @@ function createButtons() {
     studentButtonsDiv.innerHTML = '';
     teacherButtonsDiv.innerHTML = '';
 
+    // Helper to create a button group
+    function createButtonGroup(div, type, points) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'point-control-group';
+
+        // Increment Button
+        const incButton = document.createElement('button');
+        incButton.textContent = `+${points}`;
+        incButton.className = 'btn-count btn-add';
+        incButton.onclick = () => handleCountChange('increment', type, points);
+
+        // Decrement Button
+        const decButton = document.createElement('button');
+        decButton.textContent = `-${points}`;
+        decButton.className = 'btn-count btn-remove';
+        decButton.onclick = () => handleCountChange('decrement', type, points);
+
+        wrapper.appendChild(incButton);
+        wrapper.appendChild(decButton);
+        div.appendChild(wrapper);
+    }
+
     // Loop through points 0 to 6
     for (let points = 0; points <= 6; points++) {
-        // --- Student Buttons ---
-        const sIncButton = document.createElement('button');
-        sIncButton.textContent = `+${points}`;
-        sIncButton.onclick = () => handleCountChange('increment', 'student', points);
-        studentButtonsDiv.appendChild(sIncButton);
-
-        const sDecButton = document.createElement('button');
-        sDecButton.textContent = `-${points}`;
-        sDecButton.onclick = () => handleCountChange('decrement', 'student', points);
-        studentButtonsDiv.appendChild(sDecButton);
-
-        // Add a space or break for readability if desired
-        // studentButtonsDiv.appendChild(document.createTextNode(' '));
-
-        // --- Teacher Buttons ---
-        const tIncButton = document.createElement('button');
-        tIncButton.textContent = `+${points}`;
-        tIncButton.onclick = () => handleCountChange('increment', 'teacher', points);
-        teacherButtonsDiv.appendChild(tIncButton);
-
-        const tDecButton = document.createElement('button');
-        tDecButton.textContent = `-${points}`;
-        tDecButton.onclick = () => handleCountChange('decrement', 'teacher', points);
-        teacherButtonsDiv.appendChild(tDecButton);
-
-        // Add a space or break for readability if desired
-        // teacherButtonsDiv.appendChild(document.createTextNode(' '));
+        createButtonGroup(studentButtonsDiv, 'student', points);
+        createButtonGroup(teacherButtonsDiv, 'teacher', points);
     }
+
     console.log("Button creation complete.");
 }
 

@@ -237,36 +237,6 @@ input[type="checkbox"] {
     margin: 2px;
   }
 
-  /* Index Page Button Grid */
-  #studentButtons,
-  #teacherButtons {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    /* 4 columns: +0 -0 +1 -1... */
-    gap: 10px;
-    margin-bottom: 2rem;
-  }
-
-  #studentButtons button,
-  #teacherButtons button {
-    margin: 0;
-    width: 100%;
-    padding: 12px 5px;
-    font-weight: 600;
-    font-size: 14px;
-    border-radius: 8px;
-    /* Softer pill shape */
-  }
-
-  /* Fallback for very small screens */
-  @media (max-width: 400px) {
-
-    #studentButtons,
-    #teacherButtons {
-      grid-template-columns: repeat(2, 1fr);
-      /* 2 columns: +0 -0 ... */
-    }
-  }
 
   h1 {
     font-size: 1.5rem;
@@ -292,23 +262,85 @@ input[type="checkbox"] {
   }
 }
 
-/* === Desktop/General Button Grids for Index === */
-/* Ensure they look good on desktop too */
-@media (min-width: 769px) {
+/* === Point Control Buttons (Index Page) === */
 
-  #studentButtons,
-  #teacherButtons {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 5px;
-    max-width: 800px;
-    margin: 0 auto;
-  }
+#studentButtons,
+#teacherButtons {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 15px;
+  margin-top: 1rem;
+  margin-bottom: 2rem;
+  padding: 0 10px;
+}
 
-  #studentButtons button,
-  #teacherButtons button {
-    min-width: 60px;
+.point-control-group {
+  display: flex;
+  background-color: #f1f3f5;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e9ecef;
+}
+
+.btn-count {
+  flex: 1;
+  border: none;
+  font-weight: 700;
+  font-size: 1.1rem;
+  padding: 15px 0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin: 0 !important;
+  /* Override generic button margin */
+  border-radius: 0 !important;
+  /* Override generic button radius */
+  min-height: 50px;
+}
+
+.btn-add {
+  background-color: #e6fcf5;
+  /* Light green */
+  color: #0ca678;
+  /* Dark green */
+  border-right: 1px solid #dee2e6;
+}
+
+.btn-add:hover {
+  background-color: #20c997;
+  color: white;
+}
+
+.btn-add:active {
+  background-color: #0ca678;
+  color: white;
+}
+
+.btn-remove {
+  background-color: #fff5f5;
+  /* Light red */
+  color: #fa5252;
+  /* Red */
+}
+
+.btn-remove:hover {
+  background-color: #ff8787;
+  color: white;
+}
+
+.btn-remove:active {
+  background-color: #fa5252;
+  color: white;
+}
+
+/* Specific styling for 0 points buttons to make them less prominent? 
+   Or consistent. Consistent is better for muscle memory. */
+
+/* Mobile adjustments handled by grid auto-fill, but let's ensure small screens form nice rows */
+@media (max-width: 400px) {
+  .btn-count {
+    padding: 12px 0;
+    font-size: 1rem;
   }
 }
 
