@@ -143,6 +143,7 @@ include_routers_recursively(app, BACKEND_DIR / "api")
 @app.get("/config.html")
 @app.get("/students.html")
 @app.get("/change-password.html")
+@app.get("/leaderboard.html")
 async def protected_pages(request: Request):
     path = request.url.path
     if path == "/":

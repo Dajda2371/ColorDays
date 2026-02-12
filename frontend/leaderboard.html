@@ -4,64 +4,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Color Days - Menu</title>
-  <link rel="stylesheet" href="style.css"> <!-- Assuming you have a style.css -->
+  <title>Color Days - Leaderboard</title>
+  <link rel="stylesheet" href="style.css">
   <style>
-    /* Reuse global styles where possible, override for specific layout needs */
-
-    .classList {
-      list-style: none;
-      padding: 0;
-      margin-top: 1rem;
-    }
-
-    .classList li {
-      margin-bottom: 10px;
-    }
-
-    .classList a {
-      display: inline-block;
-      padding: 12px 20px;
-      background-color: #f8f9fa;
-      border: 1px solid #ccc;
-      text-decoration: none;
-      color: #333;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      width: 100%;
-      box-sizing: border-box;
-      max-width: 300px;
-      /* Prevent them from being too wide on desktop */
-    }
-
-    .classList a:hover {
-      background-color: #007bff;
-      color: white;
-      border-color: #0056b3;
-      transform: translateY(-1px);
-    }
-
-    .classList a:focus {
-      outline: 2px solid #007bff;
-      outline-offset: 2px;
-    }
-
-    /* --- Style for the Left-Side Container (for User and Language) --- */
-    #leftSideContainer {
+      /* Reuse styles from menu.html */
+      #leftSideContainer {
       position: fixed;
       top: 15px;
       left: 15px;
       padding: 15px;
       border: 1px solid #e0e0e0;
       box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-      /* Slightly stronger shadow */
       border-radius: 8px;
       background-color: white;
       z-index: 1000;
     }
 
-    /* --- Style for the Language Toggle --- */
     #languageToggle {
       display: flex;
       border: 1px solid #ced4da;
@@ -89,7 +47,6 @@
       font-weight: 600;
     }
 
-    /* Style for the main content container */
     #mainContent {
       max-width: 800px;
       padding: 20px;
@@ -101,7 +58,6 @@
       width: 100%;
     }
 
-    /* --- Style for the Header Buttons Container --- */
     #headerButtons {
       position: fixed;
       top: 15px;
@@ -110,7 +66,6 @@
       gap: 10px;
       z-index: 1000;
       flex-wrap: wrap;
-      /* Allow wrapping if needed on medium screens */
       justify-content: flex-end;
     }
 
@@ -131,7 +86,6 @@
 
     body {
       padding-top: 100px;
-      /* Ensure content is visible below fixed headers */
       padding-left: 0;
       background-color: #fdfdfd;
     }
@@ -158,12 +112,10 @@
         position: static;
         margin: 0 auto 15px auto;
         width: 90%;
-        /* Center with some margin */
         max-width: 400px;
         display: flex;
         flex-direction: column;
         align-items: center;
-        /* Center content inside */
       }
 
       #loggedInUser {
@@ -179,7 +131,6 @@
       #headerButtons {
         position: static;
         flex-direction: column;
-        /* Stack buttons vertically */
         width: 90%;
         margin: 0 auto 20px auto;
         max-width: 400px;
@@ -188,7 +139,6 @@
 
       .header-button {
         width: 100%;
-        /* Full width buttons */
         text-align: center;
         padding: 12px;
       }
@@ -225,31 +175,34 @@
 
   <!-- Container for Header Buttons -->
   <div id="headerButtons">
-    <!-- Classes Button (Links to classes.html) -->
-    <button id="classesButton" class="header-button" onclick="window.location.href='classes.html'"
-      data-translate-key="classesButtonText">Classes</button>
-    <button id="leaderboardButton" class="header-button" onclick="window.location.href='leaderboard.html'"
-      data-translate-key="leaderboardButtonText">Leaderboard</button>
-    <button id="configButton" class="header-button" onclick="window.location.href='config.html'"
-      data-translate-key="configButtonText">Config</button>
-    <!-- Change Password Button -->
-    <button id="changePasswordBtn" class="header-button" onclick="window.location.href='change-password.html'"
-      data-translate-key="changePasswordButtonText">Change Password</button>
-    <!-- Logout Button -->
+    <button id="backButton" class="header-button" onclick="window.location.href='menu.html'"
+      data-translate-key="backToMenuButtonText">Back to Menu</button>
     <button id="logoutButton" class="header-button" data-translate-key="logoutButtonText">Logout</button>
   </div>
 
   <!-- Main Content Container -->
   <div id="mainContent">
-    <h1 data-translate-key="mainHeading">Color Days Counter</h1>
-    <h2 data-translate-key="selectClassSubheading">Select Your Class:</h2>
+    <h1 data-translate-key="leaderboardHeading">Leaderboard</h1>
 
-    <div id="dynamicClassList">
-      <!-- Class sections (Monday, Tuesday, Wednesday) will be populated here by JavaScript -->
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th data-translate-key="rankHeader">Rank</th>
+            <th data-translate-key="classHeader">Class</th>
+            <th data-translate-key="scoreHeader">Score</th>
+          </tr>
+        </thead>
+        <tbody id="leaderboardTable">
+          <tr>
+            <td colspan="3">Loading...</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </div>
 
-  <script src="menu.js"></script> <!-- Assuming you have a menu.js for the JavaScript logic -->
+  <script src="leaderboard.js"></script>
 </body>
 
 </html>
