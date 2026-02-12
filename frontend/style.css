@@ -1,133 +1,462 @@
+/* Global Box Sizing */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 body {
-    font-family: Arial, sans-serif;
-    padding: 2rem;
-    text-align: center;
-  }
-  
-  table {
-    margin: 0 auto 2rem auto;
-    border-collapse: collapse;
-  }
-  
-  th, td {
-    border: 1px solid #333;
-    padding: 10px 20px;
-  }
-  
-  button {
-    /* Incorporating styles from .class-button */
-    display: inline-block; 
-    padding: 8px 15px; /* Updated from 10px 20px */
-    margin: 5px;
-    border: 1px solid #ccc;
-    background-color: #f0f0f0; 
-    color: #333; 
-    text-decoration: none; 
-    border-radius: 4px; 
-    transition: background-color 0.2s, color 0.2s; 
-    
-    /* Retained from original button style or good defaults */
-    font-size: 16px;
-    cursor: pointer;
-  }
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  padding: 2rem;
+  text-align: center;
+  margin: 0;
+  line-height: 1.6;
+  background-color: #fdfdfd;
+  color: #333;
+}
 
-button:hover {
-  background-color: #007bff; /* From .class-button:hover */
-  color: white; /* From .class-button:hover */
-  border-color: #0056b3; /* From .class-button:hover */
-  }
+/* Responsive Table Wrapper */
+.table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  border-radius: 8px;
+}
 
-/* Styles for the dynamically added class buttons */
+table {
+  margin: 0 auto;
+  border-collapse: collapse;
+  width: 100%;
+  max-width: 800px;
+  /* Prevent tables from getting too wide on large screens */
+  background-color: white;
+}
+
+th,
+td {
+  border: 1px solid #ddd;
+  padding: 12px 15px;
+  text-align: left;
+}
+
+th {
+  background-color: #f8f9fa;
+  font-weight: 600;
+}
+
+/* Button Styling */
+button,
+.button,
 .class-button {
-  display: inline-block; /* Allows setting padding, margin, etc. */
-  padding: 8px 15px;
+  display: inline-block;
+  padding: 10px 20px;
   margin: 5px;
   border: 1px solid #ccc;
-  background-color: #f0f0f0; /* Light grey background */
-  color: #333; /* Dark grey text */
-  text-decoration: none; /* Remove underline from the link */
-  border-radius: 4px; /* Rounded corners */
-  transition: background-color 0.2s, color 0.2s; /* Smooth transition for hover effect */
+  background-color: #f8f9fa;
+  color: #333;
+  text-decoration: none;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  font-size: 16px;
+  cursor: pointer;
+  font-family: inherit;
+  /* Ensure sufficient touch target */
+  min-height: 44px;
+  line-height: normal;
 }
 
-.class-button:hover {
-  background-color: #007bff; /* Blue background on hover */
-  color: white; /* White text on hover */
-  border-color: #0056b3;
-}
-
-/* Hover style for class name links in menu.html */
+button:hover,
+.button:hover,
+.class-button:hover,
 .classList a:hover {
-  background-color: #007bff; /* Blue background on hover */
-  color: white; /* White text on hover */
-  border-color: #0056b3; /* Darker blue border on hover */
+  background-color: #007bff;
+  color: white;
+  border-color: #0056b3;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+button:active,
+.button:active,
+.class-button:active {
+  transform: translateY(0);
+}
+
+/* Class List Links (from menu.html context) */
+.classList a:hover {
+  background-color: #007bff;
+  color: white;
+  border-color: #0056b3;
 }
 
 /* === Login Page Styles === */
 
+/* === Login Page Styles === */
+
 #login-sections-container {
-    display: flex;
-    justify-content: center; /* Center the two section blocks horizontally */
-    gap: 30px; /* Space between the teacher and student sections */
-    margin-top: 2rem; /* Space below the main H1 heading */
-    margin-bottom: 1rem; /* Space above the error message div */
-    flex-wrap: wrap; /* Allow sections to wrap on smaller screens */
+  display: flex;
+  justify-content: center;
+  gap: 30px;
+  margin-top: 2rem;
+  margin-bottom: 3rem;
+  /* More bottom space */
+  flex-wrap: wrap;
 }
 
-/* Styling for each login section (Teacher, Student) */
 #login-sections-container section {
-    background-color: #f9f9f9; /* Light background for each section box */
-    padding: 25px;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    width: 320px; /* Define a width for each login box */
-    box-sizing: border-box; /* Include padding and border in the element's total width and height */
-    text-align: left; /* Align text like labels to the left within the section */
+  background-color: white;
+  padding: 30px;
+  border: 1px solid #e1e4e8;
+  border-radius: 12px;
+  width: 350px;
+  text-align: left;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
+  /* Deeper shadow */
+  transition: transform 0.2s, box-shadow 0.2s;
 }
 
-/* Headings within login sections (e.g., "Login as Teacher") */
+#login-sections-container section:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
+  /* Lift effect */
+}
+
 #login-sections-container h2 {
-    text-align: center; /* Center the heading within its section */
-    margin-top: 0; /* Remove default top margin */
-    margin-bottom: 1.5rem; /* Space below the heading */
-    font-size: 1.5em; /* Slightly larger font for section titles */
+  text-align: center;
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+  font-size: 1.5em;
+  color: #2c3e50;
+  font-weight: 700;
 }
 
-/* Spacing for divs containing label/input pairs within forms */
 #login-sections-container form div {
-    margin-bottom: 1rem;
+  margin-bottom: 1.25rem;
 }
 
 #login-sections-container label {
-    display: block; /* Make labels take their own line */
-    margin-bottom: 0.5rem; /* Space below the label, above the input */
-    font-weight: bold;
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: #495057;
+  font-size: 0.95rem;
 }
 
-#login-sections-container input[type="text"],
-#login-sections-container input[type="password"] {
-    width: 100%; /* Make input fields take full width of their container */
-    padding: 10px; /* Padding inside input fields */
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    box-sizing: border-box;
+input[type="text"],
+input[type="password"],
+select {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  font-size: 16px;
+  /* Prevents zoom on iOS */
+  transition: border-color 0.2s, box-shadow 0.2s;
+  background-color: white;
+  /* Ensure background is white for selects */
 }
 
-/* Buttons within the login sections (form submit buttons and Google login button) */
+input[type="text"]:focus,
+input[type="password"]:focus,
+select:focus {
+  border-color: #007bff;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.15);
+}
+
+input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  vertical-align: middle;
+  cursor: pointer;
+  margin: 5px;
+}
+
 #login-sections-container section button {
-    width: 100%; /* Make buttons take full width */
-    /* General button styles (padding, font-size, cursor) from above will apply */
-    /* Override general button margin for this specific context */
-    margin-top: 10px; /* Add some top margin */
-    margin-left: 0;
-    margin-right: 0;
-    /* margin-bottom will inherit from the general button style (5px) */
+  width: 100%;
+  margin-top: 15px;
+  margin-left: 0;
+  margin-right: 0;
+  /* Ensure styles override generic button defaults */
+  font-weight: 600;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  padding: 12px;
+}
+
+.btn-primary {
+  background-color: #007bff;
+  color: white;
+  transition: background-color 0.2s;
+}
+
+.btn-primary:hover {
+  background-color: #0056b3;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.btn-primary:active {
+  background-color: #004494;
+  transform: translateY(0);
+}
+
+.btn-google {
+  background-color: white;
+  color: #333;
+  border: 1px solid #ddd !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: Roboto, sans-serif;
+}
+
+.btn-google::before {
+  content: "";
+  /* A simplistic Google 'G' icon placeholder or we can use an SVG if available. 
+     For now, just a colored G using text or background would be complex. 
+     Let's stick to text or SVG if provided. 
+     Alternatively, use a multicolored border left? No, keep it simple. */
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  margin-right: 10px;
+  background: url('https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg') no-repeat center center;
+  background-size: contain;
+}
+
+.btn-google:hover {
+  background-color: #f8f9fa;
+  border-color: #ccc !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.text-separator {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  color: #6c757d;
+  margin: 1rem 0;
+  font-size: 0.9em;
+}
+
+.text-separator::before,
+.text-separator::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.text-separator::before {
+  margin-right: .5em;
+}
+
+.text-separator::after {
+  margin-left: .5em;
 }
 
 #error-message {
-    color: red;
-    margin-top: 1rem; /* Space above the error message */
-    min-height: 1em; /* Reserve space so layout doesn't jump when message appears */
-    font-weight: bold;
-    /* text-align: center; is inherited from body style */
+  color: #dc3545;
+  margin-top: 1rem;
+  min-height: 1.5em;
+  font-weight: 500;
+}
+
+/* === Mobile Optimizations === */
+/* Trigger mobile layout sooner (e.g. for tablets in portrait) */
+@media (max-width: 900px) {
+  body {
+    padding: 1rem 0.5rem;
+  }
+
+  /* Login Page Mobile */
+  #login-sections-container {
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    margin-top: 1rem;
+  }
+
+  #login-sections-container section {
+    width: 100%;
+    max-width: 100%;
+    padding: 20px;
+  }
+
+  /* Compact Table Styles */
+  .table-wrapper {
+    margin-left: -0.5rem;
+    margin-right: -0.5rem;
+    width: calc(100% + 1rem);
+    /* Full width bleed to maximize space */
+    border-radius: 0;
+    box-shadow: none;
+    border-top: 1px solid #eee;
+    border-bottom: 1px solid #eee;
+    overflow-x: auto;
+    /* Ensure scrolling is enabled */
+  }
+
+  table {
+    font-size: 13px;
+    /* Smaller font for dense data */
+    width: 100%;
+    /* Ensure table uses full width */
+    table-layout: auto;
+    /* Let columns adjust naturally, or use fixed if strictly needed */
+    /* table-layout: fixed; Only use if we want to FORCE column widths */
+  }
+
+  th,
+  td {
+    padding: 8px 3px;
+    /* Even tighter padding */
+    white-space: normal;
+    /* Allow text wrapping */
+    word-break: break-word;
+    /* Break long words */
+    max-width: 150px;
+    /* Prevent any single cell from getting too wide by default */
+  }
+
+  /* Specific override for very long content like codes */
+  td:first-child,
+  /* Assuming code is often first */
+  td.long-text {
+    word-break: break-all;
+  }
+
+  /* specific adjustments for form elements inside tables */
+  td input[type="text"],
+  td select {
+    padding: 4px;
+    font-size: 13px;
+    min-height: 30px;
+    max-width: 100%;
+    /* Ensure inputs don't overflow cells */
+    box-sizing: border-box;
+  }
+
+  td button {
+    padding: 6px 8px;
+    font-size: 12px;
+    margin: 2px 0;
+    width: 100%;
+    /* Stack buttons fully */
+    display: block;
+    /* Force block to stack vertically */
+  }
+
+  h1 {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+    color: #2c3e50;
+  }
+
+  h2 {
+    font-size: 1.25rem;
+    color: #34495e;
+  }
+
+  /* Table Actions Column: distinct styling for the last column (Actions) to allow button stacking */
+  td:last-child {
+    text-align: center;
+    width: 1%;
+    /* Shrink to fit content */
+    white-space: nowrap;
+    /* Keep actions somewhat together if possible, or allow wrap if constrained */
+    min-width: 70px;
+    /* Ensure enough touch width */
+  }
+
+  /* Allow actions column to wrap elements if needed */
+  td:last-child {
+    white-space: normal;
+  }
+}
+
+/* === Point Control Buttons (Index Page) === */
+
+#studentButtons,
+#teacherButtons {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 12px;
+  margin-top: 1rem;
+  margin-bottom: 2rem;
+  padding: 0 5px;
+}
+
+.point-control-group {
+  display: flex;
+  background-color: #f1f3f5;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e9ecef;
+}
+
+.btn-count {
+  flex: 1;
+  border: none;
+  font-weight: 700;
+  font-size: 1rem;
+  /* Slightly smaller for mobile */
+  padding: 12px 0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  min-height: 48px;
+}
+
+.btn-add {
+  background-color: #e6fcf5;
+  color: #0ca678;
+  border-right: 1px solid #dee2e6;
+}
+
+.btn-add:hover {
+  background-color: #20c997;
+  color: white;
+}
+
+.btn-add:active {
+  background-color: #0ca678;
+  color: white;
+}
+
+.btn-remove {
+  background-color: #fff5f5;
+  color: #fa5252;
+}
+
+.btn-remove:hover {
+  background-color: #ff8787;
+  color: white;
+}
+
+.btn-remove:active {
+  background-color: #fa5252;
+  color: white;
+}
+
+/* Mobile adjustments */
+@media (max-width: 400px) {
+
+  #studentButtons,
+  #teacherButtons {
+    grid-template-columns: repeat(2, 1fr);
+    /* Force 2 columns */
+    gap: 8px;
+  }
+
+  .btn-count {
+    padding: 10px 0;
+    font-size: 0.95rem;
+    min-height: 44px;
+  }
 }

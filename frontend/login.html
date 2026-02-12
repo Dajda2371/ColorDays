@@ -1,10 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Color Days</title>
     <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
     <h1>Login to Color Days Counter</h1>
     <div id="login-sections-container">
@@ -15,13 +18,13 @@
                     <label for="code">Code:</label>
                     <input type="text" id="code" name="code" required>
                 </div>
-                <button type="submit">Login</button>
+                <button type="submit" class="btn-primary">Login</button>
             </form>
         </section>
         <section>
             <h2>Login as Teacher</h2>
-            <button onclick="window.location.href='/login/google'">Login with Google</button>
-            <p style="display: flex; justify-content: center;">or</p>
+            <button onclick="window.location.href='/login/google'" class="btn-google">Login with Google</button>
+            <p class="text-separator">or</p>
             <form id="loginForm" style="margin-top: 1rem;">
                 <div>
                     <label for="username">Username:</label>
@@ -31,11 +34,12 @@
                     <label for="password">Password:</label>
                     <input type="password" id="password" name="password" required>
                 </div>
-                <button type="submit">Login</button>
-            </form>            
+                <button type="submit" class="btn-primary">Login</button>
+            </form>
         </section>
     </div>
     <div id="error-message"></div>
     <script src="login.js"></script>
 </body>
+
 </html>

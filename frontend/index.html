@@ -1,69 +1,74 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Color Days Counter</title>
   <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
   <h1>Color Days Counter</h1>
   <h2 id="className">Class: Loading...</h2>
 
-  <table>
-    <thead>
-      <tr>
-        <th>Points</th>
-        <th>Students</th>
-        <th>Teachers</th>
-      </tr>
-    </thead>
-    <tbody id="counterTable">
-      <!-- Static rows for points 0 to 6, dynamically filled with data -->
-      <tr>
-        <td>0</td>
-        <td id="student0">loading ...</td>
-        <td id="teacher0">loading ...</td>
-      </tr>
-      <tr>
-        <td>1</td>
-        <td id="student1">loading ...</td>
-        <td id="teacher1">loading ...</td>
-      </tr>
-      <tr>
-        <td>2</td>
-        <td id="student2">loading ...</td>
-        <td id="teacher2">loading ...</td>
-      </tr>
-      <tr>
-        <td>3</td>
-        <td id="student3">loading ...</td>
-        <td id="teacher3">loading ...</td>
-      </tr>
-      <tr>
-        <td>4</td>
-        <td id="student4">loading ...</td>
-        <td id="teacher4">loading ...</td>
-      </tr>
-      <tr>
-        <td>5</td>
-        <td id="student5">loading ...</td>
-        <td id="teacher5">loading ...</td>
-      </tr>
-      <tr>
-        <td>6</td>
-        <td id="student6">loading ...</td>
-        <td id="teacher6">loading ...</td>
-      </tr>
-    </tbody>
-    <tfoot>
-      <tr>
-        <td><strong>Total</strong></td>
-        <td id="studentTotal">loading ...</td>
-        <td id="teacherTotal">loading ...</td>
-      </tr>
-    </tfoot>
-  </table>
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>Points</th>
+          <th>Students</th>
+          <th>Teachers</th>
+        </tr>
+      </thead>
+      <tbody id="counterTable">
+        <!-- Static rows for points 0 to 6, dynamically filled with data -->
+        <tr>
+          <td>0</td>
+          <td id="student0">loading ...</td>
+          <td id="teacher0">loading ...</td>
+        </tr>
+        <tr>
+          <td>1</td>
+          <td id="student1">loading ...</td>
+          <td id="teacher1">loading ...</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td id="student2">loading ...</td>
+          <td id="teacher2">loading ...</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td id="student3">loading ...</td>
+          <td id="teacher3">loading ...</td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td id="student4">loading ...</td>
+          <td id="teacher4">loading ...</td>
+        </tr>
+        <tr>
+          <td>5</td>
+          <td id="student5">loading ...</td>
+          <td id="teacher5">loading ...</td>
+        </tr>
+        <tr>
+          <td>6</td>
+          <td id="student6">loading ...</td>
+          <td id="teacher6">loading ...</td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr>
+          <td><strong>Total</strong></td>
+          <td id="studentTotal">loading ...</td>
+          <td id="teacherTotal">loading ...</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
 
   <h3>Student Buttons</h3>
   <div id="studentButtons"></div>
@@ -75,4 +80,5 @@
 
   <script src="script.js"></script>
 </body>
+
 </html>
