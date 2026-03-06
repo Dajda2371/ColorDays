@@ -55,38 +55,43 @@ document.addEventListener('DOMContentLoaded', function () {
             body: JSON.stringify(bodyPayload),
             credentials: 'include' // Crucial for sending and receiving cookies
         })
-        .then(response => {
-            if (!response.ok) {
-                // Attempt to parse error from JSON body, then throw
-                return response.json().then(errData => {
-                    const error = new Error(errData.error || `HTTP error! status: ${response.status}`);
-                    error.data = errData; // Attach full error data if needed
-                    throw error;
-                }).catch(() => {
-                    // If response.json() fails (e.g., not JSON), throw a generic error
-                    throw new Error(`${userType} login failed. Server returned status: ${response.status}`);
-                });
-            }
-            return response.json(); // Assuming success response is JSON
-        })
-        .then(data => {
-            if (data.success) {
-                console.log(`${userType} login successful:`, data);
-                window.location.href = '/menu.html'; // Redirect on success
-            } else {
-                displayError(data.error || `${userType} login failed. Please try again.`);
-            }
-        })
-        .catch(error => {
-            console.error(`${userType} login error:`, error);
-            const serverErrorMessage = error.data ? error.data.error : null;
-            displayError(serverErrorMessage || error.message || `An unexpected error occurred during ${userType.toLowerCase()} login.`);
-        });
+            .then(response => {
+                if (!response.ok) {
+                    // Attempt to parse error from JSON body, then throw
+                    return response.json().then(errData => {
+                        const error = new Error(errData.error || `HTTP error! status: ${response.status}`);
+                        error.data = errData; // Attach full error data if needed
+                        throw error;
+                    }).catch(() => {
+                        // If response.json() fails (e.g., not JSON), throw a generic error
+                        throw new Error(`${userType} login failed. Server returned status: ${response.status}`);
+                    });
+                }
+                return response.json(); // Assuming success response is JSON
+            })
+            .then(data => {
+                if (data.success) {
+                    console.log(`${userType} login successful:`, data);
+                    window.location.href = '/menu.html'; // Redirect on success
+                } else {
+                    displayError(data.error || `${userType} login failed. Please try again.`);
+                }
+            })
+            .catch(error => {
+                console.error(`${userType} login error:`, error);
+                const serverErrorMessage = error.data ? error.data.error : null;
+                displayError(serverErrorMessage || error.message || `An unexpected error occurred during ${userType.toLowerCase()} login.`);
+            });
     }
 
     // --- Auto-login with code from URL parameter ---
     const urlParams = new URLSearchParams(window.location.search);
     const codeParam = urlParams.get('code');
+    const errorParam = urlParams.get('error');
+
+    if (errorParam === 'invalid_domain') {
+        alert('Tato e-mailová doména není pro Google přihlášení povolena.');
+    }
 
     if (codeParam) {
         console.log('Auto-login: Code parameter detected:', codeParam);

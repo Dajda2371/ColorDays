@@ -49,6 +49,13 @@ def oauth2callback(code: str = None):
         if not user_email:
              raise HTTPException(status_code=400, detail="Could not retrieve email from Google.")
 
+        from data_manager import server_config
+        allowed_domains = server_config.get('allowed_oauth_domains', [])
+        if allowed_domains:
+            domain = user_email.split('@')[-1]
+            if domain not in allowed_domains:
+                return RedirectResponse(url='/login.html?error=invalid_domain')
+
         with data_lock:
             if user_email not in user_password_store:
                 user_password_store[user_email] = {
