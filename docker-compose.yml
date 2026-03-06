@@ -1,0 +1,9 @@
+services:
+  app:
+    build: .
+    container_name: colordays_app
+    ports:
+      - "443:443"
+    volumes:
+      - ./backend/data:/app/backend/data
+    restart: unless-stopped
