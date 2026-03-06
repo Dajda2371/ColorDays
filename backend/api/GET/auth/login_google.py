@@ -5,17 +5,17 @@ from config import (
     GOOGLE_SCOPES,
     GOOGLE_REDIRECT_URI,
 )
-import api.get.auth.oauth as oauth_mod
+from dependencies import InstalledAppFlow
 
 router = APIRouter()
 
 @router.get("/login/google")
 def login_google():
     try:
-        if oauth_mod.InstalledAppFlow is None:
+        if InstalledAppFlow is None:
              raise HTTPException(status_code=500, detail="Google OAuth component (InstalledAppFlow) missing on server.")
 
-        flow = oauth_mod.InstalledAppFlow.from_client_secrets_file(
+        flow = InstalledAppFlow.from_client_secrets_file(
             CLIENT_SECRETS_FILE, scopes=GOOGLE_SCOPES, redirect_uri=GOOGLE_REDIRECT_URI
         )
         auth_url, _ = flow.authorization_url(prompt='consent', access_type='offline')
@@ -24,4 +24,5 @@ def login_google():
     except FileNotFoundError:
         raise HTTPException(status_code=500, detail="Google OAuth configuration error (server-side).")
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Could not initiate Google login.")
+        print(f"Error in login_google: {e}")
+        raise HTTPException(status_code=500, detail=f"Could not initiate Google login: {e}")

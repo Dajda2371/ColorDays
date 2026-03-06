@@ -12,7 +12,7 @@ from config import (
     DEFAULT_ROLE_FOR_NEW_USERS,
 )
 from data_manager import user_password_store, data_lock, save_user_data_to_db
-import api.get.auth.oauth as oauth_mod
+from dependencies import InstalledAppFlow, google_discovery_service
 
 router = APIRouter()
 
@@ -22,16 +22,16 @@ def oauth2callback(code: str = None):
         if not code:
             raise HTTPException(status_code=400, detail="Missing authorization code from Google.")
 
-        if oauth_mod.InstalledAppFlow is None or oauth_mod.google_discovery_service is None:
+        if InstalledAppFlow is None or google_discovery_service is None:
             raise HTTPException(status_code=500, detail="Google OAuth components missing on server.")
 
-        flow = oauth_mod.InstalledAppFlow.from_client_secrets_file(
+        flow = InstalledAppFlow.from_client_secrets_file(
             CLIENT_SECRETS_FILE, scopes=GOOGLE_SCOPES, redirect_uri=GOOGLE_REDIRECT_URI
         )
         flow.fetch_token(code=code)
         credentials = flow.credentials
 
-        userinfo_service = oauth_mod.google_discovery_service.build('oauth2', 'v2', credentials=credentials)
+        userinfo_service = google_discovery_service.build('oauth2', 'v2', credentials=credentials)
         user_info = userinfo_service.userinfo().get().execute()
 
         _user_email_from_google = user_info.get('email')

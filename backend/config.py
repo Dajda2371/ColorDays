@@ -19,7 +19,7 @@ CURRENT_YEAR_DIR = DATA_DIR / str(datetime.datetime.now().year)
 LOGINS_SQL_FILE_PATH = DATA_DIR / 'logins.sql'
 DOMAIN = 'barevnedny.davidbenes.cz'
 HOST = '0.0.0.0'
-PORT = 8000
+PORT = 443
 SUPPORTED_CLASSES = []
 SQL_DAY_FILE_PATHS = {
     "monday": CURRENT_YEAR_DIR / 'tables-monday.sql',
@@ -31,7 +31,10 @@ STUDENTS_SQL_FILE_PATH = CURRENT_YEAR_DIR / 'students.sql'
 # --- Google OAuth Configuration ---
 CLIENT_SECRETS_FILE = DATA_DIR / 'client_secret.json'
 GOOGLE_SCOPES = ['openid', 'https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile']
-GOOGLE_REDIRECT_URI = f'http://{DOMAIN}:{PORT}/oauth2callback'
+if PORT == 443:
+    GOOGLE_REDIRECT_URI = f'https://{DOMAIN}/oauth2callback'
+else:
+    GOOGLE_REDIRECT_URI = f'http://{DOMAIN}:{PORT}/oauth2callback'
 
 # --- Secure Login Configuration ---
 HASH_ALGORITHM = 'sha256'
