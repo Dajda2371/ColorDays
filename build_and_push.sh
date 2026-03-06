@@ -4,7 +4,7 @@
 # Docker Hub registry is just 'docker.io' or omitted, but specifying is explicit.
 REGISTRY="docker.io"
 # Replace with your actual Docker Hub username!
-USERNAME="dajda2371" 
+USERNAME="davidbenes" 
 IMAGE_NAME="colordays"
 TAG="latest"
 
