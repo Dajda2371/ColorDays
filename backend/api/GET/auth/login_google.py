@@ -5,7 +5,7 @@ from config import (
     GOOGLE_SCOPES,
     GOOGLE_REDIRECT_URI,
 )
-import backend.api.get.auth.oauth as oauth_mod
+import api.get.auth.oauth as oauth_mod
 
 router = APIRouter()
 

@@ -12,7 +12,7 @@ from config import (
     DEFAULT_ROLE_FOR_NEW_USERS,
 )
 from data_manager import user_password_store, data_lock, save_user_data_to_db
-import backend.api.get.auth.oauth as oauth_mod
+import api.get.auth.oauth as oauth_mod
 
 router = APIRouter()
 
