@@ -60,6 +60,6 @@ def get_leaderboard(request: Request, user_info=Depends(get_current_user_info)):
             "percentage": f"{percentage}%"
         })
 
-    leaderboard_data.sort(key=lambda x: x["score"], reverse=True)
+    leaderboard_data.sort(key=lambda x: float(x["percentage"].replace('%', '')), reverse=True)
 
     return leaderboard_data
