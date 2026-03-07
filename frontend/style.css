@@ -460,3 +460,336 @@ input[type="checkbox"] {
     min-height: 44px;
   }
 }
+
+/* Reuse global styles where possible, override for specific layout needs */
+
+.classList {
+  list-style: none;
+  padding: 0;
+  margin-top: 1rem;
+}
+
+.classList li {
+  margin-bottom: 10px;
+}
+
+.classList a {
+  display: inline-block;
+  padding: 12px 20px;
+  background-color: #f8f9fa;
+  border: 1px solid #ccc;
+  text-decoration: none;
+  color: #333;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+  box-sizing: border-box;
+  max-width: 300px;
+  /* Prevent them from being too wide on desktop */
+}
+
+.classList a:hover {
+  background-color: #007bff;
+  color: white;
+  border-color: #0056b3;
+  transform: translateY(-1px);
+}
+
+.classList a:focus {
+  outline: 2px solid #007bff;
+  outline-offset: 2px;
+}
+
+/* --- Style for the Left-Side Container (for User and Language) --- */
+#leftSideContainer {
+  position: fixed;
+  top: 15px;
+  left: 15px;
+  padding: 15px;
+  border: 1px solid #e0e0e0;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  /* Slightly stronger shadow */
+  border-radius: 8px;
+  background-color: white;
+  z-index: 1000;
+}
+
+/* --- Style for the Language Toggle --- */
+#languageToggle {
+  display: flex;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-top: 10px;
+  background-color: #fff;
+}
+
+#languageToggle span {
+  flex-grow: 1;
+  text-align: center;
+  padding: 8px 12px;
+  cursor: pointer;
+  background-color: #f8f9fa;
+  color: #495057;
+  transition: all 0.2s ease;
+  user-select: none;
+  font-size: 0.9rem;
+}
+
+#languageToggle span.active {
+  background-color: #007bff;
+  color: white;
+  font-weight: 600;
+}
+
+/* Style for the main content container */
+#mainContent {
+  max-width: 800px;
+  padding: 20px;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+/* --- Style for the Header Buttons Container --- */
+#headerButtons {
+  position: fixed;
+  top: 15px;
+  right: 15px;
+  display: flex;
+  gap: 10px;
+  z-index: 1000;
+  flex-wrap: wrap;
+  /* Allow wrapping if needed on medium screens */
+  justify-content: flex-end;
+}
+
+.header-button {
+  padding: 10px 15px;
+  cursor: pointer;
+  background-color: #f8f9fa;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  font-size: 0.9rem;
+  min-height: 40px;
+}
+
+.header-button:hover {
+  background-color: #007bff;
+}
+
+body {
+  padding-top: 100px;
+  /* Ensure content is visible below fixed headers */
+  padding-left: 0;
+  background-color: #fdfdfd;
+}
+
+#loggedInUser {
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  color: #333;
+  font-size: 0.95rem;
+}
+
+#profileCircle {
+  width: 32px;
+  height: 32px;
+  background-color: #adb5bd;
+  border-radius: 50%;
+  margin-right: 10px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  #leftSideContainer {
+    position: static;
+    margin: 0 auto 15px auto;
+    width: 90%;
+    /* Center with some margin */
+    max-width: 400px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    /* Center content inside */
+  }
+
+  #loggedInUser {
+    margin-bottom: 10px;
+    width: 100%;
+    justify-content: center;
+  }
+
+  #languageToggle {
+    width: 100%;
+  }
+
+  #headerButtons {
+    position: static;
+    flex-direction: column;
+    /* Stack buttons vertically */
+    width: 90%;
+    margin: 0 auto 20px auto;
+    max-width: 400px;
+    gap: 8px;
+  }
+
+  .header-button {
+    width: 100%;
+    /* Full width buttons */
+    text-align: center;
+    padding: 12px;
+  }
+
+  #mainContent {
+    position: static;
+    transform: none;
+    width: 100%;
+    padding: 10px;
+  }
+
+  body {
+    padding-top: 10px;
+    padding-bottom: 30px;
+  }
+}
+
+
+/* Basic styling for the login form */
+body {
+  font-family: sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 50px;
+}
+
+form {
+  border: 1px solid #ccc;
+  padding: 20px;
+  border-radius: 5px;
+  background-color: #f9f9f9;
+}
+
+label,
+input,
+button {
+  display: block;
+  margin-bottom: 10px;
+}
+
+input,
+button {
+  width: 100%;
+  max-width: 300px;
+  box-sizing: border-box;
+}
+
+button {
+  width: 100%;
+  /* Override auto width */
+  max-width: 300px;
+  padding: 8px 15px;
+  cursor: pointer;
+}
+
+#error-message {
+  color: red;
+  margin-top: 10px;
+  min-height: 1em;
+  /* Reserve space for the message */
+}
+
+
+/* --- Extracted Inline Styles --- */
+
+.mt-3rem {
+  margin-top: 3rem;
+}
+
+.mt-2rem {
+  margin-top: 2rem;
+}
+
+.mt-1rem {
+  margin-top: 1rem;
+}
+
+.mb-1rem {
+  margin-bottom: 1rem;
+}
+
+.mb-5px {
+  margin-bottom: 5px;
+}
+
+.btn-danger {
+  background-color: #dc3545;
+  color: white;
+  border-color: #bd2130;
+}
+
+.class-teacher-heading {
+  margin-top: 0;
+  font-weight: normal;
+  color: #555;
+}
+
+.qr-modal-overlay {
+  display: none;
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  box-sizing: border-box;
+  z-index: 1000;
+}
+
+.qr-modal-content {
+  background: #fff;
+  padding: 2rem;
+  border-radius: 8px;
+  position: relative;
+  text-align: center;
+  max-width: 100%;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.qr-modal-close {
+  position: absolute;
+  right: 0.5rem;
+  top: 0.5rem;
+  cursor: pointer;
+  font-size: 2rem;
+  line-height: 1;
+  padding: 0.5rem;
+}
+
+.qr-modal-note {
+  margin-bottom: 1rem;
+  font-size: 1.1rem;
+  color: #333;
+  word-break: break-word;
+}
+
+.flex-center {
+  display: flex;
+  justify-content: center;
+}
+
+.qr-modal-url {
+  margin-top: 1rem;
+  font-size: 0.9rem;
+  word-break: break-all;
+}

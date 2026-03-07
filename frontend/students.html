@@ -7,156 +7,6 @@
   <title>User Configuration</title>
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-  <style>
-      /* Reuse styles from menu.html */
-      #leftSideContainer {
-      position: fixed;
-      top: 15px;
-      left: 15px;
-      padding: 15px;
-      border: 1px solid #e0e0e0;
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-      border-radius: 8px;
-      background-color: white;
-      z-index: 1000;
-    }
-
-    #languageToggle {
-      display: flex;
-      border: 1px solid #ced4da;
-      border-radius: 6px;
-      overflow: hidden;
-      margin-top: 10px;
-      background-color: #fff;
-    }
-
-    #languageToggle span {
-      flex-grow: 1;
-      text-align: center;
-      padding: 8px 12px;
-      cursor: pointer;
-      background-color: #f8f9fa;
-      color: #495057;
-      transition: all 0.2s ease;
-      user-select: none;
-      font-size: 0.9rem;
-    }
-
-    #languageToggle span.active {
-      background-color: #007bff;
-      color: white;
-      font-weight: 600;
-    }
-
-    #mainContent {
-      max-width: 800px;
-      padding: 20px;
-      position: absolute;
-      left: 50%;
-      transform: translateX(-50%);
-      text-align: center;
-      box-sizing: border-box;
-      width: 100%;
-    }
-
-    #headerButtons {
-      position: fixed;
-      top: 15px;
-      right: 15px;
-      display: flex;
-      gap: 10px;
-      z-index: 1000;
-      flex-wrap: wrap;
-      justify-content: flex-end;
-    }
-
-    .header-button {
-      padding: 10px 15px;
-      cursor: pointer;
-      background-color: #f8f9fa;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      transition: all 0.2s ease;
-      font-size: 0.9rem;
-      min-height: 40px;
-    }
-
-    .header-button:hover {
-      background-color: #007bff;
-    }
-
-    body {
-      padding-top: 100px;
-      padding-left: 0;
-      background-color: #fdfdfd;
-    }
-
-    #loggedInUser {
-      display: flex;
-      align-items: center;
-      font-weight: 600;
-      color: #333;
-      font-size: 0.95rem;
-    }
-
-    #profileCircle {
-      width: 32px;
-      height: 32px;
-      background-color: #adb5bd;
-      border-radius: 50%;
-      margin-right: 10px;
-      flex-shrink: 0;
-    }
-
-    @media (max-width: 768px) {
-      #leftSideContainer {
-        position: static;
-        margin: 0 auto 15px auto;
-        width: 90%;
-        max-width: 400px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-      }
-
-      #loggedInUser {
-        margin-bottom: 10px;
-        width: 100%;
-        justify-content: center;
-      }
-
-      #languageToggle {
-        width: 100%;
-      }
-
-      #headerButtons {
-        position: static;
-        flex-direction: column;
-        width: 90%;
-        margin: 0 auto 20px auto;
-        max-width: 400px;
-        gap: 8px;
-      }
-
-      .header-button {
-        width: 100%;
-        text-align: center;
-        padding: 12px;
-      }
-
-      #mainContent {
-        position: static;
-        transform: none;
-        width: 100%;
-        padding: 10px;
-      }
-
-      body {
-        padding-top: 10px;
-        padding-bottom: 30px;
-      }
-    }
-  </style>
 </head>
 
 <body>
@@ -183,41 +33,38 @@
 
   <!-- Main Content Container -->
   <div id="mainContent">
-  <h1>Students</h1>
-  <p>This page lists student configurations for counting specific classes.</p>
+    <h1>Students</h1>
+    <p>This page lists student configurations for counting specific classes.</p>
 
-  <section style="margin-top: 2rem;">
-    <h2>Student List</h2>
-    <div class="table-wrapper">
-      <table id="students-table">
-        <thead>
-          <tr>
-            <th>Code</th>
-            <th>Class</th>
-            <th>Note</th>
-            <th>Counting Classes</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="students-table-body">
-          <!-- Student data will be dynamically added here -->
-        </tbody>
-      </table>
-    </div>
-    <button class="class-button" onclick="addStudentConfiguration()">Add Student</button>
-  </section>
+    <section class="mt-2rem">
+      <h2>Student List</h2>
+      <div class="table-wrapper">
+        <table id="students-table">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Class</th>
+              <th>Note</th>
+              <th>Counting Classes</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="students-table-body">
+            <!-- Student data will be dynamically added here -->
+          </tbody>
+        </table>
+      </div>
+      <button class="class-button" onclick="addStudentConfiguration()">Add Student</button>
+    </section>
   </div>
 
   <!-- QR Code Modal -->
-  <div id="qrModal"
-    style="display:none; position:fixed; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; padding: 1rem; box-sizing: border-box; z-index: 1000;">
-    <div
-      style="background:#fff; padding:2rem; border-radius:8px; position:relative; text-align:center; max-width: 100%; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-      <span id="closeQrModal"
-        style="position:absolute; right:0.5rem; top:0.5rem; cursor:pointer; font-size:2rem; line-height: 1; padding: 0.5rem;">&times;</span>
-      <div id="qrNote" style="margin-bottom:1rem; font-size:1.1rem; color:#333; word-break: break-word;"></div>
-      <div id="qrcode" style="display: flex; justify-content: center;"></div>
-      <div id="qrUrl" style="margin-top:1rem; font-size:0.9rem; word-break:break-all;"></div>
+  <div id="qrModal" class="qr-modal-overlay">
+    <div class="qr-modal-content">
+      <span id="closeQrModal" class="qr-modal-close">&times;</span>
+      <div id="qrNote" class="qr-modal-note"></div>
+      <div id="qrcode" class="flex-center"></div>
+      <div id="qrUrl" class="qr-modal-url"></div>
     </div>
   </div>
   <script src="students.js"></script>
