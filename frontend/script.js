@@ -98,6 +98,8 @@ function updateTotals(data) {
     console.log("Updating totals (with teacher points doubled)...");
     let studentScoreTotal = 0; // Use a name that reflects score, not just count
     let teacherScoreTotal = 0; // Use a name that reflects score, not just count
+    let studentCountTotal = 0;
+    let teacherCountTotal = 0;
 
     if (Array.isArray(data)) {
         data.forEach(item => {
@@ -105,9 +107,11 @@ function updateTotals(data) {
             if (item.type === 'student') {
                 // Student score = points * count
                 studentScoreTotal += item.points * item.count;
+                studentCountTotal += item.count;
             } else if (item.type === 'teacher') {
                 // Teacher score = points * count * 2 (doubled)
                 teacherScoreTotal += item.points * item.count * 2;
+                teacherCountTotal += item.count;
             }
         });
     } else {
@@ -116,10 +120,14 @@ function updateTotals(data) {
 
     const studentTotalCell = document.getElementById('studentTotal');
     const teacherTotalCell = document.getElementById('teacherTotal');
+    const studentCountCell = document.getElementById('studentCount');
+    const teacherCountCell = document.getElementById('teacherCount');
 
     // Update the footer cells with the calculated SCORES
     if (studentTotalCell) studentTotalCell.textContent = studentScoreTotal;
     if (teacherTotalCell) teacherTotalCell.textContent = teacherScoreTotal;
+    if (studentCountCell) studentCountCell.textContent = studentCountTotal;
+    if (teacherCountCell) teacherCountCell.textContent = teacherCountTotal;
 
     // Update console log
     console.log("Totals update complete (weighted):", { studentScoreTotal, teacherScoreTotal });
@@ -136,8 +144,12 @@ function resetTableAndTotals() {
     }
     const studentTotalCell = document.getElementById('studentTotal');
     const teacherTotalCell = document.getElementById('teacherTotal');
+    const studentCountCell = document.getElementById('studentCount');
+    const teacherCountCell = document.getElementById('teacherCount');
     if (studentTotalCell) studentTotalCell.textContent = '0';
     if (teacherTotalCell) teacherTotalCell.textContent = '0';
+    if (studentCountCell) studentCountCell.textContent = '0';
+    if (teacherCountCell) teacherCountCell.textContent = '0';
 }
 
 
