@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Classes</title>
   <link rel="stylesheet" href="style.css" />
-  </head>
+</head>
 
 <body>
   <!-- Container for Left Side Elements (User Info and Language Toggle) -->
@@ -32,50 +32,50 @@
 
   <!-- Main Content Container -->
   <div id="mainContent">
-  <h1>Classes</h1>
+    <!-- Header removed -->
 
-  <section class="mt-3rem">
-    <h2>Days</h2>
+    <section class="mt-3rem">
+      <h2>Days</h2>
 
-    <section id="monday-classes">
-      <h3>Monday</h3>
-      <!-- Buttons for Monday classes will be dynamically added here -->
+      <section id="monday-classes">
+        <h3>Monday</h3>
+        <!-- Buttons for Monday classes will be dynamically added here -->
+      </section>
+
+      <section id="tuesday-classes">
+        <h3>Tuesday</h3>
+        <!-- Buttons for Tuesday classes will be dynamically added here -->
+      </section>
+
+      <section id="wednesday-classes">
+        <h3>Wednesday</h3>
+        <!-- Buttons for Wednesday classes will be dynamically added here -->
+      </section>
     </section>
 
-    <section id="tuesday-classes">
-      <h3>Tuesday</h3>
-      <!-- Buttons for Tuesday classes will be dynamically added here -->
+    <section class="mt-3rem">
+      <h2>Class Counting List</h2>
+      <div id="auto-assign-controls" class="mb-1rem">
+        <button id="split-evenly-btn" class="button">Split Evenly</button>
+        <button id="split-randomly-btn" class="button">Split Randomly</button>
+        <button id="clear-assignments-btn" class="button" class="btn-danger">Clear All</button>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Class</th>
+              <th>Monday</th>
+              <th>Tuesday</th>
+              <th>Wednesday</th>
+            </tr>
+          </thead>
+          <tbody id="class-counting-tbody">
+            <!-- Class counting data will be dynamically added here -->
+          </tbody>
+        </table>
+      </div>
     </section>
-
-    <section id="wednesday-classes">
-      <h3>Wednesday</h3>
-      <!-- Buttons for Wednesday classes will be dynamically added here -->
-    </section>
-  </section>
-
-  <section class="mt-3rem">
-    <h2>Class Counting List</h2>
-    <div id="auto-assign-controls" class="mb-1rem">
-      <button id="split-evenly-btn" class="button">Split Evenly</button>
-      <button id="split-randomly-btn" class="button">Split Randomly</button>
-      <button id="clear-assignments-btn" class="button" class="btn-danger">Clear All</button>
-    </div>
-    <div class="table-wrapper">
-    <table>
-      <thead>
-        <tr>
-          <th>Class</th>
-          <th>Monday</th>
-          <th>Tuesday</th>
-          <th>Wednesday</th>
-        </tr>
-      </thead>
-      <tbody id="class-counting-tbody">
-        <!-- Class counting data will be dynamically added here -->
-      </tbody>
-    </table>
-    </div>
-  </section>
   </div>
 
   <!-- Ensure classes.js is linked -->
