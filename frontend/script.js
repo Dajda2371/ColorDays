@@ -16,11 +16,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Update the heading with the class name
     const classNameElement = document.getElementById('className');
+    const classTeacherElement = document.getElementById('classTeacher');
     if (classNameElement) {
-        classNameElement.textContent = `Class: ${decodeURIComponent(currentClassName)} - Day: ${currentDayIdentifier.charAt(0).toUpperCase() + currentDayIdentifier.slice(1)}`;
+        // Find if we have translations loaded somewhere, else fallback correctly
+        classNameElement.textContent = `${decodeURIComponent(currentClassName)} | ${currentDayIdentifier.charAt(0).toUpperCase() + currentDayIdentifier.slice(1)}`;
     } else {
         console.error("Element with ID 'className' not found.");
     }
+
+    // Fetch class teacher
+    fetch('/api/classes')
+        .then(response => response.json())
+        .then(classes => {
+            const currentClassInfo = classes.find(c => c.class === decodeURIComponent(currentClassName));
+            if (currentClassInfo && classTeacherElement) {
+                classTeacherElement.textContent = currentClassInfo.teacher || '';
+            }
+        })
+        .catch(error => console.error("Error fetching class details:", error));
 
     // Create the buttons immediately (they don't depend on fetched counts)
     createButtons();

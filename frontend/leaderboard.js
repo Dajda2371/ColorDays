@@ -65,9 +65,11 @@ function applyTranslations() {
 }
 
 // --- Function to fetch and display leaderboard ---
-async function loadLeaderboard() {
-    const loadingMessage = translations.loadingLeaderboardText?.[currentLanguage] || translations.loadingLeaderboardText?.['en'] || 'Loading leaderboard...';
-    leaderboardTable.innerHTML = `<tr><td colspan="4">${loadingMessage}</td></tr>`;
+async function loadLeaderboard(showLoading = true) {
+    if (showLoading) {
+        const loadingMessage = translations.loadingLeaderboardText?.[currentLanguage] || translations.loadingLeaderboardText?.['en'] || 'Loading leaderboard...';
+        leaderboardTable.innerHTML = `<tr><td colspan="4">${loadingMessage}</td></tr>`;
+    }
 
     try {
         const response = await fetch('/api/leaderboard', { credentials: 'include' });
@@ -187,5 +189,8 @@ document.addEventListener('DOMContentLoaded', () => {
         setToggleState(currentLanguage);
         loadLeaderboard();
         displayLoggedInUser();
+
+        // Auto-refresh the leaderboard every 5 seconds
+        setInterval(() => loadLeaderboard(false), 5000);
     });
 });

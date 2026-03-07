@@ -19,7 +19,7 @@ def get_leaderboard(request: Request, user_info=Depends(get_current_user_info)):
         raise HTTPException(status_code=403, detail="Forbidden: Access denied.")
 
     # Initialize scores and people count for all classes
-    scores = {cls['class']: {'score': 0, 'people': 0} for cls in class_data_store}
+    scores = {cls['class']: {'score': 0, 'students': 0, 'teachers': 0} for cls in class_data_store}
 
     days = ["monday", "tuesday", "wednesday"]
 
@@ -31,13 +31,19 @@ def get_leaderboard(request: Request, user_info=Depends(get_current_user_info)):
             for class_name, type_data in day_counts.items():
                 if class_name in scores:
                     class_score = 0
-                    class_people = 0
+                    class_students = 0
+                    class_teachers = 0
                     for type_val, points_data in type_data.items():
                         for points_val, count in points_data.items():
-                            class_score += points_val * count
-                            class_people += count
+                            if type_val == 'student':
+                                class_score += points_val * count
+                                class_students += count
+                            elif type_val == 'teacher':
+                                class_score += (points_val * count) * 2
+                                class_teachers += count
                     scores[class_name]['score'] += class_score
-                    scores[class_name]['people'] += class_people
+                    scores[class_name]['students'] += class_students
+                    scores[class_name]['teachers'] += class_teachers
         except Exception as e:
             print(f"Error loading counts for {day}: {e}")
             # Continue to next day, or maybe raise error? prefer continue to show partial results
@@ -46,20 +52,22 @@ def get_leaderboard(request: Request, user_info=Depends(get_current_user_info)):
     leaderboard_data = []
     for k, v in scores.items():
         score = v['score']
-        people = v['people']
-        if score > 0:
-            # As requested: total students + teachers (people) divided by total class points (score)
-            percentage = round((people / score) * 100, 2)
+        students = v['students']
+        teachers = v['teachers']
+        divisor = (students * 6) + (teachers * 12)
+        if divisor > 0:
+            # As requested: total class points / ((number of students * 6) + (number of teachers * 12))
+            percentage = round((score / divisor) * 100, 2)
         else:
             percentage = 0
             
         leaderboard_data.append({
             "class": k,
             "score": score,
-            "people": people,
+            "people": students + teachers,
             "percentage": f"{percentage}%"
         })
 
-    leaderboard_data.sort(key=lambda x: x["score"], reverse=True)
+    leaderboard_data.sort(key=lambda x: float(x["percentage"].replace('%', '')), reverse=True)
 
     return leaderboard_data
