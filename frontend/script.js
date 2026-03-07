@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
     currentDayIdentifier = urlParams.get('day'); // Store day globally
 
     if (!currentClassName || !currentDayIdentifier) {
-        alert("No class selected. Redirecting to the menu.");
+        alert((translations.noClassSelectedAlert?.[currentLanguage] || "No class selected. Redirecting to the menu."));
         window.location.href = 'menu.html'; // Redirect if no class
         return; // Stop further execution
     }
@@ -67,10 +67,10 @@ async function handleLogout() {
         if (response.ok) {
             window.location.href = '/login.html';
         } else {
-            alert('Logout failed');
+            alert((translations.logoutFailedAlert?.[currentLanguage] || 'Logout failed'));
         }
     } catch (error) {
-        alert('An error occurred during logout.');
+        alert((translations.logoutErrorAlert?.[currentLanguage] || 'An error occurred during logout.'));
     }
 }
 
@@ -92,10 +92,13 @@ async function fetchTranslations() {
 function applyTranslations() {
     document.querySelectorAll('[data-translate-key]').forEach(element => {
         const key = element.getAttribute('data-translate-key');
-        if (translations[key] && translations[key][currentLanguage]) {
-            element.textContent = translations[key][currentLanguage];
-        } else if (translations[key] && translations[key]['en']) {
-            element.textContent = translations[key]['en'];
+        const text = translations[key]?.[currentLanguage] || translations[key]?.['en'];
+        if (text) {
+            if (element.tagName === 'INPUT') {
+                element.placeholder = text;
+            } else {
+                element.textContent = text;
+            }
         }
     });
 }
@@ -108,7 +111,7 @@ function displayLoggedInUser() {
         const username = usernameCookie.split('=')[1];
         usernameTextSpan.textContent = decodeURIComponent(username);
     } else if (usernameTextSpan) {
-        usernameTextSpan.textContent = translations.usernameNotLoggedIn?.[currentLanguage] || 'Not Logged In';
+        usernameTextSpan.textContent = translations.usernameNotLoggedIn?.[currentLanguage] || (translations.usernameNotLoggedIn?.[currentLanguage] || 'Not Logged In');
     }
 }
 
@@ -340,7 +343,7 @@ function createButtons() {
 async function handleCountChange(action, type, points) {
     if (!currentClassName || !currentDayIdentifier) {
         console.error("Cannot change count, className or dayIdentifier is not set.");
-        alert("Error: Class context lost. Please refresh or go back to menu.");
+        alert((translations.classContextLostAlert?.[currentLanguage] || "Error: Class context lost. Please refresh or go back to menu."));
         return;
     }
 
@@ -388,6 +391,9 @@ async function handleCountChange(action, type, points) {
 
     } catch (error) {
         console.error(`Error during ${action}:`, error);
-        alert(`Failed to ${action} count. ${error.message}`); // Inform the user
+        const actionTranslation = action === 'increment'
+            ? (translations.failedToIncrementAlert?.[currentLanguage] || 'Failed to increment count.')
+            : (translations.failedToDecrementAlert?.[currentLanguage] || 'Failed to decrement count.');
+        alert(`${actionTranslation} ${error.message}`);
     }
 }

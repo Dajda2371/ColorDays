@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Color Days Counter</title>
+  <title data-translate-key="mainHeading">Color Days Counter</title>
   <link rel="stylesheet" href="style.css">
 </head>
 
@@ -33,78 +33,78 @@
   <!-- Main Content Container -->
   <div id="mainContent">
 
-    <h1 id="className" class="mb-5px">Loading...</h1>
+    <h1 id="className" class="mb-5px" data-translate-key="loadingText">Loading...</h1>
     <h3 id="classTeacher" class="class-teacher-heading"></h3>
 
     <div class="table-wrapper">
       <table>
         <thead>
           <tr>
-            <th>Points</th>
-            <th>Students</th>
-            <th>Teachers</th>
+            <th data-translate-key="pointsHeader">Points</th>
+            <th data-translate-key="studentsHeader">Students</th>
+            <th data-translate-key="teachersHeader">Teachers</th>
           </tr>
         </thead>
         <tbody id="counterTable">
           <!-- Static rows for points 0 to 6, dynamically filled with data -->
           <tr>
             <td>0</td>
-            <td id="student0">loading ...</td>
-            <td id="teacher0">loading ...</td>
+            <td id="student0">loading ...<!-- data-translate-key="loadingLowerText" handled via JS --></td>
+            <td id="teacher0">loading ...<!-- data-translate-key="loadingLowerText" handled via JS --></td>
           </tr>
           <tr>
             <td>1</td>
-            <td id="student1">loading ...</td>
-            <td id="teacher1">loading ...</td>
+            <td id="student1">loading ...<!-- data-translate-key="loadingLowerText" handled via JS --></td>
+            <td id="teacher1">loading ...<!-- data-translate-key="loadingLowerText" handled via JS --></td>
           </tr>
           <tr>
             <td>2</td>
-            <td id="student2">loading ...</td>
-            <td id="teacher2">loading ...</td>
+            <td id="student2">loading ...<!-- data-translate-key="loadingLowerText" handled via JS --></td>
+            <td id="teacher2">loading ...<!-- data-translate-key="loadingLowerText" handled via JS --></td>
           </tr>
           <tr>
             <td>3</td>
-            <td id="student3">loading ...</td>
-            <td id="teacher3">loading ...</td>
+            <td id="student3">loading ...<!-- data-translate-key="loadingLowerText" handled via JS --></td>
+            <td id="teacher3">loading ...<!-- data-translate-key="loadingLowerText" handled via JS --></td>
           </tr>
           <tr>
             <td>4</td>
-            <td id="student4">loading ...</td>
-            <td id="teacher4">loading ...</td>
+            <td id="student4">loading ...<!-- data-translate-key="loadingLowerText" handled via JS --></td>
+            <td id="teacher4">loading ...<!-- data-translate-key="loadingLowerText" handled via JS --></td>
           </tr>
           <tr>
             <td>5</td>
-            <td id="student5">loading ...</td>
-            <td id="teacher5">loading ...</td>
+            <td id="student5">loading ...<!-- data-translate-key="loadingLowerText" handled via JS --></td>
+            <td id="teacher5">loading ...<!-- data-translate-key="loadingLowerText" handled via JS --></td>
           </tr>
           <tr>
             <td>6</td>
-            <td id="student6">loading ...</td>
-            <td id="teacher6">loading ...</td>
+            <td id="student6">loading ...<!-- data-translate-key="loadingLowerText" handled via JS --></td>
+            <td id="teacher6">loading ...<!-- data-translate-key="loadingLowerText" handled via JS --></td>
           </tr>
         </tbody>
         <tfoot>
           <tr>
-            <td><strong>Total People</strong></td>
-            <td id="studentCount">loading ...</td>
-            <td id="teacherCount">loading ...</td>
+            <td><strong data-translate-key="totalPeopleText">Total People</strong></td>
+            <td id="studentCount">loading ...<!-- data-translate-key="loadingLowerText" handled via JS --></td>
+            <td id="teacherCount">loading ...<!-- data-translate-key="loadingLowerText" handled via JS --></td>
           </tr>
           <tr>
-            <td><strong>Total Points</strong></td>
-            <td id="studentTotal">loading ...</td>
-            <td id="teacherTotal">loading ...</td>
+            <td><strong data-translate-key="totalPointsText">Total Points</strong></td>
+            <td id="studentTotal">loading ...<!-- data-translate-key="loadingLowerText" handled via JS --></td>
+            <td id="teacherTotal">loading ...<!-- data-translate-key="loadingLowerText" handled via JS --></td>
           </tr>
         </tfoot>
       </table>
     </div>
 
-    <h3>Student Buttons</h3>
+    <h3 data-translate-key="studentButtonsHeading">Student Buttons</h3>
     <div id="studentButtons"></div>
 
-    <h3>Teacher Buttons</h3>
+    <h3 data-translate-key="teacherButtonsHeading">Teacher Buttons</h3>
     <div id="teacherButtons"></div>
 
-    <p class="mt-2rem"><a href="menu.html" style="display:none;">Back to Class Selection</a></p>
+    <p class="mt-2rem"><a href="menu.html" style="display:none;" data-translate-key="backToClassSelectionText">Back to Class Selection</a></p>
   </div>
 
   <script src="script.js"></script>

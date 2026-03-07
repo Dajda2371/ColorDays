@@ -37,7 +37,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const code = studentLoginForm.code.value;
 
             if (!code) {
-                displayError('Please enter your student code.');
+                displayError((translations.enterStudentCodeError?.[currentLanguage] || 'Please enter your student code.'));
                 return;
             }
 
@@ -74,13 +74,13 @@ document.addEventListener('DOMContentLoaded', function () {
                     console.log(`${userType} login successful:`, data);
                     window.location.href = '/menu.html'; // Redirect on success
                 } else {
-                    displayError(data.error || `${userType} login failed. Please try again.`);
+                    displayError(data.error || `${userType}${translations.loginFailedTryAgainError?.[currentLanguage] || " login failed. Please try again."}`);
                 }
             })
             .catch(error => {
                 console.error(`${userType} login error:`, error);
                 const serverErrorMessage = error.data ? error.data.error : null;
-                displayError(serverErrorMessage || error.message || `An unexpected error occurred during ${userType.toLowerCase()} login.`);
+                displayError(serverErrorMessage || error.message || `${translations.unexpectedLoginError?.[currentLanguage] || "An unexpected error occurred during "}${userType.toLowerCase()} login.`);
             });
     }
 
@@ -90,7 +90,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const errorParam = urlParams.get('error');
 
     if (errorParam === 'invalid_domain') {
-        alert('Tato e-mailová doména není pro Google přihlášení povolena.');
+        alert((translations.invalidGoogleDomainAlert?.[currentLanguage] || 'Tato e-mailová doména není pro Google přihlášení povolena.'));
     }
 
     if (codeParam) {

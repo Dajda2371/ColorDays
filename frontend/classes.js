@@ -39,7 +39,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             if (splitEvenlyBtn && splitRandomlyBtn && clearAssignmentsBtn) {
                 splitEvenlyBtn.addEventListener('click', () => {
-                    if (!confirm("Are you sure you want to split counting duties evenly? This will overwrite existing assignments.")) return;
+                    if (!confirm((translations.confirmSplitEvenly?.[currentLanguage] || "Are you sure you want to split counting duties evenly? This will overwrite existing assignments."))) return;
 
                     const updates = [];
                     ['1', '2', '3'].forEach(day => {
@@ -84,7 +84,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
 
                 splitRandomlyBtn.addEventListener('click', () => {
-                    if (!confirm("Are you sure you want to split counting duties randomly? This will overwrite existing assignments.")) return;
+                    if (!confirm((translations.confirmSplitRandomly?.[currentLanguage] || "Are you sure you want to split counting duties randomly? This will overwrite existing assignments."))) return;
 
                     const updates = [];
                     ['1', '2', '3'].forEach(day => {
@@ -171,7 +171,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
 
                 clearAssignmentsBtn.addEventListener('click', () => {
-                    if (!confirm("Are you sure you want to CLEAR ALL counting assignments? This cannot be undone.")) return;
+                    if (!confirm((translations.confirmClearAll?.[currentLanguage] || "Are you sure you want to CLEAR ALL counting assignments? This cannot be undone."))) return;
 
                     // Show loading state
                     clearAssignmentsBtn.disabled = true;
@@ -184,15 +184,15 @@ document.addEventListener('DOMContentLoaded', function () {
                         .then(res => res.json())
                         .then(data => {
                             if (data.success) {
-                                alert(data.message);
+                                alert((translations.successText?.[currentLanguage] || "Success: ") + data.message);
                                 window.location.reload();
                             } else {
-                                alert("Error: " + (data.error || data.message || "Unknown error"));
+                                alert((translations.errorText?.[currentLanguage] || "Error: ") + (data.error || data.message || (translations.unknownErrorText?.[currentLanguage] || "Unknown error")));
                             }
                         })
                         .catch(err => {
                             console.error(err);
-                            alert("Error clearing assignments: " + err.message);
+                            alert((translations.errorClearingAssignmentsText?.[currentLanguage] || "Error clearing assignments: ") + err.message);
                         })
                         .finally(() => {
                             if (clearAssignmentsBtn) clearAssignmentsBtn.disabled = false;
@@ -204,7 +204,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             function sendBatchUpdates(updates) {
                 if (updates.length === 0) {
-                    alert("No updates to apply (maybe no classes are set to count?).");
+                    alert((translations.noUpdatesToApply?.[currentLanguage] || "No updates to apply (maybe no classes are set to count?)."));
                     return;
                 }
 
@@ -221,15 +221,15 @@ document.addEventListener('DOMContentLoaded', function () {
                     .then(res => res.json())
                     .then(data => {
                         if (data.success) {
-                            alert(data.message);
+                            alert((translations.successText?.[currentLanguage] || "Success: ") + data.message);
                             window.location.reload();
                         } else {
-                            alert("Error: " + (data.error || data.message || "Unknown error"));
+                            alert((translations.errorText?.[currentLanguage] || "Error: ") + (data.error || data.message || (translations.unknownErrorText?.[currentLanguage] || "Unknown error")));
                         }
                     })
                     .catch(err => {
                         console.error(err);
-                        alert("Error sending updates: " + err.message);
+                        alert((translations.errorSendingUpdatesText?.[currentLanguage] || "Error sending updates: ") + err.message);
                     })
                     .finally(() => {
                         if (splitEvenlyBtn) splitEvenlyBtn.disabled = false;
@@ -247,7 +247,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             if (!classes || classes.length === 0) {
                 const noClassesMsgP = document.createElement('p');
-                noClassesMsgP.textContent = 'No classes available to display.';
+                noClassesMsgP.textContent = (translations.noClassesAvailableText?.[currentLanguage] || 'No classes available to display.');
                 mondaySection.appendChild(noClassesMsgP.cloneNode(true));
                 tuesdaySection.appendChild(noClassesMsgP.cloneNode(true));
                 wednesdaySection.appendChild(noClassesMsgP.cloneNode(true));
@@ -255,7 +255,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 const noDataRow = classCountingTbody.insertRow();
                 const cell = noDataRow.insertCell();
                 cell.colSpan = 4; // Span across all columns
-                cell.textContent = 'No class counting data available.';
+                cell.textContent = (translations.noClassCountingDataText?.[currentLanguage] || 'No class counting data available.');
                 cell.style.textAlign = 'center';
 
                 // Add "Prefill Classes" button
@@ -264,13 +264,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 prefillContainer.style.marginTop = '2rem';
 
                 const prefillButton = document.createElement('button');
-                prefillButton.textContent = 'Prefill Classes from Website';
+                prefillButton.textContent = (translations.prefillClassesBtnText?.[currentLanguage] || 'Prefill Classes from Website');
                 prefillButton.className = 'button'; // Re-use existing button class
                 prefillButton.style.backgroundColor = '#4CAF50'; // Green color to indicate action
 
                 prefillButton.onclick = function () {
                     prefillButton.disabled = true;
-                    prefillButton.textContent = 'Scraping...';
+                    prefillButton.textContent = (translations.scrapingText?.[currentLanguage] || 'Scraping...');
 
                     fetch('/api/classes/prefill', {
                         method: 'POST',
@@ -287,14 +287,14 @@ document.addEventListener('DOMContentLoaded', function () {
                             } else {
                                 alert('Error: ' + (data.error || 'Unknown error'));
                                 prefillButton.disabled = false;
-                                prefillButton.textContent = 'Prefill Classes from Website';
+                                prefillButton.textContent = (translations.prefillClassesBtnText?.[currentLanguage] || 'Prefill Classes from Website');
                             }
                         })
                         .catch(err => {
                             console.error(err);
                             alert('Error contacting server.');
                             prefillButton.disabled = false;
-                            prefillButton.textContent = 'Prefill Classes from Website';
+                            prefillButton.textContent = (translations.prefillClassesBtnText?.[currentLanguage] || 'Prefill Classes from Website');
                         });
                 };
 
@@ -337,7 +337,7 @@ document.addEventListener('DOMContentLoaded', function () {
         .catch(error => {
             console.error('Error fetching or processing class data:', error);
             const errorPara = document.createElement('p');
-            errorPara.textContent = 'Failed to load class buttons. Please check the console for errors.';
+            errorPara.textContent = (translations.failedLoadClassButtons?.[currentLanguage] || 'Failed to load class buttons. Please check the console for errors.');
             errorPara.style.color = 'red';
             // Insert error before the "Back to Class Selection" link
             const backLink = document.querySelector('p > a[href="menu.html"]');
@@ -368,7 +368,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // N/A Option
         const naOption = document.createElement('option');
         naOption.value = '_NULL_';
-        naOption.textContent = 'N/A';
+        naOption.textContent = (translations.naText?.[currentLanguage] || 'N/A');
         select.appendChild(naOption);
 
         // Options for counting classes
@@ -427,12 +427,12 @@ document.addEventListener('DOMContentLoaded', function () {
                     } else {
                         // This case should ideally be caught by the !response.ok check above
                         console.error('Failed to save:', data.error || 'Unknown error');
-                        alert(`Error saving change: ${data.error || 'Unknown error'}`);
+                        alert(`${translations.errorSavingChange?.[currentLanguage] || 'Error saving change: '}${data.error || (translations.unknownErrorText?.[currentLanguage] || 'Unknown error')}`);
                     }
                 })
                 .catch(error => {
                     console.error('Error updating class counting value:', error);
-                    alert(`Error updating: ${error.message}`);
+                    alert(`${translations.errorUpdating?.[currentLanguage] || 'Error updating: '}${error.message}`);
                 });
         });
 

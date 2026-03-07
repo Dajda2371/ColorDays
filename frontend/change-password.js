@@ -62,13 +62,13 @@ document.addEventListener('DOMContentLoaded', (event) => {
                 } else {
                     // Login failed - display error message from server
                     console.error('Password change failed:', result.message);
-                    errorMessageDiv.textContent = result.message || 'Invalid password.';
+                    errorMessageDiv.textContent = result.message || (translations.invalidPasswordError?.[currentLanguage] || 'Invalid password.');
                 }
 
             } catch (error) {
                 // Handle network errors or issues reaching the server
                 console.error('Change password request failed:', error);
-                errorMessageDiv.textContent = 'Change password request failed. Please check your connection or contact support.';
+                errorMessageDiv.textContent = (translations.changePasswordRequestFailed?.[currentLanguage] || 'Change password request failed. Please check your connection or contact support.');
             }
         });
     } else {

@@ -4,37 +4,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Color Days</title>
+    <title data-translate-key="loginTitle">Login - Color Days</title>
     <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
-    <h1>Login to Color Days Counter</h1>
+    <h1 data-translate-key="loginHeading">Login to Color Days Counter</h1>
     <div id="login-sections-container">
         <section>
-            <h2>Login as Student</h2>
+            <h2 data-translate-key="loginAsStudent">Login as Student</h2>
             <form id="studentLoginForm">
                 <div>
-                    <label for="code">Code:</label>
+                    <label for="code" data-translate-key="codeLabel">Code:</label>
                     <input type="text" id="code" name="code" required>
                 </div>
-                <button type="submit" class="btn-primary">Login</button>
+                <button type="submit" class="btn-primary" data-translate-key="loginButton">Login</button>
             </form>
         </section>
         <section>
-            <h2>Login as Teacher</h2>
-            <button onclick="window.location.href='/login/google'" class="btn-google">Login with Google</button>
-            <p class="text-separator">or</p>
+            <h2 data-translate-key="loginAsTeacher">Login as Teacher</h2>
+            <button onclick="window.location.href='/login/google'" class="btn-google" data-translate-key="loginWithGoogle">Login with Google</button>
+            <p class="text-separator" data-translate-key="orText">or</p>
             <form id="loginForm" class="mt-1rem">
                 <div>
-                    <label for="username">Username:</label>
+                    <label for="username" data-translate-key="usernameLabel">Username:</label>
                     <input type="text" id="username" name="username" required>
                 </div>
                 <div>
-                    <label for="password">Password:</label>
+                    <label for="password" data-translate-key="passwordLabel">Password:</label>
                     <input type="password" id="password" name="password" required>
                 </div>
-                <button type="submit" class="btn-primary">Login</button>
+                <button type="submit" class="btn-primary" data-translate-key="loginButton">Login</button>
             </form>
         </section>
     </div>

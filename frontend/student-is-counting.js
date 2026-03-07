@@ -17,12 +17,12 @@ document.addEventListener('DOMContentLoaded', function () {
     const day = urlParams.get('day');
 
     if (!studentCode) {
-        pageTitleElement.textContent = 'Error: Student Code Missing';
+        pageTitleElement.textContent = (translations.errorStudentCodeMissing?.[currentLanguage] || 'Error: Student Code Missing');
         studentIsCountingTableBody.innerHTML = `<tr><td colspan="3" style="color: red; text-align: center;">No student code provided in the URL.</td></tr>`;
         return;
     }
     if (!day || !['1', '2', '3'].includes(day)) {
-        pageTitleElement.textContent = 'Error: Day Parameter Invalid';
+        pageTitleElement.textContent = (translations.errorDayParameterInvalid?.[currentLanguage] || 'Error: Day Parameter Invalid');
         studentIsCountingTableBody.innerHTML = `<tr><td colspan="3" style="color: red; text-align: center;">Day parameter is missing or invalid (must be 1, 2, or 3).</td></tr>`;
         return;
     }
@@ -118,7 +118,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 notesToDisplayElements.forEach(el => ul.appendChild(el));
                 isCountedByCell.appendChild(ul);
             } else {
-                isCountedByCell.textContent = 'N/A';
+                isCountedByCell.textContent = (translations.naText?.[currentLanguage] || 'N/A');
             }
         });
     }
@@ -196,7 +196,7 @@ document.addEventListener('DOMContentLoaded', function () {
             notesElements.forEach(el => ul.appendChild(el));
             cell.appendChild(ul);
         } else {
-            cell.textContent = 'N/A';
+            cell.textContent = (translations.naText?.[currentLanguage] || 'N/A');
         }
     }
 });

@@ -53,13 +53,15 @@ async function fetchTranslations() {
 }
 
 function applyTranslations() {
-    console.log(`Applying translations for language: ${currentLanguage}`);
     document.querySelectorAll('[data-translate-key]').forEach(element => {
         const key = element.getAttribute('data-translate-key');
-        if (translations[key] && translations[key][currentLanguage]) {
-            element.textContent = translations[key][currentLanguage];
-        } else if (translations[key] && translations[key]['en']) {
-            element.textContent = translations[key]['en'];
+        const text = translations[key]?.[currentLanguage] || translations[key]?.['en'];
+        if (text) {
+            if (element.tagName === 'INPUT') {
+                element.placeholder = text;
+            } else {
+                element.textContent = text;
+            }
         }
     });
 }
@@ -67,7 +69,7 @@ function applyTranslations() {
 // --- Function to fetch and display leaderboard ---
 async function loadLeaderboard(showLoading = true) {
     if (showLoading) {
-        const loadingMessage = translations.loadingLeaderboardText?.[currentLanguage] || translations.loadingLeaderboardText?.['en'] || 'Loading leaderboard...';
+        const loadingMessage = translations.loadingLeaderboardText?.[currentLanguage] || translations.loadingLeaderboardText?.['en'] || (translations.loadingLeaderboardText?.[currentLanguage] || 'Loading leaderboard...');
         leaderboardTable.innerHTML = `<tr><td colspan="4">${loadingMessage}</td></tr>`;
     }
 
@@ -82,7 +84,7 @@ async function loadLeaderboard(showLoading = true) {
         leaderboardTable.innerHTML = ''; // Clear loading message
 
         if (leaderboardData.length === 0) {
-            leaderboardTable.innerHTML = `<tr><td colspan="4">${translations.noDataText?.[currentLanguage] || 'No data available'}</td></tr>`;
+            leaderboardTable.innerHTML = `<tr><td colspan="4">${translations.noDataText?.[currentLanguage] || (translations.noDataText?.[currentLanguage] || 'No data available')}</td></tr>`;
             return;
         }
 
@@ -113,7 +115,7 @@ function displayLoggedInUser() {
         const username = usernameCookie.split('=')[1];
         usernameTextSpan.textContent = decodeURIComponent(username);
     } else {
-        usernameTextSpan.textContent = translations.usernameNotLoggedIn?.[currentLanguage] || 'Not Logged In';
+        usernameTextSpan.textContent = translations.usernameNotLoggedIn?.[currentLanguage] || (translations.usernameNotLoggedIn?.[currentLanguage] || 'Not Logged In');
     }
 }
 

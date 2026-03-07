@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>User Configuration</title>
+  <title data-translate-key="configTitle">User Configuration</title>
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 </head>
@@ -36,16 +36,16 @@
     <!-- Headers removed -->
 
     <section class="mt-2rem">
-      <h2>Student List</h2>
+      <h2 data-translate-key="studentListHeading">Student List</h2>
       <div class="table-wrapper" id="students-table-wrapper">
         <table id="students-table">
           <thead>
             <tr>
-              <th>Code</th>
-              <th>Class</th>
-              <th>Note</th>
-              <th>Counting Classes</th>
-              <th>Actions</th>
+              <th data-translate-key="codeHeader">Code</th>
+              <th data-translate-key="classHeader">Class</th>
+              <th data-translate-key="noteHeader">Note</th>
+              <th data-translate-key="countingClassesHeader">Counting Classes</th>
+              <th data-translate-key="actionsHeader">Actions</th>
             </tr>
           </thead>
           <tbody id="students-table-body">
@@ -53,7 +53,7 @@
           </tbody>
         </table>
       </div>
-      <button class="class-button" onclick="addStudentConfiguration()">Add Student</button>
+      <button class="class-button" onclick="addStudentConfiguration()" data-translate-key="addStudentBtnText">Add Student</button>
     </section>
   </div>
 

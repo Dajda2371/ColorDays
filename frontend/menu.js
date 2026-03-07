@@ -27,12 +27,12 @@ async function handleLogout() {
         } else {
             // Try to parse error message if available
             const result = await response.json().catch(() => ({})); // Default to empty object if JSON fails
-            console.error('Logout request failed:', response.status, result.error || 'Unknown server error');
-            alert(`Logout failed: ${result.error || 'Server error'}`);
+            console.error('Logout request failed:', response.status, result.error || (translations.unknownErrorText?.[currentLanguage] || 'Unknown server error'));
+            alert(`Logout failed: ${result.error || (translations.serverErrorText?.[currentLanguage] || 'Server error')}`);
         }
     } catch (error) {
         console.error('Error during logout fetch:', error);
-        alert('An error occurred during logout. Please check your connection.');
+        alert((translations.logoutErrorAlert?.[currentLanguage] || 'An error occurred during logout. Please check your connection.'));
     }
 }
 
@@ -57,22 +57,15 @@ async function fetchTranslations() {
 }
 
 function applyTranslations() {
-    // currentLanguage is now set globally before this function is called.
-    console.log(`Applying translations for language: ${currentLanguage}`);
-    console.log("Translations object:", translations); // Log the loaded translations
-
     document.querySelectorAll('[data-translate-key]').forEach(element => {
         const key = element.getAttribute('data-translate-key');
-        console.log(`Processing element with key: '${key}'`);
-        if (translations[key] && translations[key][currentLanguage]) {
-            console.log(`Found translation for '${key}' in '${currentLanguage}': '${translations[key][currentLanguage]}'`);
-            element.textContent = translations[key][currentLanguage];
-        } else if (translations[key] && translations[key]['en']) { // Fallback to English
-            console.warn(`Translation missing for key '${key}' in language '${currentLanguage}'. Falling back to English.`);
-            element.textContent = translations[key]['en'];
-            element.style.color = 'orange'; // Optional: Highlight missing translations
-        } else {
-            console.warn(`Translation key '${key}' not found or no English fallback available.`);
+        const text = translations[key]?.[currentLanguage] || translations[key]?.['en'];
+        if (text) {
+            if (element.tagName === 'INPUT') {
+                element.placeholder = text;
+            } else {
+                element.textContent = text;
+            }
         }
     });
 }
@@ -114,7 +107,7 @@ async function loadAndDisplayClasses() {
                 const errorData = await studentsResponse.json().catch(() => ({ error: "Failed to fetch student data" }));
                 // Don't throw, but log and potentially fall back or show error for student-specific list
                 console.error("Failed to fetch student data:", errorData.error || `HTTP error! status: ${studentsResponse.status}`);
-                errorMessage = "Could not load your specific class assignments. Showing all available classes.";
+                errorMessage = (translations.errorSpecificClassAssignments?.[currentLanguage] || "Could not load your specific class assignments. Showing all available classes.");
                 // For students, if their data fails to load, they should ideally see nothing or a specific error.
                 // Falling back to "all classes" might be confusing if they are meant to see a restricted list.
                 // Let's ensure they see an error and an empty list if their specific data isn't available.
@@ -128,7 +121,7 @@ async function loadAndDisplayClasses() {
                     // relevantClassesForDisplay will be determined later based on visible days and student's counting_classes
                 } else {
                     console.warn("Current student data not found or no counting_classes. Student code:", studentCode);
-                    errorMessage = "Could not load your assigned classes. You may not be assigned to any.";
+                    errorMessage = (translations.errorAssignedClasses?.[currentLanguage] || "Could not load your assigned classes. You may not be assigned to any.");
                     // If student record not found, they shouldn't see any classes.
                     currentStudentData = null; // Ensure it's null
                     relevantClassesForDisplay = []; // Student sees no classes if their specific list is empty/not found
@@ -141,7 +134,7 @@ async function loadAndDisplayClasses() {
         }
     } catch (error) {
         console.error('Error loading classes:', error);
-        errorMessage = `Error loading classes: ${error.message}. Please try again later or contact support.`;
+        errorMessage = `${(translations.errorLoadingClassesSuffix?.[currentLanguage] || "Error loading classes: {error}. Please try again later or contact support.").replace("{error}", error.message)}`;
         relevantClassesForDisplay = []; // Clear classes on major error
     }
 
@@ -168,7 +161,7 @@ async function loadAndDisplayClasses() {
         console.log(`Student Main Class: ${studentMainClass}, Personally Counts:`, studentPersonalCountingList);
 
         if (!studentMainClass) {
-            if (!errorMessage) errorMessage = "Your main class is not set. Cannot determine days to display.";
+            if (!errorMessage) errorMessage = (translations.errorMainClassNotSet?.[currentLanguage] || "Your main class is not set. Cannot determine days to display.");
             dynamicClassList.innerHTML = `<p style="color:red;">${errorMessage}</p>`;
             return;
         }
@@ -277,7 +270,7 @@ function displayLoggedInUser() {
         const username = usernameCookie.split('=')[1];
         usernameTextSpan.textContent = decodeURIComponent(username);
     } else { // This branch is for when the ColorDaysUser cookie is missing
-        usernameTextSpan.textContent = translations.usernameNotLoggedIn?.[currentLanguage] || 'Not Logged In';
+        usernameTextSpan.textContent = translations.usernameNotLoggedIn?.[currentLanguage] || (translations.usernameNotLoggedIn?.[currentLanguage] || 'Not Logged In');
     }
 }
 
@@ -365,8 +358,8 @@ async function setLanguagePreference(lang) {
             loadAndDisplayClasses();
             displayLoggedInUser();
         } else {
-            console.error('Failed to set language preference:', response.status, result.error || 'Unknown server error');
-            alert((translations.languageUpdateFailedAlert?.[currentLanguage] || translations.languageUpdateFailedAlert?.['en'] || "Failed to set language: {error}").replace("{error}", result.error || 'Server error')); // Added English fallback
+            console.error('Failed to set language preference:', response.status, result.error || (translations.unknownErrorText?.[currentLanguage] || 'Unknown server error'));
+            alert((translations.languageUpdateFailedAlert?.[currentLanguage] || translations.languageUpdateFailedAlert?.['en'] || "Failed to set language: {error}").replace("{error}", result.error || (translations.serverErrorText?.[currentLanguage] || 'Server error'))); // Added English fallback
         }
     } catch (error) {
         console.error('Error during setLanguagePreference fetch:', error);
