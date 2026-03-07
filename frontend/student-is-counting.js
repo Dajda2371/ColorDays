@@ -328,3 +328,18 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 });
+
+function goBackToStudents() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const dayFromUrl = urlParams.get('day');
+    const classFromUrl = urlParams.get('class');
+    
+    let url = 'students.html';
+    if (classFromUrl) {
+        url += '?class=' + encodeURIComponent(classFromUrl);
+    }
+    if (dayFromUrl) {
+        url += (classFromUrl ? '&' : '?') + 'day=' + encodeURIComponent(dayFromUrl);
+    }
+    window.location.href = url;
+}

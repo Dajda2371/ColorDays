@@ -634,5 +634,17 @@
   "newPasswordPlaceholder": {
     "en": "New Password",
     "cs": "Nové heslo"
+  },
+  "backToClassesBtnText": {
+    "en": "Back to Classes",
+    "cs": "Zpět na Třídy"
+  },
+  "backToStudentsBtnText": {
+    "en": "Back to Students",
+    "cs": "Zpět na Studenty"
+  },
+  "studentCountingTitle": {
+    "en": "Student Counting Configuration",
+    "cs": "Konfigurace sčítání studenta"
   }
 }

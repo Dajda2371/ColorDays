@@ -26,8 +26,8 @@
 
   <!-- Container for Header Buttons -->
   <div id="headerButtons">
-    <button id="backButton" class="header-button" onclick="window.location.href='classes.html'"
-      data-translate-key="backToMenuButtonText">Back to Classes</button>
+    <button id="backButton" class="header-button" onclick="goBackToClasses()"
+      data-translate-key="backToClassesBtnText">Back to Classes</button>
     <button id="logoutButton" class="header-button" data-translate-key="logoutButtonText">Logout</button>
   </div>
 
@@ -53,7 +53,8 @@
           </tbody>
         </table>
       </div>
-      <button class="class-button" onclick="addStudentConfiguration()" data-translate-key="addStudentBtnText">Add Student</button>
+      <button class="class-button" onclick="addStudentConfiguration()" data-translate-key="addStudentBtnText">Add
+        Student</button>
     </section>
   </div>
 

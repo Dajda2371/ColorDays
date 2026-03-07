@@ -205,9 +205,9 @@ document.addEventListener('DOMContentLoaded', function () {
           <td>${student.note}</td>
           <td>${(student.counting_classes || []).join(', ')}</td>
           <td>
-            <button class="class-button" onclick="window.location.href='student-is-counting.html?code=${encodeURIComponent(student.code)}&day=${encodeURIComponent(dayFromUrl || '')}&class=${encodeURIComponent(classFromUrl || '')}'">Edit Classes</button>
-            <button class="class-button" onclick="showQrCode('${student.code}')">QR Code</button>
-            <button class="class-button" onclick="removeStudent('${student.code}', '${student.note?.replace(/'/g, "\\'") || ''}', '${student.class}')">Remove</button>
+            <button class="class-button" onclick="window.location.href='student-is-counting.html?code=${encodeURIComponent(student.code)}&day=${encodeURIComponent(dayFromUrl || '')}&class=${encodeURIComponent(classFromUrl || '')}'">${translations.editClassesBtnText?.[currentLanguage] || 'Edit Classes'}</button>
+            <button class="class-button" onclick="showQrCode('${student.code}')">${translations.qrCodeBtnText?.[currentLanguage] || 'QR Code'}</button>
+            <button class="class-button" onclick="removeStudent('${student.code}', '${student.note?.replace(/'/g, "\\'") || ''}', '${student.class}')">${translations.removeBtnText?.[currentLanguage] || 'Remove'}</button>
           </td>
         `;
             tbody.appendChild(tr);
@@ -346,3 +346,14 @@ document.addEventListener('DOMContentLoaded', function () {
     // Alias for backward compatibility if needed, though we will change HTML
     window.addStudentConfiguration = window.handleAddStudentRow;
 });
+
+function goBackToClasses() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const dayFromUrl = urlParams.get('day');
+    
+    let url = 'classes.html';
+    if (dayFromUrl) {
+        url += '?day=' + encodeURIComponent(dayFromUrl);
+    }
+    window.location.href = url;
+}

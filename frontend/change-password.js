@@ -54,7 +54,15 @@ function applyTranslations() {
 }
 
 function displayLoggedInUser() {
-    // skip for change password
+    const cookies = document.cookie.split('; ');
+    const usernameCookie = cookies.find(row => row.startsWith('ColorDaysUser='));
+    const usernameTextSpan = document.getElementById('usernameText');
+    if (usernameCookie && usernameTextSpan) {
+        const username = usernameCookie.split('=')[1];
+        usernameTextSpan.textContent = decodeURIComponent(username);
+    } else if (usernameTextSpan) {
+        usernameTextSpan.textContent = translations.usernameNotLoggedIn?.[currentLanguage] || (translations.usernameNotLoggedIn?.[currentLanguage] || 'Not Logged In');
+    }
 }
 
 function getCookie(name) {
@@ -115,6 +123,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
     currentLanguage = getCookie("language") || 'en';
     fetchTranslations().then(() => {
         setToggleState(currentLanguage);
+        displayLoggedInUser();
     });
 
     console.log("DOM fully loaded. Checking for cookie..."); // Log: DOM ready
