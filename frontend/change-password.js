@@ -1,3 +1,114 @@
+
+// --- NAVBAR LOGIC ADDED ---
+const logoutButton = document.getElementById('logoutButton');
+const languageToggle = document.getElementById('languageToggle');
+const toggleCs = document.getElementById('toggleCs');
+const toggleEn = document.getElementById('toggleEn');
+
+let translations = {};
+let currentLanguage = 'en';
+
+async function handleLogout() {
+    try {
+        const response = await fetch('/logout', {
+            method: 'POST',
+            credentials: 'include'
+        });
+        if (response.ok) {
+            window.location.href = '/login.html';
+        } else {
+            alert((translations.logoutFailedAlert?.[currentLanguage] || 'Logout failed'));
+        }
+    } catch (error) {
+        alert((translations.logoutErrorAlert?.[currentLanguage] || 'An error occurred during logout.'));
+    }
+}
+
+if (logoutButton) {
+    logoutButton.addEventListener('click', handleLogout);
+}
+
+async function fetchTranslations() {
+    try {
+        const response = await fetch('/api/translations');
+        if (!response.ok) return;
+        translations = await response.json();
+        applyTranslations();
+    } catch (error) {
+        console.error('Error fetching translations:', error);
+    }
+}
+
+function applyTranslations() {
+    document.querySelectorAll('[data-translate-key]').forEach(element => {
+        const key = element.getAttribute('data-translate-key');
+        const text = translations[key]?.[currentLanguage] || translations[key]?.['en'];
+        if (text) {
+            if (element.tagName === 'INPUT') {
+                element.placeholder = text;
+            } else {
+                element.textContent = text;
+            }
+        }
+    });
+}
+
+function displayLoggedInUser() {
+    // skip for change password
+}
+
+function getCookie(name) {
+    const nameEQ = name + "=";
+    const ca = document.cookie.split(';');
+    for (let i = 0; i < ca.length; i++) {
+        let c = ca[i];
+        while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+        if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+    }
+    return null;
+}
+
+async function setLanguagePreference(lang) {
+    try {
+        const response = await fetch('/api/language/set', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ language: lang }),
+            credentials: 'include'
+        });
+        if (response.ok) {
+            currentLanguage = lang;
+            applyTranslations(); window.location.reload(); window.location.reload();
+        }
+    } catch (error) {
+        console.error('Error setting language:', error);
+    }
+}
+
+function setToggleState(lang) {
+    if (toggleCs && toggleEn) {
+        if (lang === 'cs') {
+            toggleCs.classList.add('active');
+            toggleEn.classList.remove('active');
+        } else {
+            toggleEn.classList.add('active');
+            toggleCs.classList.remove('active');
+        }
+    }
+}
+
+if (languageToggle) {
+    languageToggle.addEventListener('click', (event) => {
+        const target = event.target;
+        if (target.tagName === 'SPAN' && target.dataset.lang) {
+            const selectedLang = target.dataset.lang;
+            setLanguagePreference(selectedLang);
+            setToggleState(selectedLang);
+        }
+    });
+}
+// --- END NAVBAR LOGIC ---
+
 // Wait for the HTML document to be fully loaded before running the script
 document.addEventListener('DOMContentLoaded', (event) => {
     console.log("DOM fully loaded. Checking for cookie..."); // Log: DOM ready

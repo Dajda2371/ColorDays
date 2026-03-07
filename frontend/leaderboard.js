@@ -146,7 +146,7 @@ async function setLanguagePreference(lang) {
 
         if (response.ok) {
             currentLanguage = lang;
-            applyTranslations();
+            applyTranslations(); window.location.reload(); window.location.reload();
             loadLeaderboard(); // Reload data
             displayLoggedInUser();
         } else {

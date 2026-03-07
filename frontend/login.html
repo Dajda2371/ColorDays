@@ -10,6 +10,12 @@
 
 <body>
     <h1 data-translate-key="loginHeading">Login to Color Days Counter</h1>
+    <div id="leftSideContainer">
+        <div id="languageToggle">
+            <span id="toggleCs" data-lang="cs">Čeština</span>
+            <span id="toggleEn" data-lang="en">English</span>
+        </div>
+    </div>
     <div id="login-sections-container">
         <section>
             <h2 data-translate-key="loginAsStudent">Login as Student</h2>
@@ -23,7 +29,8 @@
         </section>
         <section>
             <h2 data-translate-key="loginAsTeacher">Login as Teacher</h2>
-            <button onclick="window.location.href='/login/google'" class="btn-google" data-translate-key="loginWithGoogle">Login with Google</button>
+            <button onclick="window.location.href='/login/google'" class="btn-google"
+                data-translate-key="loginWithGoogle">Login with Google</button>
             <p class="text-separator" data-translate-key="orText">or</p>
             <form id="loginForm" class="mt-1rem">
                 <div>
