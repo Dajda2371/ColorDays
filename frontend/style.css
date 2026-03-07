@@ -46,7 +46,7 @@ th {
   font-weight: 600;
 }
 
-tfoot td {
+tfoot tr:first-child td {
   border-top: 3px solid #666;
 }
 
