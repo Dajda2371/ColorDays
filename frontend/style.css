@@ -733,14 +733,17 @@ body {
 }
 
 #students-table td:last-child {
-  white-space: nowrap;
-  width: 1%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  justify-content: center;
+  align-items: center;
+  min-width: 120px;
 }
 
 #students-table td:last-child button {
-  display: inline-block;
-  width: auto;
-  margin: 2px;
+  margin: 0;
+  flex: 1 1 auto;
 }
 
 
