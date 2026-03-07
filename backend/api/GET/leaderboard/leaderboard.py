@@ -35,10 +35,11 @@ def get_leaderboard(request: Request, user_info=Depends(get_current_user_info)):
                     class_teachers = 0
                     for type_val, points_data in type_data.items():
                         for points_val, count in points_data.items():
-                            class_score += points_val * count
                             if type_val == 'student':
+                                class_score += points_val * count
                                 class_students += count
                             elif type_val == 'teacher':
+                                class_score += (points_val * count) * 2
                                 class_teachers += count
                     scores[class_name]['score'] += class_score
                     scores[class_name]['students'] += class_students
