@@ -350,15 +350,6 @@ input[type="checkbox"] {
     /* Force block to stack vertically */
   }
 
-  #students-table td:last-child {
-    white-space: nowrap;
-  }
-
-  #students-table td:last-child button {
-    display: inline-block;
-    width: auto;
-    margin: 2px;
-  }
 
   /* Scale class buttons on mobile properly */
   #dynamicClassList {
@@ -738,6 +729,17 @@ body {
 
 .narrow-col input[type="checkbox"] {
   margin: 0 4px;
+}
+
+#students-table td:last-child {
+  white-space: nowrap;
+  width: 1%;
+}
+
+#students-table td:last-child button {
+  display: inline-block;
+  width: auto;
+  margin: 2px;
 }
 
 
