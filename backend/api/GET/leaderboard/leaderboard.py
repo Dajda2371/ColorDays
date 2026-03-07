@@ -54,8 +54,8 @@ def get_leaderboard(request: Request, user_info=Depends(get_current_user_info)):
         students = v['students']
         teachers = v['teachers']
         if score > 0:
-            # As requested: ((number of students * 6) + (number of teachers * 8)) / total class points
-            percentage = round((((students * 6) + (teachers * 8)) / score) * 100, 2)
+            # As requested: ((number of students * 6) + (number of teachers * 12)) / total class points
+            percentage = round((((students * 6) + (teachers * 12)) / score) * 100, 2)
         else:
             percentage = 0
             
