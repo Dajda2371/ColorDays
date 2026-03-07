@@ -6,9 +6,182 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>User Configuration</title>
   <link rel="stylesheet" href="style.css" />
+  <style>
+      /* Reuse styles from menu.html */
+      #leftSideContainer {
+      position: fixed;
+      top: 15px;
+      left: 15px;
+      padding: 15px;
+      border: 1px solid #e0e0e0;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+      border-radius: 8px;
+      background-color: white;
+      z-index: 1000;
+    }
+
+    #languageToggle {
+      display: flex;
+      border: 1px solid #ced4da;
+      border-radius: 6px;
+      overflow: hidden;
+      margin-top: 10px;
+      background-color: #fff;
+    }
+
+    #languageToggle span {
+      flex-grow: 1;
+      text-align: center;
+      padding: 8px 12px;
+      cursor: pointer;
+      background-color: #f8f9fa;
+      color: #495057;
+      transition: all 0.2s ease;
+      user-select: none;
+      font-size: 0.9rem;
+    }
+
+    #languageToggle span.active {
+      background-color: #007bff;
+      color: white;
+      font-weight: 600;
+    }
+
+    #mainContent {
+      max-width: 800px;
+      padding: 20px;
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      text-align: center;
+      box-sizing: border-box;
+      width: 100%;
+    }
+
+    #headerButtons {
+      position: fixed;
+      top: 15px;
+      right: 15px;
+      display: flex;
+      gap: 10px;
+      z-index: 1000;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .header-button {
+      padding: 10px 15px;
+      cursor: pointer;
+      background-color: #f8f9fa;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      transition: all 0.2s ease;
+      font-size: 0.9rem;
+      min-height: 40px;
+    }
+
+    .header-button:hover {
+      background-color: #007bff;
+    }
+
+    body {
+      padding-top: 100px;
+      padding-left: 0;
+      background-color: #fdfdfd;
+    }
+
+    #loggedInUser {
+      display: flex;
+      align-items: center;
+      font-weight: 600;
+      color: #333;
+      font-size: 0.95rem;
+    }
+
+    #profileCircle {
+      width: 32px;
+      height: 32px;
+      background-color: #adb5bd;
+      border-radius: 50%;
+      margin-right: 10px;
+      flex-shrink: 0;
+    }
+
+    @media (max-width: 768px) {
+      #leftSideContainer {
+        position: static;
+        margin: 0 auto 15px auto;
+        width: 90%;
+        max-width: 400px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      #loggedInUser {
+        margin-bottom: 10px;
+        width: 100%;
+        justify-content: center;
+      }
+
+      #languageToggle {
+        width: 100%;
+      }
+
+      #headerButtons {
+        position: static;
+        flex-direction: column;
+        width: 90%;
+        margin: 0 auto 20px auto;
+        max-width: 400px;
+        gap: 8px;
+      }
+
+      .header-button {
+        width: 100%;
+        text-align: center;
+        padding: 12px;
+      }
+
+      #mainContent {
+        position: static;
+        transform: none;
+        width: 100%;
+        padding: 10px;
+      }
+
+      body {
+        padding-top: 10px;
+        padding-bottom: 30px;
+      }
+    }
+  </style>
 </head>
 
 <body>
+  <!-- Container for Left Side Elements (User Info and Language Toggle) -->
+  <div id="leftSideContainer">
+    <!-- Element to display the logged-in username -->
+    <div id="loggedInUser">
+      <div id="profileCircle"></div>
+      <span id="usernameText"></span>
+    </div>
+    <!-- Language Toggle -->
+    <div id="languageToggle">
+      <span id="toggleCs" data-lang="cs">Čeština</span>
+      <span id="toggleEn" data-lang="en">English</span>
+    </div>
+  </div>
+
+  <!-- Container for Header Buttons -->
+  <div id="headerButtons">
+    <button id="backButton" class="header-button" onclick="window.location.href='students.html'"
+      data-translate-key="backToMenuButtonText">Back to Students</button>
+    <button id="logoutButton" class="header-button" data-translate-key="logoutButtonText">Logout</button>
+  </div>
+
+  <!-- Main Content Container -->
+  <div id="mainContent">
   <h1>Students</h1>
   <p>This page lists student configurations for counting specific classes.</p>
 
@@ -29,7 +202,7 @@
       </table>
     </div>
   </section>
-  <p style="margin-top: 2rem;"><a id="backToStudentsLink" href="students.html">Back to Students</a></p>
+  </div>
   <script src="student-is-counting.js"></script>
 </body>
 
