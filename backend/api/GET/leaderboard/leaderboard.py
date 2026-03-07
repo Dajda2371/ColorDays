@@ -18,8 +18,8 @@ def get_leaderboard(request: Request, user_info=Depends(get_current_user_info)):
     if not (user_role in [ADMIN_ROLE, TEACHER_ROLE] or is_student_session):
         raise HTTPException(status_code=403, detail="Forbidden: Access denied.")
 
-    # Initialize scores for all classes
-    scores = {cls['class']: 0 for cls in class_data_store}
+    # Initialize scores and people count for all classes
+    scores = {cls['class']: {'score': 0, 'people': 0} for cls in class_data_store}
 
     days = ["monday", "tuesday", "wednesday"]
 
@@ -31,16 +31,35 @@ def get_leaderboard(request: Request, user_info=Depends(get_current_user_info)):
             for class_name, type_data in day_counts.items():
                 if class_name in scores:
                     class_score = 0
+                    class_people = 0
                     for type_val, points_data in type_data.items():
                         for points_val, count in points_data.items():
                             class_score += points_val * count
-                    scores[class_name] += class_score
+                            class_people += count
+                    scores[class_name]['score'] += class_score
+                    scores[class_name]['people'] += class_people
         except Exception as e:
             print(f"Error loading counts for {day}: {e}")
             # Continue to next day, or maybe raise error? prefer continue to show partial results
 
     # Convert to list and sort
-    leaderboard_data = [{"class": k, "score": v} for k, v in scores.items()]
+    leaderboard_data = []
+    for k, v in scores.items():
+        score = v['score']
+        people = v['people']
+        if score > 0:
+            # As requested: total students + teachers (people) divided by total class points (score)
+            percentage = round((people / score) * 100, 2)
+        else:
+            percentage = 0
+            
+        leaderboard_data.append({
+            "class": k,
+            "score": score,
+            "people": people,
+            "percentage": f"{percentage}%"
+        })
+
     leaderboard_data.sort(key=lambda x: x["score"], reverse=True)
 
     return leaderboard_data

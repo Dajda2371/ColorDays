@@ -67,7 +67,7 @@ function applyTranslations() {
 // --- Function to fetch and display leaderboard ---
 async function loadLeaderboard() {
     const loadingMessage = translations.loadingLeaderboardText?.[currentLanguage] || translations.loadingLeaderboardText?.['en'] || 'Loading leaderboard...';
-    leaderboardTable.innerHTML = `<tr><td colspan="3">${loadingMessage}</td></tr>`;
+    leaderboardTable.innerHTML = `<tr><td colspan="4">${loadingMessage}</td></tr>`;
 
     try {
         const response = await fetch('/api/leaderboard', { credentials: 'include' });
@@ -80,7 +80,7 @@ async function loadLeaderboard() {
         leaderboardTable.innerHTML = ''; // Clear loading message
 
         if (leaderboardData.length === 0) {
-            leaderboardTable.innerHTML = `<tr><td colspan="3">${translations.noDataText?.[currentLanguage] || 'No data available'}</td></tr>`;
+            leaderboardTable.innerHTML = `<tr><td colspan="4">${translations.noDataText?.[currentLanguage] || 'No data available'}</td></tr>`;
             return;
         }
 
@@ -89,6 +89,7 @@ async function loadLeaderboard() {
             row.innerHTML = `
                 <td>${index + 1}</td>
                 <td>${entry.class}</td>
+                <td>${entry.percentage}</td>
                 <td>${entry.score}</td>
             `;
             leaderboardTable.appendChild(row);
@@ -96,7 +97,7 @@ async function loadLeaderboard() {
 
     } catch (error) {
         console.error('Error loading leaderboard:', error);
-        leaderboardTable.innerHTML = `<tr><td colspan="3" style="color:red;">Error loading leaderboard: ${error.message}</td></tr>`;
+        leaderboardTable.innerHTML = `<tr><td colspan="4" style="color:red;">Error loading leaderboard: ${error.message}</td></tr>`;
     }
 }
 
@@ -145,7 +146,7 @@ async function setLanguagePreference(lang) {
             loadLeaderboard(); // Reload data
             displayLoggedInUser();
         } else {
-             console.error('Failed to set language preference:', response.status);
+            console.error('Failed to set language preference:', response.status);
         }
     } catch (error) {
         console.error('Error during setLanguagePreference fetch:', error);
