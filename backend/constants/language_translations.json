@@ -1,0 +1,638 @@
+{
+  "mainHeading": {
+    "en": "Color Days Counter",
+    "cs": "Počítadlo Barevných Dnů"
+  },
+  "selectClassSubheading": {
+    "en": "Select Your Class:",
+    "cs": "Vyberte svou třídu:"
+  },
+  "classesButtonText": {
+    "en": "Classes",
+    "cs": "Třídy"
+  },
+  "configButtonText": {
+    "en": "Config",
+    "cs": "Konfigurace"
+  },
+  "changePasswordButtonText": {
+    "en": "Change Password",
+    "cs": "Změnit Heslo"
+  },
+  "logoutButtonText": {
+    "en": "Logout",
+    "cs": "Odhlásit se"
+  },
+  "loadingClassesText": {
+    "en": "Loading classes...",
+    "cs": "Načítání tříd..."
+  },
+  "noClassesToCountStudentText": {
+    "en": "You have no classes to count for the currently scheduled days, or no days are assigned for your class to supervise counting.",
+    "cs": "Nemáte žádné třídy k počítání pro aktuálně naplánované dny, nebo pro vaši třídu nejsou přiřazeny žádné dny k dozoru nad počítáním."
+  },
+  "noClassesScheduledAdminText": {
+    "en": "No classes are scheduled or assigned for these days.",
+    "cs": "Pro tyto dny nejsou naplánovány ani přiřazeny žádné třídy."
+  },
+  "dayMonday": {
+    "en": "Monday",
+    "cs": "Pondělí"
+  },
+  "dayTuesday": {
+    "en": "Tuesday",
+    "cs": "Úterý"
+  },
+  "dayWednesday": {
+    "en": "Wednesday",
+    "cs": "Středa"
+  },
+  "languageUpdateSuccessAlert": {
+    "en": "Language preference updated to {lang}. You might need to reload the page for changes to take full effect.",
+    "cs": "Jazykové preference aktualizovány na {lang}. Možná budete muset obnovit stránku, aby se změny plně projevily."
+  },
+  "languageUpdateFailedAlert": {
+    "en": "Failed to set language: {error}",
+    "cs": "Nepodařilo se nastavit jazyk: {error}"
+  },
+  "languageUpdateErrorAlert": {
+    "en": "An error occurred while setting language preference. Please check your connection.",
+    "cs": "Při nastavování jazykových preferencí došlo k chybě. Zkontrolujte prosím své připojení."
+  },
+  "usernameNotLoggedIn": {
+    "en": "Not Logged In",
+    "cs": "Nepřihlášen"
+  },
+  "rankHeader": {
+    "en": "Rank",
+    "cs": "Pořadí"
+  },
+  "classHeader": {
+    "en": "Class",
+    "cs": "Třída"
+  },
+  "scoreHeader": {
+    "en": "Score",
+    "cs": "Skóre"
+  },
+  "percentageHeader": {
+    "en": "Percentage",
+    "cs": "Procentuálně"
+  },
+  "leaderboardHeading": {
+    "en": "Leaderboard",
+    "cs": "Výsledková listina"
+  },
+  "leaderboardButtonText": {
+    "en": "Leaderboard",
+    "cs": "Výsledková listina"
+  },
+  "backToMenuButtonText": {
+    "en": "Back to Menu",
+    "cs": "Zpět do menu"
+  },
+  "loadingText": {
+    "en": "Loading...",
+    "cs": "Načítání..."
+  },
+  "pointsHeader": {
+    "en": "Points",
+    "cs": "Body"
+  },
+  "studentsHeader": {
+    "en": "Students",
+    "cs": "Studenti"
+  },
+  "teachersHeader": {
+    "en": "Teachers",
+    "cs": "Učitelé"
+  },
+  "loadingLowerText": {
+    "en": "loading ...",
+    "cs": "načítání ..."
+  },
+  "totalPeopleText": {
+    "en": "Total People",
+    "cs": "Celkem osob"
+  },
+  "totalPointsText": {
+    "en": "Total Points",
+    "cs": "Celkem bodů"
+  },
+  "studentButtonsHeading": {
+    "en": "Student Buttons",
+    "cs": "Tlačítka studentů"
+  },
+  "teacherButtonsHeading": {
+    "en": "Teacher Buttons",
+    "cs": "Tlačítka učitelů"
+  },
+  "backToClassSelectionText": {
+    "en": "Back to Class Selection",
+    "cs": "Zpět na výběr třídy"
+  },
+  "noClassSelectedAlert": {
+    "en": "No class selected. Redirecting to the menu.",
+    "cs": "Nebyla vybrána žádná třída. Přesměrování do menu."
+  },
+  "logoutFailedAlert": {
+    "en": "Logout failed",
+    "cs": "Odhlášení se nezdařilo"
+  },
+  "logoutErrorAlert": {
+    "en": "An error occurred during logout.",
+    "cs": "Během odhlášení došlo k chybě."
+  },
+  "classContextLostAlert": {
+    "en": "Error: Class context lost. Please refresh or go back to menu.",
+    "cs": "Chyba: Ztratil se kontext třídy. Obnovte stránku nebo se vraťte do menu."
+  },
+  "cannotDecrementAlert": {
+    "en": "Count is already zero.",
+    "cs": "Počet je již nula."
+  },
+  "failedToIncrementAlert": {
+    "en": "Failed to increment count.",
+    "cs": "Nepodařilo se zvýšit počet."
+  },
+  "failedToDecrementAlert": {
+    "en": "Failed to decrement count.",
+    "cs": "Nepodařilo se snížit počet."
+  },
+  "loadingLeaderboardText": {
+    "en": "Loading leaderboard...",
+    "cs": "Načítání výsledkové listiny..."
+  },
+  "noDataText": {
+    "en": "No data available",
+    "cs": "Žádná data nejsou k dispozici"
+  },
+  "errorLoadingLeaderboardPrefix": {
+    "en": "Error loading leaderboard: ",
+    "cs": "Chyba při načítání výsledkové listiny: "
+  },
+  "loginHeading": {
+    "en": "Login to Color Days Counter",
+    "cs": "Přihlášení do Počítadla Barevných Dnů"
+  },
+  "loginAsStudent": {
+    "en": "Login as Student",
+    "cs": "Přihlásit se jako student"
+  },
+  "codeLabel": {
+    "en": "Code:",
+    "cs": "Kód:"
+  },
+  "loginButton": {
+    "en": "Login",
+    "cs": "Přihlásit se"
+  },
+  "loginAsTeacher": {
+    "en": "Login as Teacher",
+    "cs": "Přihlásit se jako učitel"
+  },
+  "loginWithGoogle": {
+    "en": "Login with Google",
+    "cs": "Přihlásit se přes Google"
+  },
+  "orText": {
+    "en": "or",
+    "cs": "nebo"
+  },
+  "usernameLabel": {
+    "en": "Username:",
+    "cs": "Uživatelské jméno:"
+  },
+  "passwordLabel": {
+    "en": "Password:",
+    "cs": "Heslo:"
+  },
+  "enterStudentCodeError": {
+    "en": "Please enter your student code.",
+    "cs": "Zadejte prosím svůj studentský kód."
+  },
+  "loginFailedStatusError": {
+    "en": " login failed. Server returned status: ",
+    "cs": " přihlášení selhalo. Server vrátil stav: "
+  },
+  "loginFailedTryAgainError": {
+    "en": " login failed. Please try again.",
+    "cs": " přihlášení selhalo. Zkuste to prosím znovu."
+  },
+  "unexpectedLoginError": {
+    "en": "An unexpected error occurred during ",
+    "cs": "Došlo k neočekávané chybě během "
+  },
+  "invalidGoogleDomainAlert": {
+    "en": "Tato e-mailová doména není pro Google přihlášení povolena.",
+    "cs": "Tato e-mailová doména není pro Google přihlášení povolena."
+  },
+  "classesTitle": {
+    "en": "Classes - Color Days",
+    "cs": "Třídy - Barevné Dny"
+  },
+  "daysHeading": {
+    "en": "Days",
+    "cs": "Dny"
+  },
+  "classCountingListHeading": {
+    "en": "Class Counting List",
+    "cs": "Seznam tříd pro sčítání"
+  },
+  "splitEvenlyBtnText": {
+    "en": "Split Evenly",
+    "cs": "Rozdělit rovnoměrně"
+  },
+  "splitRandomlyBtnText": {
+    "en": "Split Randomly",
+    "cs": "Rozdělit náhodně"
+  },
+  "clearAllBtnText": {
+    "en": "Clear All",
+    "cs": "Vymazat vše"
+  },
+  "mondayHeader": {
+    "en": "Monday",
+    "cs": "Pondělí"
+  },
+  "tuesdayHeader": {
+    "en": "Tuesday",
+    "cs": "Úterý"
+  },
+  "wednesdayHeader": {
+    "en": "Wednesday",
+    "cs": "Středa"
+  },
+  "confirmSplitEvenly": {
+    "en": "Are you sure you want to split counting duties evenly? This will overwrite existing assignments.",
+    "cs": "Opravdu chcete rozdělit povinnosti sčítání rovnoměrně? Tím se přepíšou stávající přiřazení."
+  },
+  "confirmSplitRandomly": {
+    "en": "Are you sure you want to split counting duties randomly? This will overwrite existing assignments.",
+    "cs": "Opravdu chcete rozdělit povinnosti sčítání náhodně? Tím se přepíšou stávající přiřazení."
+  },
+  "confirmClearAll": {
+    "en": "Are you sure you want to CLEAR ALL counting assignments? This cannot be undone.",
+    "cs": "Opravdu chcete VYMAZAT VŠECHNA přiřazení sčítání? Tento krok nelze vrátit zpět."
+  },
+  "noUpdatesToApply": {
+    "en": "No updates to apply (maybe no classes are set to count?).",
+    "cs": "Žádné aktualizace k provedení (možná nejsou nastaveny žádné třídy pro sčítání?)."
+  },
+  "noClassesAvailableText": {
+    "en": "No classes available to display.",
+    "cs": "Nejsou k dispozici žádné třídy k zobrazení."
+  },
+  "noClassCountingDataText": {
+    "en": "No class counting data available.",
+    "cs": "Nejsou k dispozici žádná data o sčítání tříd."
+  },
+  "prefillClassesBtnText": {
+    "en": "Prefill Classes from Website",
+    "cs": "Předvyplnit třídy z webu"
+  },
+  "scrapingText": {
+    "en": "Scraping...",
+    "cs": "Stahování..."
+  },
+  "failedLoadClassButtons": {
+    "en": "Failed to load class buttons. Please check the console for errors.",
+    "cs": "Nepodařilo se načíst tlačítka tříd. Zkontrolujte chyby v konzoli."
+  },
+  "naText": {
+    "en": "N/A",
+    "cs": "N/A"
+  },
+  "errorSavingChange": {
+    "en": "Error saving change: ",
+    "cs": "Chyba při ukládání změny: "
+  },
+  "errorUpdating": {
+    "en": "Error updating: ",
+    "cs": "Chyba při aktualizaci: "
+  },
+  "backToClassesButtonText": {
+    "en": "Back to Classes",
+    "cs": "Zpět na třídy"
+  },
+  "studentListHeading": {
+    "en": "Student List",
+    "cs": "Seznam studentů"
+  },
+  "codeHeader": {
+    "en": "Code",
+    "cs": "Kód"
+  },
+  "noteHeader": {
+    "en": "Note",
+    "cs": "Poznámka"
+  },
+  "countingClassesHeader": {
+    "en": "Counting Classes",
+    "cs": "Třídy na sčítání"
+  },
+  "actionsHeader": {
+    "en": "Actions",
+    "cs": "Akce"
+  },
+  "addStudentBtnText": {
+    "en": "Add Student",
+    "cs": "Přidat studenta"
+  },
+  "errorLoadingStudents": {
+    "en": "Error loading students: ",
+    "cs": "Chyba při načítání studentů: "
+  },
+  "editClassesBtnText": {
+    "en": "Edit Classes",
+    "cs": "Upravit třídy"
+  },
+  "qrCodeBtnText": {
+    "en": "QR Code",
+    "cs": "QR kód"
+  },
+  "removeBtnText": {
+    "en": "Remove",
+    "cs": "Odebrat"
+  },
+  "confirmRemoveStudent": {
+    "en": "Are you sure you want to remove the student configuration:\nCode: {code}\nClass: {class}",
+    "cs": "Opravdu chcete odebrat konfiguraci studenta:\nKód: {code}\nTřída: {class}"
+  },
+  "noNoteText": {
+    "en": "(No note)",
+    "cs": "(Žádná poznámka)"
+  },
+  "studentRemovedSuccess": {
+    "en": "Student configuration removed successfully.",
+    "cs": "Konfigurace studenta úspěšně odebrána."
+  },
+  "errorRemovingStudent": {
+    "en": "Error removing student configuration: ",
+    "cs": "Chyba při odebírání konfigurace studenta: "
+  },
+  "autoGeneratedText": {
+    "en": "Auto-generated",
+    "cs": "Automaticky generováno"
+  },
+  "classPlaceholderText": {
+    "en": "Class (e.g. 9.A)",
+    "cs": "Třída (např. 9.A)"
+  },
+  "notePlaceholderText": {
+    "en": "Note",
+    "cs": "Poznámka"
+  },
+  "saveBtnText": {
+    "en": "Save",
+    "cs": "Uložit"
+  },
+  "cancelBtnText": {
+    "en": "Cancel",
+    "cs": "Zrušit"
+  },
+  "classNameRequiredText": {
+    "en": "Class name is required.",
+    "cs": "Je vyžadován název třídy."
+  },
+  "userManagementHeading": {
+    "en": "User Management",
+    "cs": "Správa uživatelů"
+  },
+  "passwordStatusHeader": {
+    "en": "Password Status",
+    "cs": "Stav hesla"
+  },
+  "classManagementHeading": {
+    "en": "Class Management",
+    "cs": "Správa tříd"
+  },
+  "teacherHeader": {
+    "en": "Teacher",
+    "cs": "Učitel"
+  },
+  "countsHeader": {
+    "en": "Counts",
+    "cs": "Počítá"
+  },
+  "addClassBtnText": {
+    "en": "Add Class",
+    "cs": "Přidat třídu"
+  },
+  "oauthManagementHeading": {
+    "en": "Oauth Management",
+    "cs": "Správa OAuth"
+  },
+  "enableOauthLabel": {
+    "en": "Enable:",
+    "cs": "Povolit:"
+  },
+  "domainHeader": {
+    "en": "domain",
+    "cs": "doména"
+  },
+  "addDomainBtnText": {
+    "en": "Add Domain",
+    "cs": "Přidat doménu"
+  },
+  "notSetStatus": {
+    "en": "not set",
+    "cs": "nenastaveno"
+  },
+  "setStatus": {
+    "en": "set",
+    "cs": "nastaveno"
+  },
+  "googleAuthStatus": {
+    "en": "Google Auth",
+    "cs": "Google přihlášení"
+  },
+  "setPasswordBtnText": {
+    "en": "Set Password",
+    "cs": "Nastavit heslo"
+  },
+  "resetPasswordBtnText": {
+    "en": "Reset Password",
+    "cs": "Obnovit heslo"
+  },
+  "enterNewUsernamePrompt": {
+    "en": "Enter new username:",
+    "cs": "Zadejte nové uživatelské jméno:"
+  },
+  "usernameEmptyError": {
+    "en": "Username cannot be empty.",
+    "cs": "Uživatelské jméno nesmí být prázdné."
+  },
+  "usernameExistsError": {
+    "en": "Username already exists locally. Refresh if needed.",
+    "cs": "Uživatelské jméno již lokálně existuje. V případě potřeby obnovte stránku."
+  },
+  "userAddedSuccess": {
+    "en": "User added successfully!",
+    "cs": "Uživatel úspěšně přidán!"
+  },
+  "failedAddUser": {
+    "en": "Failed to add user",
+    "cs": "Nepodařilo se přidat uživatele"
+  },
+  "confirmRemoveUser": {
+    "en": "Remove user ",
+    "cs": "Odebrat uživatele "
+  },
+  "failedRemoveUser": {
+    "en": "Failed to remove user",
+    "cs": "Nepodařilo se odebrat uživatele"
+  },
+  "failedResetPassword": {
+    "en": "Failed to reset password",
+    "cs": "Nepodařilo se obnovit heslo"
+  },
+  "usernamePasswordRequired": {
+    "en": "Username and new password required.",
+    "cs": "Je vyžadováno uživatelské jméno a nové heslo."
+  },
+  "newClassPlaceholder": {
+    "en": "New Class (e.g. 1.A)",
+    "cs": "Nová třída (např. 1.A)"
+  },
+  "teacherNamePlaceholder": {
+    "en": "Teacher Name",
+    "cs": "Jméno učitele"
+  },
+  "confirmScrapeClasses": {
+    "en": "Are you sure you want to scrape classes from the school website? This will add any new classes found.",
+    "cs": "Opravdu chcete stáhnout seznam tříd ze stránek školy? Přidají se tím nalezené nové třídy."
+  },
+  "errorLoadingClassesText": {
+    "en": "Error loading classes.",
+    "cs": "Chyba při načítání tříd."
+  },
+  "pleaseEnterClassName": {
+    "en": "Please enter a class name.",
+    "cs": "Zadejte prosím název třídy."
+  },
+  "confirmRemoveClass": {
+    "en": "Are you sure you want to remove class ",
+    "cs": "Opravdu chcete odebrat třídu "
+  },
+  "enterNewDomainPrompt": {
+    "en": "Enter the new allowed domain (e.g., example.com):",
+    "cs": "Zadejte novou povolenou doménu (např. example.com):"
+  },
+  "domainEmptyError": {
+    "en": "Domain name cannot be empty.",
+    "cs": "Název domény nesmí být prázdný."
+  },
+  "changePasswordHeading": {
+    "en": "Change Password",
+    "cs": "Změnit heslo"
+  },
+  "oldPasswordLabel": {
+    "en": "Old password:",
+    "cs": "Staré heslo:"
+  },
+  "newPasswordLabel": {
+    "en": "New password:",
+    "cs": "Nové heslo:"
+  },
+  "invalidPasswordError": {
+    "en": "Invalid password.",
+    "cs": "Neplatné heslo."
+  },
+  "changePasswordRequestFailed": {
+    "en": "Change password request failed. Please check your connection or contact support.",
+    "cs": "Požadavek na změnu hesla selhal. Zkontrolujte prosím připojení nebo kontaktujte podporu."
+  },
+  "backToStudentsButtonText": {
+    "en": "Back to Students",
+    "cs": "Zpět na studenty"
+  },
+  "isCountedByHeader": {
+    "en": "Is Counted By",
+    "cs": "Je sčítán kým"
+  },
+  "errorStudentCodeMissing": {
+    "en": "Error: Student Code Missing",
+    "cs": "Chyba: Chybí kód studenta"
+  },
+  "noStudentCodeUrl": {
+    "en": "No student code provided in the URL.",
+    "cs": "V URL nebyl poskytnut žádný kód studenta."
+  },
+  "errorDayParameterInvalid": {
+    "en": "Error: Day Parameter Invalid",
+    "cs": "Chyba: Neplatný parametr dne"
+  },
+  "dayParameterMissing": {
+    "en": "Day parameter is missing or invalid (must be 1, 2, or 3).",
+    "cs": "Parametr dne chybí nebo je neplatný (musí být 1, 2 nebo 3)."
+  },
+  "studentNotAssignedAnyClasses": {
+    "en": "This student's class is not assigned to count any classes on ",
+    "cs": "Třída tohoto studenta není přiřazena k žádnému sčítání tříd v den "
+  },
+  "menuTitle": {
+    "en": "Color Days - Menu",
+    "cs": "Barevné Dny - Menu"
+  },
+  "loginTitle": {
+    "en": "Login - Color Days",
+    "cs": "Přihlášení - Barevné Dny"
+  },
+  "changePasswordTitle": {
+    "en": "Change Password - Color Days",
+    "cs": "Změnit heslo - Barevné Dny"
+  },
+  "configTitle": {
+    "en": "User Configuration",
+    "cs": "Konfigurace uživatelů"
+  },
+  "studentIsCountingTitle": {
+    "en": "Student Counting Configuration",
+    "cs": "Konfigurace sčítání pro studenta"
+  },
+  "noUpdatesAppliedOrNoCountingClasses": {
+    "en": "No updates to apply (maybe no classes are set to count?).",
+    "cs": "Žádné aktualizace k použití (možná nejsou nastaveny žádné sčítací třídy?)."
+  },
+  "studentsForClassText": {
+    "en": "Students for Class: ",
+    "cs": "Studenti třídy: "
+  },
+  "errorSpecificClassAssignments": {
+    "en": "Could not load your specific class assignments. Showing all available classes.",
+    "cs": "Nepodařilo se načíst vaše konkrétní přiřazení tříd. Zobrazují se všechny dostupné třídy."
+  },
+  "errorAssignedClasses": {
+    "en": "Could not load your assigned classes. You may not be assigned to any.",
+    "cs": "Nepodařilo se načíst vaše přiřazené třídy. Možná nejste k žádné přiřazeni."
+  },
+  "errorLoadingClassesSuffix": {
+    "en": "Error loading classes: {error}. Please try again later or contact support.",
+    "cs": "Chyba při načítání tříd: {error}. Zkuste to prosím znovu později nebo kontaktujte podporu."
+  },
+  "errorMainClassNotSet": {
+    "en": "Your main class is not set. Cannot determine days to display.",
+    "cs": "Vaše hlavní třída není nastavena. Nelze určit dny k zobrazení."
+  },
+  "serverErrorText": {
+    "en": "Server error",
+    "cs": "Chyba serveru"
+  },
+  "unknownErrorText": {
+    "en": "Unknown error",
+    "cs": "Neznámá chyba"
+  },
+  "usernamePlaceholder": {
+    "en": "Username",
+    "cs": "Uživatelské jméno"
+  },
+  "passwordPlaceholder": {
+    "en": "Password",
+    "cs": "Heslo"
+  },
+  "newPasswordPlaceholder": {
+    "en": "New Password",
+    "cs": "Nové heslo"
+  }
+}

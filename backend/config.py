@@ -56,7 +56,7 @@ GOOGLE_COOKIE_NAME = "GoogleAuthUser"
 SQL_COOKIE_NAME = "SQLAuthUser"
 SQL_AUTH_USER_STUDENT_COOKIE_NAME = "SQLAuthUserStudent"
 LANGUAGE_COOKIE_NAME = "language"
-TRANSLATIONS_FILE_PATH = DATA_DIR / 'language_translations.json'
+TRANSLATIONS_FILE_PATH = BACKEND_DIR / 'constants' / 'language_translations.json'
 
 DATABASE_FILE = DATA_DIR / 'data.db'
 YEAR_DATABASE_FILE = DATA_DIR / f"{datetime.datetime.now().year}.db"
