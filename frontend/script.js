@@ -19,7 +19,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const classTeacherElement = document.getElementById('classTeacher');
     if (classNameElement) {
         // Find if we have translations loaded somewhere, else fallback correctly
-        classNameElement.textContent = `${decodeURIComponent(currentClassName)} | ${currentDayIdentifier.charAt(0).toUpperCase() + currentDayIdentifier.slice(1)}`;
+        let dayKey = '';
+        const dayLower = currentDayIdentifier.toLowerCase();
+        if (dayLower === 'monday' || dayLower === '1') dayKey = 'dayMonday';
+        else if (dayLower === 'tuesday' || dayLower === '2') dayKey = 'dayTuesday';
+        else if (dayLower === 'wednesday' || dayLower === '3') dayKey = 'dayWednesday';
+
+        let dayDisplay = currentDayIdentifier.charAt(0).toUpperCase() + currentDayIdentifier.slice(1);
+
+        if (dayKey) {
+            classNameElement.innerHTML = `${decodeURIComponent(currentClassName)} | <span data-translate-key="${dayKey}">${dayDisplay}</span>`;
+        } else {
+            classNameElement.textContent = `${decodeURIComponent(currentClassName)} | ${dayDisplay}`;
+        }
         classNameElement.removeAttribute('data-translate-key');
     } else {
         console.error("Element with ID 'className' not found.");
