@@ -1,11 +1,10 @@
 document.addEventListener('DOMContentLoaded', function () {
     const studentIsCountingTableBody = document.getElementById('student-is-counting-table-body');
-    const pageTitleElement = document.querySelector('h1'); // Assuming the main h1 is for the student's name/note
-    const subTitleElement = document.querySelector('h2'); // The h2 "Name is Counting"
+    const pageTitleElement = document.getElementById('pageTitle');
 
     let fetchedClassDetails = []; // Store fetched details for dynamic updates
     let currentStudentNoteForDisplay = ''; // Store the note of the current student
-    if (!studentIsCountingTableBody || !pageTitleElement || !subTitleElement) {
+    if (!studentIsCountingTableBody || !pageTitleElement) {
         console.error('Required HTML elements (table body or title) not found!');
         if (studentIsCountingTableBody) {
             studentIsCountingTableBody.innerHTML = `<tr><td colspan="3" style="color: red; text-align: center;">Page structure error.</td></tr>`;
@@ -18,20 +17,18 @@ document.addEventListener('DOMContentLoaded', function () {
     const day = urlParams.get('day');
 
     if (!studentCode) {
-        pageTitleElement.textContent = 'Error';
-        subTitleElement.textContent = 'Student Code Missing';
+        pageTitleElement.textContent = 'Error: Student Code Missing';
         studentIsCountingTableBody.innerHTML = `<tr><td colspan="3" style="color: red; text-align: center;">No student code provided in the URL.</td></tr>`;
         return;
     }
     if (!day || !['1', '2', '3'].includes(day)) {
-        pageTitleElement.textContent = `Student Code: ${studentCode}`;
-        subTitleElement.textContent = 'Error: Day Parameter Invalid';
+        pageTitleElement.textContent = 'Error: Day Parameter Invalid';
         studentIsCountingTableBody.innerHTML = `<tr><td colspan="3" style="color: red; text-align: center;">Day parameter is missing or invalid (must be 1, 2, or 3).</td></tr>`;
         return;
     }
 
     const dayNames = { '1': 'Monday', '2': 'Tuesday', '3': 'Wednesday' };
-    pageTitleElement.textContent = `Student Code: ${studentCode}`; // Initial title
+    pageTitleElement.textContent = dayNames[day]; // Initial title
 
     fetch(`/api/student/counting-details?code=${encodeURIComponent(studentCode)}&day=${encodeURIComponent(day)}`)
         .then(response => {
@@ -46,8 +43,8 @@ document.addEventListener('DOMContentLoaded', function () {
             const studentClass = apiResponse.student_class; // Get the student's main class
 
             // Update titles with the fetched note
-            pageTitleElement.textContent = `Student: ${currentStudentNoteForDisplay}`;
-            subTitleElement.textContent = `Manage Class Counted by ${currentStudentNoteForDisplay} for ${dayNames[day]}`;
+            // Update title with the day (instead of student note)
+            pageTitleElement.textContent = dayNames[day];
 
             // Update the "Back to Students" button
             const backBtn = document.getElementById('backButton');
