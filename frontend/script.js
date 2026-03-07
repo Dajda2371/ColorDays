@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (classNameElement) {
         // Find if we have translations loaded somewhere, else fallback correctly
         classNameElement.textContent = `${decodeURIComponent(currentClassName)} | ${currentDayIdentifier.charAt(0).toUpperCase() + currentDayIdentifier.slice(1)}`;
+        classNameElement.removeAttribute('data-translate-key');
     } else {
         console.error("Element with ID 'className' not found.");
     }
