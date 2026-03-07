@@ -46,6 +46,10 @@ th {
   font-weight: 600;
 }
 
+tfoot td {
+  border-top: 3px solid #666;
+}
+
 /* Button Styling */
 button,
 .button,
