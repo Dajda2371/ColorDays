@@ -183,7 +183,7 @@ function renderClasses() {
     tr.innerHTML = `
       <td>${cls.class}</td>
       <td>${cls.teacher}</td>
-      <td>
+      <td class="narrow-col">
         <input type="checkbox" ${cls.counts1 === 'T' ? 'checked' : ''} onchange="updateClassCount('${cls.class}', 'counts1', this.checked)" />
         <input type="checkbox" ${cls.counts2 === 'T' ? 'checked' : ''} onchange="updateClassCount('${cls.class}', 'counts2', this.checked)" />
         <input type="checkbox" ${cls.counts3 === 'T' ? 'checked' : ''} onchange="updateClassCount('${cls.class}', 'counts3', this.checked)" />
@@ -206,7 +206,7 @@ function handleAddClassRow() {
   addRow.innerHTML = `
       <td><input type="text" id="newClassName" placeholder="New Class (e.g. 1.A)" /></td>
       <td><input type="text" id="newClassTeacher" placeholder="Teacher Name" /></td>
-      <td>
+      <td class="narrow-col">
         <!-- Counts are always F initially, saved on click later if needed, but here we just create class -->
         <input type="checkbox" disabled />
         <input type="checkbox" disabled />

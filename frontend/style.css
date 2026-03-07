@@ -350,6 +350,53 @@ input[type="checkbox"] {
     /* Force block to stack vertically */
   }
 
+  #students-table td:last-child {
+    white-space: nowrap;
+  }
+
+  #students-table td:last-child button {
+    display: inline-block;
+    width: auto;
+    margin: 2px;
+  }
+
+  /* Scale class buttons on mobile properly */
+  #dynamicClassList {
+    padding: 0 10px;
+  }
+
+  #dynamicClassList .day-section>div {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 10px !important;
+  }
+
+  #dynamicClassList .day-section>ul {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    padding: 0;
+  }
+
+  #dynamicClassList .day-section>ul li {
+    margin: 0;
+  }
+
+  #dynamicClassList .class-button,
+  #dynamicClassList .classList a {
+    flex: 0 1 calc(25% - 8px);
+    /* up to 4 per row, scaled down */
+    max-width: 90px;
+    aspect-ratio: 1 / 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    padding: 0;
+  }
+
   h1 {
     font-size: 1.5rem;
     margin-bottom: 1rem;
@@ -661,11 +708,36 @@ body {
   }
 }
 
-/* Generic login styling removed and scoped appropriately */
+/* --- Extracted Inline Styles --- */
+
+.mt-3rem {
+  margin-top: 3rem;
+}
+
+.mt-2rem {
+  margin-top: 2rem;
+}
+
+.mt-1rem {
+  margin-top: 1rem;
+}
+
+.mb-1rem {
+  margin-bottom: 1rem;
+}
+
+.mb-5px {
+  margin-bottom: 5px;
+}
 
 .narrow-col {
   width: 1%;
   white-space: nowrap;
+  text-align: center;
+}
+
+.narrow-col input[type="checkbox"] {
+  margin: 0 4px;
 }
 
 

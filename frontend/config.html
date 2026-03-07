@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>User Configuration</title>
   <link rel="stylesheet" href="style.css" />
-  </head>
+</head>
 
 <body>
   <!-- Container for Left Side Elements (User Info and Language Toggle) -->
@@ -32,84 +32,84 @@
 
   <!-- Main Content Container -->
   <div id="mainContent">
-  <h1>Configuration Page</h1>
+    <h1>Configuration Page</h1>
 
-  <!-- <section>
+    <!-- <section>
     <h2>Add User</h2>
     <input type="text" id="newUsername" placeholder="Username" />
     <input type="password" id="newPassword" placeholder="Password" />
   </section> -->
 
-  <!-- <section>
+    <!-- <section>
     <h2>Change Password</h2>
     <input type="text" id="changeUsername" placeholder="Username" />
     <input type="password" id="changePassword" placeholder="New Password" />
     <button onclick="changePassword()">Change Password</button>
   </section> -->
 
-  <section>
-    <h2>User Management</h2>
-    <ul id="userList"></ul>
-    <div class="table-wrapper">
-      <table id="userTable" border="0" cellspacing="0" cellpadding="8">
-        <thead>
-          <tr>
-            <th>Username</th>
-            <th>Password Status</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="userTableBody">
-          <!-- JS will populate this -->
-        </tbody>
-      </table>
-    </div>
-    <button onclick="addUser()">Add User</button>
-  </section>
-
-  <section>
-    <h2>Class Management</h2>
-    <ul id="classList"></ul>
-    <div class="table-wrapper">
-      <table id="classTable" border="0" cellspacing="0" cellpadding="8">
-        <thead>
-          <tr>
-            <th>Class</th>
-            <th>Teacher</th>
-            <th>Counts</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="classTableBody">
-          <!-- JS will populate this -->
-        </tbody>
-      </table>
-    </div>
-
-    <button onclick="handleAddClassRow()">Add Class</button>
-    <button onclick="prefillClasses()">Prefill Classes from Website</button>
-  </section>
-
-  <section>
-    <h2>Oauth Management</h2>
-    <h3>Google</h3>
-    <toggle>
-      <label for="googleOauth">Enable:</label> <input type="checkbox" id="googleOauth" /> <br>
+    <section>
+      <h2>User Management</h2>
+      <ul id="userList"></ul>
       <div class="table-wrapper">
-        <table>
+        <table id="userTable" border="0" cellspacing="0" cellpadding="8">
           <thead>
             <tr>
-              <th>domain</th>
+              <th>Username</th>
+              <th>Password Status</th>
               <th>Actions</th>
             </tr>
           </thead>
-          <tbody id="googleOauthTableBody">
-            <!-- Domains will be populated by config.js -->
+          <tbody id="userTableBody">
+            <!-- JS will populate this -->
           </tbody>
         </table>
       </div>
-      <button onclick="addGoogleOauthDomain()">Add Domain</button>
-  </section>
+      <button onclick="addUser()">Add User</button>
+    </section>
+
+    <section>
+      <h2>Class Management</h2>
+      <ul id="classList"></ul>
+      <div class="table-wrapper">
+        <table id="classTable" border="0" cellspacing="0" cellpadding="8">
+          <thead>
+            <tr>
+              <th>Class</th>
+              <th>Teacher</th>
+              <th class="narrow-col">Counts</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="classTableBody">
+            <!-- JS will populate this -->
+          </tbody>
+        </table>
+      </div>
+
+      <button onclick="handleAddClassRow()">Add Class</button>
+      <button onclick="prefillClasses()">Prefill Classes from Website</button>
+    </section>
+
+    <section>
+      <h2>Oauth Management</h2>
+      <h3>Google</h3>
+      <toggle>
+        <label for="googleOauth">Enable:</label> <input type="checkbox" id="googleOauth" /> <br>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>domain</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="googleOauthTableBody">
+              <!-- Domains will be populated by config.js -->
+            </tbody>
+          </table>
+        </div>
+        <button onclick="addGoogleOauthDomain()">Add Domain</button>
+    </section>
 
   </div>
 

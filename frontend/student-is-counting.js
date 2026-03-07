@@ -49,14 +49,20 @@ document.addEventListener('DOMContentLoaded', function () {
             pageTitleElement.textContent = `Student: ${currentStudentNoteForDisplay}`;
             subTitleElement.textContent = `Manage Class Counted by ${currentStudentNoteForDisplay} for ${dayNames[day]}`;
 
-            // Update the "Back to Students" link
-            const backLink = document.getElementById('backToStudentsLink');
-            if (backLink && studentClass) {
-                let newHref = `students.html?class=${encodeURIComponent(studentClass)}`;
-                if (day) { // 'day' is already available from urlParams.get('day')
-                    newHref += `&day=${encodeURIComponent(day)}`;
+            // Update the "Back to Students" button
+            const backBtn = document.getElementById('backButton');
+            if (backBtn) {
+                const prevClass = urlParams.get('class');
+                const targetClass = prevClass || studentClass;
+                let newHref = 'students.html';
+                if (targetClass || day) {
+                    newHref += '?';
+                    const params = new URLSearchParams();
+                    if (targetClass) params.set('class', targetClass);
+                    if (day) params.set('day', day);
+                    newHref += params.toString();
                 }
-                backLink.href = newHref;
+                backBtn.onclick = function () { window.location.href = newHref; };
             }
             renderCountingDetailsTable(fetchedClassDetails);
         })
@@ -79,6 +85,7 @@ document.addEventListener('DOMContentLoaded', function () {
             row.insertCell().textContent = item.class_name;
 
             const countsCell = row.insertCell();
+            countsCell.className = 'narrow-col';
             const checkbox = document.createElement('input');
             checkbox.type = 'checkbox';
             checkbox.checked = item.is_counted_by_current_student;

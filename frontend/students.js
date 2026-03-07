@@ -77,7 +77,7 @@ document.addEventListener('DOMContentLoaded', function () {
           <td>${student.note}</td>
           <td>${(student.counting_classes || []).join(', ')}</td>
           <td>
-            <button class="class-button" onclick="window.location.href='student-is-counting.html?code=${encodeURIComponent(student.code)}&day=${encodeURIComponent(dayFromUrl)}'">Edit Classes</button>
+            <button class="class-button" onclick="window.location.href='student-is-counting.html?code=${encodeURIComponent(student.code)}&day=${encodeURIComponent(dayFromUrl || '')}&class=${encodeURIComponent(classFromUrl || '')}'">Edit Classes</button>
             <button class="class-button" onclick="showQrCode('${student.code}')">QR Code</button>
             <button class="class-button" onclick="removeStudent('${student.code}', '${student.note?.replace(/'/g, "\\'") || ''}', '${student.class}')">Remove</button>
           </td>
