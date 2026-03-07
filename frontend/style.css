@@ -733,17 +733,31 @@ body {
 }
 
 #students-table td:last-child {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  justify-content: center;
-  align-items: center;
-  min-width: 120px;
+  white-space: nowrap;
+  width: 1%;
 }
 
 #students-table td:last-child button {
-  margin: 0;
-  flex: 1 1 auto;
+  display: inline-block;
+  width: auto;
+  margin: 2px;
+}
+
+@media (max-width: 900px) {
+  #students-table td:last-child {
+    white-space: normal;
+    padding: 0;
+  }
+
+  #students-table td:last-child button {
+    width: 100%;
+    display: block;
+    margin: 0;
+    box-sizing: border-box;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
 }
 
 
@@ -839,17 +853,19 @@ body {
   min-width: 100% !important;
 }
 
-#students-table td:last-child {
-  white-space: nowrap !important;
-  width: 1% !important;
-  /* expands the action column to fit its exact nowrap content */
-}
+@media (min-width: 901px) {
+  #students-table td:last-child {
+    white-space: nowrap !important;
+    width: 1% !important;
+    /* expands the action column to fit its exact nowrap content on desktop */
+  }
 
-#students-table td:last-child button {
-  display: inline-block !important;
-  width: auto !important;
-  margin: 2px 4px !important;
-  padding: 8px 12px !important;
+  #students-table td:last-child button {
+    display: inline-block !important;
+    width: auto !important;
+    margin: 2px 4px !important;
+    padding: 8px 12px !important;
+  }
 }
 
 #classTable td.narrow-col {
