@@ -86,7 +86,7 @@ async function setLanguagePreference(lang) {
         });
         if (response.ok) {
             currentLanguage = lang;
-            applyTranslations(); window.location.reload(); window.location.reload();
+            applyTranslations(); window.location.reload();
             displayLoggedInUser();
         }
     } catch (error) {

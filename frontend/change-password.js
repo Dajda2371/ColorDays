@@ -78,7 +78,7 @@ async function setLanguagePreference(lang) {
         });
         if (response.ok) {
             currentLanguage = lang;
-            applyTranslations(); window.location.reload(); window.location.reload();
+            applyTranslations(); window.location.reload();
         }
     } catch (error) {
         console.error('Error setting language:', error);
@@ -111,6 +111,12 @@ if (languageToggle) {
 
 // Wait for the HTML document to be fully loaded before running the script
 document.addEventListener('DOMContentLoaded', (event) => {
+    // Language Initialization
+    currentLanguage = getCookie("language") || 'en';
+    fetchTranslations().then(() => {
+        setToggleState(currentLanguage);
+    });
+
     console.log("DOM fully loaded. Checking for cookie..."); // Log: DOM ready
     // --- Check for the password change cookie on page load ---
     const cookieName = "ChangePasswordVerificationNotNeeded";
@@ -140,7 +146,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
 
     // Only add the submit listener *after* the DOM is loaded
     if (changePasswordForm) {
-        changePasswordForm.addEventListener('submit', async function(event) {
+        changePasswordForm.addEventListener('submit', async function (event) {
             event.preventDefault(); // Prevent default form submission
 
             // Read values from the input fields
