@@ -757,6 +757,7 @@ body {
     border-radius: 0;
     border-left: none;
     border-right: none;
+    white-space: nowrap;
   }
 }
 
