@@ -1,23 +1,23 @@
 import collections
 import traceback
-from fastapi import APIRouter, HTTPException, Request, Body
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel, Field
 from config import SQL_AUTH_USER_STUDENT_COOKIE_NAME
-from data_manager import load_counts_from_db, save_counts_to_db, is_student_allowed
+from data_manager import load_counts_from_db, save_counts_to_db, is_student_allowed, data_lock
 
 router = APIRouter()
 
 class IncrementRequest(BaseModel):
-    className: str
+    class_name: str = Field(alias="class")
     type: str # 'student' or 'teacher'
-    points: int
+    value: int
     day: str
 
-@router.put("/api/increment")
+@router.post("/api/increment")
 def increment_count(request: Request, payload: IncrementRequest):
-    class_name = payload.className
+    class_name = payload.class_name
     type_val = payload.type
-    points_val = payload.points
+    points_val = payload.value
     day_identifier = payload.day
 
     if type_val not in ['student', 'teacher']:
@@ -43,23 +43,24 @@ def increment_count(request: Request, payload: IncrementRequest):
          raise HTTPException(status_code=400, detail=f"Cannot modify data because it is marked as {cls_info[state_key]}.")
 
     try:
-        day_specific_data = load_counts_from_db(day_identifier.lower())
+        with data_lock:
+            day_specific_data = load_counts_from_db(day_identifier.lower())
 
-        if class_name not in day_specific_data:
-            day_specific_data[class_name] = collections.defaultdict(lambda: collections.defaultdict(int))
-            # Just mimicking original logic structure for init, though defaultdict handles it
-            for t in ['student', 'teacher']:
-                for p in range(7):
-                    day_specific_data[class_name][t][p] = 0
+            if class_name not in day_specific_data:
+                day_specific_data[class_name] = collections.defaultdict(lambda: collections.defaultdict(int))
+                # Just mimicking original logic structure for init, though defaultdict handles it
+                for t in ['student', 'teacher']:
+                    for p in range(7):
+                        day_specific_data[class_name][t][p] = 0
 
-        # Note: relying on data structure being compatible with [points_val] int key or auto-string conversion if JSON
-        current_count = day_specific_data[class_name][type_val][points_val]
-        day_specific_data[class_name][type_val][points_val] = current_count + 1
+            # Note: relying on data structure being compatible with [points_val] int key or auto-string conversion if JSON
+            current_count = day_specific_data[class_name][type_val][points_val]
+            day_specific_data[class_name][type_val][points_val] = current_count + 1
 
-        if save_counts_to_db(day_identifier.lower(), day_specific_data):
-            return {"success": True, "message": f"Count incremented for {day_identifier}"}
-        else:
-             raise HTTPException(status_code=500, detail="Failed to save to database")
+            if save_counts_to_db(day_identifier.lower(), day_specific_data):
+                return {"success": True, "message": f"Count incremented for {day_identifier}"}
+            else:
+                 raise HTTPException(status_code=500, detail="Failed to save to database")
     except Exception as e:
         print(f"Error during increment: {e}")
         traceback.print_exc()

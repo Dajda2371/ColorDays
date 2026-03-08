@@ -59,6 +59,17 @@ origins = [
     f"https://{DOMAIN}" if PORT == 443 else f"https://{DOMAIN}:{PORT}",
 ]
 
+import asyncio
+
+global_write_lock = asyncio.Lock()
+
+@app.middleware("http")
+async def concurrency_lock_middleware(request: Request, call_next):
+    if request.method in ["POST", "PUT", "DELETE", "PATCH"]:
+        async with global_write_lock:
+            return await call_next(request)
+    return await call_next(request)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,

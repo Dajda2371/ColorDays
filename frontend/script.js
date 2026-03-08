@@ -507,17 +507,17 @@ async function handleCountChange(action, type, points) {
 
     const apiUrl = `/api/${action}`; // action is 'increment' or 'decrement'
     const payload = {
-        className: currentClassName,
+        class: currentClassName,
         type: type,
-        points: points,
-        day: currentDayIdentifier // Include the day identifier in the payload
+        value: points,
+        day: currentDayIdentifier
     };
 
     console.log(`Sending ${action} request to ${apiUrl} with payload:`, payload);
 
     try {
         const response = await fetch(apiUrl, {
-            method: 'PUT',
+            method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 // 'Credentials': 'include' // Often handled by browser for same-origin, or add if needed
