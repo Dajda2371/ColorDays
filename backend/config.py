@@ -5,8 +5,6 @@ import datetime
 BACKEND_DIR = Path(__file__).parent.resolve()
 FRONTEND_DIR = (BACKEND_DIR.parent / 'frontend').resolve()
 DATA_DIR = (BACKEND_DIR / 'data').resolve()
-LOGS_DIR = DATA_DIR / 'logs'
-
 # --- Refresh Intervals ---
 # Keys are HTML file names to match the frontend, values are in milliseconds
 REFRESH_INTERVALS = {
@@ -16,11 +14,6 @@ REFRESH_INTERVALS = {
     "students.html": 10000,
     "student-is-counting.html": 10000
 }
-
-# --- Logger Setup ---
-LOGS_DIR.mkdir(parents=True, exist_ok=True)
-LOG_FILENAME = datetime.datetime.now().strftime("%Y-%m-%d.log")
-LOG_PATH = LOGS_DIR / LOG_FILENAME
 
 # --- Dynamic Data Directory based on Year ---
 CURRENT_YEAR_DIR = DATA_DIR / str(datetime.datetime.now().year)
@@ -41,10 +34,8 @@ STUDENTS_SQL_FILE_PATH = CURRENT_YEAR_DIR / 'students.sql'
 # --- Google OAuth Configuration ---
 CLIENT_SECRETS_FILE = DATA_DIR / 'client_secret.json'
 GOOGLE_SCOPES = ['openid', 'https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile']
-if PORT == 443:
-    GOOGLE_REDIRECT_URI = f'https://{DOMAIN}/oauth2callback'
-else:
-    GOOGLE_REDIRECT_URI = f'http://{DOMAIN}:{PORT}/oauth2callback'
+
+GOOGLE_REDIRECT_URI = f'https://{DOMAIN}/oauth2callback'
 
 # --- Secure Login Configuration ---
 HASH_ALGORITHM = 'sha256'

@@ -6,7 +6,10 @@ CREATE TABLE IF NOT EXISTS classes (
     counts3 TEXT,
     iscountedby1 TEXT,
     iscountedby2 TEXT,
-    iscountedby3 TEXT
+    iscountedby3 TEXT,
+    state1 TEXT,
+    state2 TEXT,
+    state3 TEXT
 );
 CREATE TABLE IF NOT EXISTS students (
     code TEXT PRIMARY KEY,

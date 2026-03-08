@@ -18,7 +18,7 @@ def add_student(payload: StudentAddRequest, admin_user: dict = Depends(get_curre
     if not class_name:
         raise HTTPException(status_code=400, detail="Class name required.")
 
-    code = generate_random_code(15) 
+    code = generate_random_code(5) 
 
     with data_lock:
         new_student = {

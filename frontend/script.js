@@ -37,6 +37,26 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error("Element with ID 'className' not found.");
     }
 
+    const markAsDoneBtn = document.getElementById('markAsDoneButton');
+    const lockBtn = document.getElementById('lockButton');
+
+    if (markAsDoneBtn) {
+        markAsDoneBtn.addEventListener('click', () => handleStateChange('done'));
+    }
+    if (lockBtn) {
+        lockBtn.addEventListener('click', () => handleStateChange('locked'));
+    }
+
+    // Role check for Lock button
+    fetch('/api/auth/me')
+        .then(res => res.json())
+        .then(data => {
+            if (data.role === 'administrator' || data.role === 'teacher') {
+                if (lockBtn) lockBtn.style.display = 'inline-block';
+            }
+        })
+        .catch(err => console.error("Error fetching user info:", err));
+
     // Fetch class teacher
     fetch('/api/classes')
         .then(response => response.json())
@@ -67,9 +87,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const interval = intervals['index.html'];
                 if (interval && interval > 0) {
                     setInterval(() => {
-                        if (!document.hidden) {
-                            fetchData();
-                        }
+                        if (document.hidden) return;
+                        if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
+                        fetchData();
                     }, interval);
                 }
             })
@@ -197,6 +217,8 @@ if (languageToggle) {
 // --- END NAVBAR LOGIC ---
 
 
+let currentClassState = '';
+
 // --- Fetch data from the backend ---
 async function fetchData() {
     if (!currentClassName || !currentDayIdentifier) {
@@ -215,20 +237,128 @@ async function fetchData() {
             throw new Error(`HTTP error! Status: ${response.status}`);
         }
 
-        const data = await response.json(); // Parse the JSON response (expecting a list)
-        console.log("Data received from backend:", data);
+        const dataResponse = await response.json(); // Parse the JSON response
+        console.log("Data received from backend:", dataResponse);
+
+        const data = dataResponse.counts;
+        currentClassState = dataResponse.state || '';
 
         // Update the UI elements
         updateTable(data);
         updateTotals(data);
+        updateUIState();
 
     } catch (error) {
         console.error("Error fetching data:", error);
-        // Optionally display an error message to the user on the page
-        // e.g., document.getElementById('errorMessage').textContent = "Failed to load data.";
-        // Reset table/totals to 0 or show error state?
-        resetTableAndTotals(); // Example: reset to 0 on error
+        resetTableAndTotals();
     }
+}
+
+async function handleStateChange(newState) {
+    if (currentClassState === 'locked' && newState === 'locked') {
+        // Special case: Unlock (which is the lock button in locked state)
+        // should return the state to 'done'
+        newState = 'done';
+    } else if (currentClassState === newState) {
+        // Normal toggle: if clicking an active state button again, reset to empty
+        newState = '';
+    }
+
+    try {
+        const response = await fetch('/api/counts/state', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                className: decodeURIComponent(currentClassName),
+                day: currentDayIdentifier,
+                state: newState
+            })
+        });
+
+        if (response.ok) {
+            fetchData(); // Refresh everything
+        } else {
+            const err = await response.json();
+            alert((translations.stateUpdateFailedAlert?.[currentLanguage] || "Failed to update state: ") + (err.detail || ''));
+        }
+    } catch (error) {
+        console.error("Error updating state:", error);
+        alert((translations.stateUpdateFailedAlert?.[currentLanguage] || "Error updating state."));
+    }
+}
+
+function updateUIState() {
+    const markDoneBtn = document.getElementById('markAsDoneButton');
+    const lockBtn = document.getElementById('lockButton');
+    const allCountButtons = document.querySelectorAll('.btn-count');
+
+    if (!markDoneBtn) return;
+
+    // Reset common styles/states
+    markDoneBtn.classList.remove('disabled');
+    if (lockBtn) lockBtn.classList.remove('disabled');
+    allCountButtons.forEach(btn => btn.classList.remove('disabled'));
+
+    if (currentClassState === 'done') {
+        allCountButtons.forEach(btn => btn.classList.add('disabled'));
+
+        // Mark as Done becomes EDIT, enabled, green
+        markDoneBtn.setAttribute('data-translate-key', 'editButtonText');
+        markDoneBtn.style.backgroundColor = '#d4edda';
+        markDoneBtn.style.color = '#155724';
+        markDoneBtn.classList.remove('disabled');
+
+        if (lockBtn) {
+            // Lock stays LOCK, enabled, red
+            lockBtn.setAttribute('data-translate-key', 'lockButtonText');
+            lockBtn.classList.remove('disabled');
+            lockBtn.style.backgroundColor = '#f8d7da';
+            lockBtn.style.color = '#721c24';
+            lockBtn.style.pointerEvents = 'auto'; // ensure clickable
+            lockBtn.style.opacity = '1';
+        }
+
+    } else if (currentClassState === 'locked') {
+        allCountButtons.forEach(btn => btn.classList.add('disabled'));
+
+        // Mark as Done becomes EDIT, disabled, green
+        markDoneBtn.setAttribute('data-translate-key', 'editButtonText');
+        markDoneBtn.classList.add('disabled');
+        markDoneBtn.style.backgroundColor = '#d4edda';
+        markDoneBtn.style.color = '#155724';
+
+        if (lockBtn) {
+            // Lock becomes UNLOCK, enabled, red
+            lockBtn.setAttribute('data-translate-key', 'unlockButtonText');
+            lockBtn.classList.remove('disabled');
+            lockBtn.style.backgroundColor = '#f8d7da';
+            lockBtn.style.color = '#721c24';
+            lockBtn.style.pointerEvents = 'auto'; // ensure clickable
+            lockBtn.style.opacity = '1';
+        }
+    } else {
+        // State EMPTY
+        allCountButtons.forEach(btn => btn.classList.remove('disabled'));
+
+        // Mark as Done stays MARK AS DONE, enabled, blue/default
+        markDoneBtn.setAttribute('data-translate-key', 'markAsDoneButtonText');
+        markDoneBtn.style.backgroundColor = '';
+        markDoneBtn.style.color = '';
+        markDoneBtn.classList.remove('disabled');
+
+        if (lockBtn) {
+            // Lock button stays LOCK, but is DISABLED
+            lockBtn.setAttribute('data-translate-key', 'lockButtonText');
+            lockBtn.classList.add('disabled');
+            lockBtn.style.backgroundColor = '';
+            lockBtn.style.color = '';
+            lockBtn.style.pointerEvents = 'none';
+            lockBtn.style.opacity = '0.5';
+        }
+    }
+
+    // Refresh translations for the dynamically updated keys
+    applyTranslations();
 }
 
 // --- Update the table cells with fetched data ---
@@ -377,17 +507,17 @@ async function handleCountChange(action, type, points) {
 
     const apiUrl = `/api/${action}`; // action is 'increment' or 'decrement'
     const payload = {
-        className: currentClassName,
+        class: currentClassName,
         type: type,
-        points: points,
-        day: currentDayIdentifier // Include the day identifier in the payload
+        value: points,
+        day: currentDayIdentifier
     };
 
     console.log(`Sending ${action} request to ${apiUrl} with payload:`, payload);
 
     try {
         const response = await fetch(apiUrl, {
-            method: 'PUT',
+            method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 // 'Credentials': 'include' // Often handled by browser for same-origin, or add if needed

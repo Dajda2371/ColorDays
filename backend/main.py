@@ -13,7 +13,6 @@ from data_manager import (
     load_class_data_from_db,
     load_students_data_from_db,
     load_main_config_from_json,
-    ensure_year_data_directory_exists,
     create_tables
 )
 from dependencies import get_current_user_info, active_sessions
@@ -25,8 +24,6 @@ from pathlib import Path
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Startup: Loading data...")
-    # Ensure directories exist
-    ensure_year_data_directory_exists()
 
     # Initialize DBs
     try:
@@ -58,6 +55,17 @@ origins = [
     f"http://{DOMAIN}:{PORT}",
     f"https://{DOMAIN}" if PORT == 443 else f"https://{DOMAIN}:{PORT}",
 ]
+
+import asyncio
+
+global_write_lock = asyncio.Lock()
+
+@app.middleware("http")
+async def concurrency_lock_middleware(request: Request, call_next):
+    if request.method in ["POST", "PUT", "DELETE", "PATCH"]:
+        async with global_write_lock:
+            return await call_next(request)
+    return await call_next(request)
 
 app.add_middleware(
     CORSMiddleware,

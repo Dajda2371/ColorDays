@@ -15,7 +15,7 @@ from config import (
     DATA_DIR,
 )
 
-def generate_random_code(length=15):
+def generate_random_code(length=5):
     """Generates a random alphanumeric code of a given length."""
     characters = string.ascii_letters + string.digits
     return ''.join(random.choice(characters) for i in range(length))

@@ -501,7 +501,11 @@ document.addEventListener('DOMContentLoaded', function () {
         .then(intervals => {
             const interval = intervals['classes.html'];
             if (interval && interval > 0) {
-                setInterval(loadClassesData, interval);
+                setInterval(() => {
+                    if (document.hidden) return;
+                    if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT') return;
+                    loadClassesData();
+                }, interval);
             }
         })
         .catch(err => console.error("Error fetching refresh intervals:", err));

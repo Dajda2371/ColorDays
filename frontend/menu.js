@@ -186,7 +186,20 @@ async function loadAndDisplayClasses() {
                     ul.className = 'classList';
                     classesStudentCounts.sort().forEach(className => { // Sort the class names
                         const listItem = document.createElement('li');
-                        listItem.innerHTML = `<a href="index.html?class=${encodeURIComponent(className)}&day=${day.defaultName.toLowerCase()}">${className}</a>`;
+                        const link = document.createElement('a');
+                        link.href = `index.html?class=${encodeURIComponent(className)}&day=${day.defaultName.toLowerCase()}`;
+                        link.textContent = className;
+
+                        // Apply state color
+                        const clsObj = allClasses.find(c => c.class === className);
+                        if (clsObj) {
+                            const stateKey = `state${day.iscountedbyFlag.slice(-1)}`;
+                            const stateValue = clsObj[stateKey];
+                            if (stateValue === 'done') link.classList.add('class-button-done');
+                            else if (stateValue === 'locked') link.classList.add('class-button-locked');
+                        }
+
+                        listItem.appendChild(link);
                         ul.appendChild(listItem);
                     });
                     daySectionDiv.appendChild(ul);
@@ -214,6 +227,8 @@ async function loadAndDisplayClasses() {
             daySectionDiv.className = 'day-section';
             daySectionDiv.innerHTML = `<h2>${dayDisplayName}</h2>`;
 
+            const stateKey = `state${day.iscountedbyFlag.slice(-1)}`;
+
             if (useSmartSorting) {
                 const grouped = {};
                 allClasses.forEach(cls => {
@@ -235,6 +250,11 @@ async function loadAndDisplayClasses() {
                         link.href = `index.html?class=${encodeURIComponent(cls.class)}&day=${day.defaultName.toLowerCase()}`;
                         link.textContent = cls.class;
                         link.className = 'class-button';
+
+                        const stateValue = cls[stateKey];
+                        if (stateValue === 'done') link.classList.add('class-button-done');
+                        else if (stateValue === 'locked') link.classList.add('class-button-locked');
+
                         groupDiv.appendChild(link);
                     });
                     daySectionDiv.appendChild(groupDiv);
@@ -245,7 +265,15 @@ async function loadAndDisplayClasses() {
                 // Display ALL classes from allClasses
                 allClasses.sort((a, b) => a.class.localeCompare(b.class)).forEach(cls => {
                     const listItem = document.createElement('li');
-                    listItem.innerHTML = `<a href="index.html?class=${encodeURIComponent(cls.class)}&day=${day.defaultName.toLowerCase()}">${cls.class}</a>`;
+                    const link = document.createElement('a');
+                    link.href = `index.html?class=${encodeURIComponent(cls.class)}&day=${day.defaultName.toLowerCase()}`;
+                    link.textContent = cls.class;
+
+                    const stateValue = cls[stateKey];
+                    if (stateValue === 'done') link.classList.add('class-button-done');
+                    else if (stateValue === 'locked') link.classList.add('class-button-locked');
+
+                    listItem.appendChild(link);
                     ul.appendChild(listItem);
                 });
                 daySectionDiv.appendChild(ul);

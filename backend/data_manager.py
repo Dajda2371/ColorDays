@@ -21,12 +21,6 @@ students_data_store = []
 user_password_store = {}
 server_config = {}
 
-def ensure_year_data_directory_exists():
-    """Creates the /data/<current year> directory if it doesn't exist."""
-    print(f"Ensuring year data directory exists: {CURRENT_YEAR_DIR}")
-    CURRENT_YEAR_DIR.mkdir(parents=True, exist_ok=True)
-    print("Year data directory check complete.")
-
 def is_student_allowed(student_code_from_cookie, requested_class_name, requested_day_identifier):
     """
     Checks if a student is allowed to access/modify data for a specific class and day.
@@ -382,7 +376,7 @@ def save_class_data_to_db():
             conn.execute("DELETE FROM classes")
             for class_item in class_data_store:
                 conn.execute(
-                    "INSERT INTO classes (class, teacher, counts1, counts2, counts3, iscountedby1, iscountedby2, iscountedby3) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO classes (class, teacher, counts1, counts2, counts3, iscountedby1, iscountedby2, iscountedby3, state1, state2, state3) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         class_item['class'],
                         class_item['teacher'],
@@ -391,7 +385,10 @@ def save_class_data_to_db():
                         class_item['counts3'],
                         class_item['iscountedby1'],
                         class_item['iscountedby2'],
-                        class_item['iscountedby3']
+                        class_item['iscountedby3'],
+                        class_item.get('state1', ''),
+                        class_item.get('state2', ''),
+                        class_item.get('state3', '')
                     )
                 )
             conn.commit()

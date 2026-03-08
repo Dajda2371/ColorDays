@@ -69,8 +69,8 @@ function applyTranslations() {
 // --- Function to fetch and display leaderboard ---
 async function loadLeaderboard(showLoading = true) {
     if (showLoading) {
-        const loadingMessage = translations.loadingLeaderboardText?.[currentLanguage] || translations.loadingLeaderboardText?.['en'] || (translations.loadingLeaderboardText?.[currentLanguage] || 'Loading leaderboard...');
-        leaderboardTable.innerHTML = `<tr><td colspan="4">${loadingMessage}</td></tr>`;
+        const loadingMessage = translations.loadingLeaderboardText?.[currentLanguage] || (translations.loadingLeaderboardText?.[currentLanguage] || 'Loading leaderboard...');
+        leaderboardTable.innerHTML = `<tr><td colspan="7">${loadingMessage}</td></tr>`;
     }
 
     try {
@@ -84,17 +84,34 @@ async function loadLeaderboard(showLoading = true) {
         leaderboardTable.innerHTML = ''; // Clear loading message
 
         if (leaderboardData.length === 0) {
-            leaderboardTable.innerHTML = `<tr><td colspan="4">${translations.noDataText?.[currentLanguage] || (translations.noDataText?.[currentLanguage] || 'No data available')}</td></tr>`;
+            leaderboardTable.innerHTML = `<tr><td colspan="7">${translations.noDataText?.[currentLanguage] || (translations.noDataText?.[currentLanguage] || 'No data available')}</td></tr>`;
             return;
         }
 
         leaderboardData.forEach((entry, index) => {
             const row = document.createElement('tr');
+
+            const getStateCell = (state) => {
+                let color = '';
+                let content = '';
+                if (state === 'done') {
+                    color = '#d4edda'; // light green
+                    content = '✓';
+                } else if (state === 'locked') {
+                    color = '#f8d7da'; // light red
+                    content = '🔒';
+                }
+                return `<td style="background-color: ${color}; text-align: center; font-size: 0.8em; min-width: 30px;">${content}</td>`;
+            };
+
             row.innerHTML = `
                 <td>${index + 1}</td>
                 <td>${entry.class}</td>
                 <td>${entry.percentage}</td>
                 <td>${entry.score}</td>
+                ${getStateCell(entry.state1)}
+                ${getStateCell(entry.state2)}
+                ${getStateCell(entry.state3)}
             `;
             leaderboardTable.appendChild(row);
         });
@@ -199,9 +216,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const interval = intervals['leaderboard.html'];
                 if (interval && interval > 0) {
                     setInterval(() => {
-                        if (!document.hidden) {
-                            loadLeaderboard(false);
-                        }
+                        if (document.hidden) return;
+                        if (document.activeElement.tagName === 'INPUT') return;
+                        loadLeaderboard(false);
                     }, interval);
                 }
             })
