@@ -50,6 +50,10 @@ def get_leaderboard(request: Request, user_info=Depends(get_current_user_info)):
 
     # Convert to list and sort
     leaderboard_data = []
+    
+    # Pre-map states for efficiency
+    class_states = {cls['class']: (cls.get('state1', ''), cls.get('state2', ''), cls.get('state3', '')) for cls in class_data_store}
+
     for k, v in scores.items():
         score = v['score']
         students = v['students']
@@ -61,11 +65,16 @@ def get_leaderboard(request: Request, user_info=Depends(get_current_user_info)):
         else:
             percentage = 0
             
+        states = class_states.get(k, ('', '', ''))
+
         leaderboard_data.append({
             "class": k,
             "score": score,
             "people": students + teachers,
-            "percentage": f"{percentage}%"
+            "percentage": f"{percentage}%",
+            "state1": states[0],
+            "state2": states[1],
+            "state3": states[2]
         })
 
     leaderboard_data.sort(key=lambda x: float(x["percentage"].replace('%', '')), reverse=True)

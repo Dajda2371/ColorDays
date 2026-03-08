@@ -34,6 +34,14 @@ def increment_count(request: Request, payload: IncrementRequest):
         if not is_student_allowed(student_code, class_name, day_identifier.lower()):
              raise HTTPException(status_code=403, detail="Forbidden: You are not authorized to modify counts for this class/day.")
 
+    # State Check
+    from data_manager import class_data_store
+    day_num = {'monday': '1', 'tuesday': '2', 'wednesday': '3'}.get(day_identifier.lower(), '1')
+    state_key = f"state{day_num}"
+    cls_info = next((c for c in class_data_store if c['class'] == class_name), None)
+    if cls_info and cls_info.get(state_key):
+         raise HTTPException(status_code=400, detail=f"Cannot modify data because it is marked as {cls_info[state_key]}.")
+
     try:
         day_specific_data = load_counts_from_db(day_identifier.lower())
 

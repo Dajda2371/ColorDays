@@ -382,7 +382,7 @@ def save_class_data_to_db():
             conn.execute("DELETE FROM classes")
             for class_item in class_data_store:
                 conn.execute(
-                    "INSERT INTO classes (class, teacher, counts1, counts2, counts3, iscountedby1, iscountedby2, iscountedby3) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO classes (class, teacher, counts1, counts2, counts3, iscountedby1, iscountedby2, iscountedby3, state1, state2, state3) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         class_item['class'],
                         class_item['teacher'],
@@ -391,7 +391,10 @@ def save_class_data_to_db():
                         class_item['counts3'],
                         class_item['iscountedby1'],
                         class_item['iscountedby2'],
-                        class_item['iscountedby3']
+                        class_item['iscountedby3'],
+                        class_item.get('state1', ''),
+                        class_item.get('state2', ''),
+                        class_item.get('state3', '')
                     )
                 )
             conn.commit()

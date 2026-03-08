@@ -37,6 +37,26 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error("Element with ID 'className' not found.");
     }
 
+    const markAsDoneBtn = document.getElementById('markAsDoneButton');
+    const lockBtn = document.getElementById('lockButton');
+
+    if (markAsDoneBtn) {
+        markAsDoneBtn.addEventListener('click', () => handleStateChange('done'));
+    }
+    if (lockBtn) {
+        lockBtn.addEventListener('click', () => handleStateChange('locked'));
+    }
+
+    // Role check for Lock button
+    fetch('/api/auth/me')
+        .then(res => res.json())
+        .then(data => {
+            if (data.role === 'administrator' || data.role === 'teacher') {
+                if (lockBtn) lockBtn.style.display = 'inline-block';
+            }
+        })
+        .catch(err => console.error("Error fetching user info:", err));
+
     // Fetch class teacher
     fetch('/api/classes')
         .then(response => response.json())
@@ -197,6 +217,8 @@ if (languageToggle) {
 // --- END NAVBAR LOGIC ---
 
 
+let currentClassState = '';
+
 // --- Fetch data from the backend ---
 async function fetchData() {
     if (!currentClassName || !currentDayIdentifier) {
@@ -215,19 +237,84 @@ async function fetchData() {
             throw new Error(`HTTP error! Status: ${response.status}`);
         }
 
-        const data = await response.json(); // Parse the JSON response (expecting a list)
-        console.log("Data received from backend:", data);
+        const dataResponse = await response.json(); // Parse the JSON response
+        console.log("Data received from backend:", dataResponse);
+
+        const data = dataResponse.counts;
+        currentClassState = dataResponse.state || '';
 
         // Update the UI elements
         updateTable(data);
         updateTotals(data);
+        updateUIState();
 
     } catch (error) {
         console.error("Error fetching data:", error);
-        // Optionally display an error message to the user on the page
-        // e.g., document.getElementById('errorMessage').textContent = "Failed to load data.";
-        // Reset table/totals to 0 or show error state?
-        resetTableAndTotals(); // Example: reset to 0 on error
+        resetTableAndTotals();
+    }
+}
+
+async function handleStateChange(newState) {
+    if (currentClassState === newState) {
+        // Toggle off if already active? (Reset to empty)
+        newState = '';
+    }
+
+    try {
+        const response = await fetch('/api/counts/state', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                className: decodeURIComponent(currentClassName),
+                day: currentDayIdentifier,
+                state: newState
+            })
+        });
+
+        if (response.ok) {
+            fetchData(); // Refresh everything
+        } else {
+            const err = await response.json();
+            alert((translations.stateUpdateFailedAlert?.[currentLanguage] || "Failed to update state: ") + (err.detail || ''));
+        }
+    } catch (error) {
+        console.error("Error updating state:", error);
+        alert((translations.stateUpdateFailedAlert?.[currentLanguage] || "Error updating state."));
+    }
+}
+
+function updateUIState() {
+    const markDoneBtn = document.getElementById('markAsDoneButton');
+    const lockBtn = document.getElementById('lockButton');
+    const allCountButtons = document.querySelectorAll('.btn-count');
+
+    // Reset common styles/states
+    markDoneBtn.classList.remove('disabled');
+    if (lockBtn) lockBtn.classList.remove('disabled');
+    allCountButtons.forEach(btn => btn.classList.remove('disabled', 'active'));
+
+    if (currentClassState === 'done') {
+        allCountButtons.forEach(btn => btn.classList.add('disabled'));
+        markDoneBtn.classList.add('disabled');
+        // If we want to indicate it's active
+        markDoneBtn.style.backgroundColor = '#71dd8a';
+        markDoneBtn.style.color = '#fff';
+    } else if (currentClassState === 'locked') {
+        allCountButtons.forEach(btn => btn.classList.add('disabled'));
+        markDoneBtn.classList.add('disabled');
+        if (lockBtn) {
+            lockBtn.classList.add('disabled');
+            lockBtn.style.backgroundColor = '#f1b0b7';
+            lockBtn.style.color = '#fff';
+        }
+    } else {
+        // Reset colors
+        markDoneBtn.style.backgroundColor = '';
+        markDoneBtn.style.color = '';
+        if (lockBtn) {
+            lockBtn.style.backgroundColor = '';
+            lockBtn.style.color = '';
+        }
     }
 }
 

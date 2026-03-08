@@ -31,19 +31,29 @@ def get_counts(
 
     response_data = []
     try:
+        from data_manager import class_data_store
+        state = ""
+        day_num = {'monday': '1', 'tuesday': '2', 'wednesday': '3'}.get(day.lower(), '1')
+        state_key = f"state{day_num}"
+        cls_info = next((c for c in class_data_store if c['class'] == class_name), None)
+        if cls_info:
+            state = cls_info.get(state_key, "")
+
         day_specific_loaded_data = load_counts_from_db(day)
 
+        rows = []
         if class_name in day_specific_loaded_data:
             class_day_data = day_specific_loaded_data[class_name]
             for type_val in ['student', 'teacher']:
                 for points_val in range(7):
                     count = class_day_data.get(type_val, {}).get(points_val, 0)
-                    response_data.append({"type": type_val, "points": points_val, "count": count})
-            response_data.sort(key=lambda x: (x['type'], x['points']))
+                    rows.append({"type": type_val, "points": points_val, "count": count})
+            rows.sort(key=lambda x: (x['type'], x['points']))
         else:
             for type_val in ['student', 'teacher']:
                 for points_val in range(7):
-                     response_data.append({"type": type_val, "points": points_val, "count": 0})
-        return response_data
+                     rows.append({"type": type_val, "points": points_val, "count": 0})
+        
+        return {"counts": rows, "state": state}
     except Exception as e:
         raise HTTPException(status_code=500, detail="Server error fetching counts.")
