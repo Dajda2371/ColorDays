@@ -56,7 +56,8 @@ def oauth2callback(request: Request, code: str = None):
         if not user_email:
              raise HTTPException(status_code=400, detail="Could not retrieve email from Google.")
 
-        from data_manager import server_config
+        from data_manager import server_config, load_main_config_from_json
+        load_main_config_from_json()
         allowed_domains = server_config.get('allowed_oauth_domains', [])
         if allowed_domains:
             domain = user_email.split('@')[-1]
