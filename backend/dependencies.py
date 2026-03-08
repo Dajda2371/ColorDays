@@ -13,7 +13,7 @@ from data_manager import user_password_store
 
 # --- Google OAuth Imports (Optional) ---
 try:
-    from google_auth_oauthlib.flow import InstalledAppFlow
+    from google_auth_oauthlib.flow import InstalledAppFlow, Flow
     from googleapiclient import discovery as google_discovery_service
     GOOGLE_OAUTH_AVAILABLE = True
 except ImportError:
