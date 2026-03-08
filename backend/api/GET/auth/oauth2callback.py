@@ -12,22 +12,29 @@ from config import (
     DEFAULT_ROLE_FOR_NEW_USERS,
 )
 from data_manager import user_password_store, data_lock, save_user_data_to_db
-from dependencies import InstalledAppFlow, google_discovery_service
+from dependencies import Flow, google_discovery_service
 
 router = APIRouter()
 
 @router.get("/oauth2callback")
-def oauth2callback(code: str = None):
+def oauth2callback(request: Request, code: str = None):
     try:
         if not code:
             raise HTTPException(status_code=400, detail="Missing authorization code from Google.")
 
-        if InstalledAppFlow is None or google_discovery_service is None:
+        from dependencies import Flow
+        if Flow is None or google_discovery_service is None:
             raise HTTPException(status_code=500, detail="Google OAuth components missing on server.")
 
-        flow = InstalledAppFlow.from_client_secrets_file(
+        flow = Flow.from_client_secrets_file(
             CLIENT_SECRETS_FILE, scopes=GOOGLE_SCOPES, redirect_uri=GOOGLE_REDIRECT_URI
         )
+        
+        # Retrieve code_verifier from cookie
+        code_verifier = request.cookies.get("google_oauth_code_verifier")
+        if code_verifier:
+            flow.code_verifier = code_verifier
+
         flow.fetch_token(code=code)
         credentials = flow.credentials
 
@@ -71,6 +78,7 @@ def oauth2callback(code: str = None):
         response.set_cookie(key=SESSION_COOKIE_NAME, value=VALID_SESSION_VALUE, path='/', httponly=True)
         response.delete_cookie(key=CHANGE_PASSWORD_COOKIE_NAME, path='/')
         response.set_cookie(key=GOOGLE_COOKIE_NAME, value=user_email, path='/', httponly=False)
+        response.delete_cookie(key="google_oauth_code_verifier", path='/')
 
         return response
 

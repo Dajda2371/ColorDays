@@ -5,22 +5,28 @@ from config import (
     GOOGLE_SCOPES,
     GOOGLE_REDIRECT_URI,
 )
-from dependencies import InstalledAppFlow
+from dependencies import Flow
 
 router = APIRouter()
 
 @router.get("/login/google")
 def login_google():
     try:
-        if InstalledAppFlow is None:
-             raise HTTPException(status_code=500, detail="Google OAuth component (InstalledAppFlow) missing on server.")
+        from dependencies import Flow
+        if Flow is None:
+             raise HTTPException(status_code=500, detail="Google OAuth component (Flow) missing on server.")
 
-        flow = InstalledAppFlow.from_client_secrets_file(
+        flow = Flow.from_client_secrets_file(
             CLIENT_SECRETS_FILE, scopes=GOOGLE_SCOPES, redirect_uri=GOOGLE_REDIRECT_URI
         )
-        auth_url, _ = flow.authorization_url(prompt='consent', access_type='offline')
+        auth_url, state = flow.authorization_url(prompt='consent', access_type='offline')
 
-        return RedirectResponse(auth_url)
+        response = RedirectResponse(auth_url)
+        # Store the code verifier in a cookie to satisfy PKCE requirements on callback
+        if hasattr(flow, 'code_verifier') and flow.code_verifier:
+            response.set_cookie(key="google_oauth_code_verifier", value=flow.code_verifier, httponly=True, secure=True, samesite='lax')
+        
+        return response
     except FileNotFoundError:
         raise HTTPException(status_code=500, detail="Google OAuth configuration error (server-side).")
     except Exception as e:
