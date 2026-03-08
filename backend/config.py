@@ -34,10 +34,8 @@ STUDENTS_SQL_FILE_PATH = CURRENT_YEAR_DIR / 'students.sql'
 # --- Google OAuth Configuration ---
 CLIENT_SECRETS_FILE = DATA_DIR / 'client_secret.json'
 GOOGLE_SCOPES = ['openid', 'https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile']
-if PORT == 443:
-    GOOGLE_REDIRECT_URI = f'https://{DOMAIN}/oauth2callback'
-else:
-    GOOGLE_REDIRECT_URI = f'http://{DOMAIN}:{PORT}/oauth2callback'
+
+GOOGLE_REDIRECT_URI = f'https://{DOMAIN}/oauth2callback'
 
 # --- Secure Login Configuration ---
 HASH_ALGORITHM = 'sha256'
