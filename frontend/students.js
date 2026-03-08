@@ -1,4 +1,132 @@
+
+// --- NAVBAR LOGIC ADDED ---
+const logoutButton = document.getElementById('logoutButton');
+const languageToggle = document.getElementById('languageToggle');
+const toggleCs = document.getElementById('toggleCs');
+const toggleEn = document.getElementById('toggleEn');
+
+let translations = {};
+let currentLanguage = 'en';
+
+async function handleLogout() {
+    try {
+        const response = await fetch('/logout', {
+            method: 'POST',
+            credentials: 'include'
+        });
+        if (response.ok) {
+            window.location.href = '/login.html';
+        } else {
+            alert((translations.logoutFailedAlert?.[currentLanguage] || 'Logout failed'));
+        }
+    } catch (error) {
+        alert((translations.logoutErrorAlert?.[currentLanguage] || 'An error occurred during logout.'));
+    }
+}
+
+if (logoutButton) {
+    logoutButton.addEventListener('click', handleLogout);
+}
+
+async function fetchTranslations() {
+    try {
+        const response = await fetch('/api/translations');
+        if (!response.ok) return;
+        translations = await response.json();
+        applyTranslations();
+    } catch (error) {
+        console.error('Error fetching translations:', error);
+    }
+}
+
+function applyTranslations() {
+    document.querySelectorAll('[data-translate-key]').forEach(element => {
+        const key = element.getAttribute('data-translate-key');
+        const text = translations[key]?.[currentLanguage] || translations[key]?.['en'];
+        if (text) {
+            if (element.tagName === 'INPUT') {
+                element.placeholder = text;
+            } else {
+                element.textContent = text;
+            }
+        }
+    });
+}
+
+function displayLoggedInUser() {
+    const cookies = document.cookie.split('; ');
+    const usernameCookie = cookies.find(row => row.startsWith('ColorDaysUser='));
+    const usernameTextSpan = document.getElementById('usernameText');
+    if (usernameCookie && usernameTextSpan) {
+        const username = usernameCookie.split('=')[1];
+        usernameTextSpan.textContent = decodeURIComponent(username);
+    } else if (usernameTextSpan) {
+        usernameTextSpan.textContent = translations.usernameNotLoggedIn?.[currentLanguage] || (translations.usernameNotLoggedIn?.[currentLanguage] || 'Not Logged In');
+    }
+}
+
+function getCookie(name) {
+    const nameEQ = name + "=";
+    const ca = document.cookie.split(';');
+    for (let i = 0; i < ca.length; i++) {
+        let c = ca[i];
+        while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+        if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+    }
+    return null;
+}
+
+async function setLanguagePreference(lang) {
+    try {
+        const response = await fetch('/api/language/set', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ language: lang }),
+            credentials: 'include'
+        });
+        if (response.ok) {
+            currentLanguage = lang;
+            applyTranslations(); window.location.reload();
+            displayLoggedInUser();
+        }
+    } catch (error) {
+        console.error('Error setting language:', error);
+    }
+}
+
+function setToggleState(lang) {
+    if (toggleCs && toggleEn) {
+        if (lang === 'cs') {
+            toggleCs.classList.add('active');
+            toggleEn.classList.remove('active');
+        } else {
+            toggleEn.classList.add('active');
+            toggleCs.classList.remove('active');
+        }
+    }
+}
+
+if (languageToggle) {
+    languageToggle.addEventListener('click', (event) => {
+        const target = event.target;
+        if (target.tagName === 'SPAN' && target.dataset.lang) {
+            const selectedLang = target.dataset.lang;
+            setLanguagePreference(selectedLang);
+            setToggleState(selectedLang);
+        }
+    });
+}
+// --- END NAVBAR LOGIC ---
+
 document.addEventListener('DOMContentLoaded', function () {
+
+    // Navbar Initialization
+    currentLanguage = getCookie("language") || 'en';
+    fetchTranslations().then(() => {
+        setToggleState(currentLanguage);
+        displayLoggedInUser();
+    });
+
     const studentsTableBody = document.getElementById('students-table-body');
 
     if (!studentsTableBody) {
@@ -7,9 +135,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // Remove the hardcoded DOMAIN and PORT
-    // const DOMAIN = "barevnedny.davidbenes.cz";
-    // const PORT = 8000;
-
     let DOMAIN = '';
     let PORT = '';
 
@@ -48,7 +173,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     // Optionally, update a subtitle or heading to indicate filtering
                     const pageHeading = document.querySelector('h1');
                     if (pageHeading) {
-                        pageHeading.textContent = `Students for Class: ${classFromUrl}`;
+                        pageHeading.textContent = `${translations.studentsForClassText?.[currentLanguage] || 'Students for Class: '}${classFromUrl}`;
                     }
                 }
                 renderStudentsTable(studentsToRender);
@@ -62,6 +187,21 @@ document.addEventListener('DOMContentLoaded', function () {
     // Call fetchDomainAndPort before loading students
     fetchDomainAndPort().then(() => {
         loadStudents();
+
+        // Fetch refresh interval and setup auto-refresh
+        fetch('/api/config/refresh_intervals')
+            .then(res => res.json())
+            .then(intervals => {
+                const interval = intervals['students.html'];
+                if (interval && interval > 0) {
+                    setInterval(() => {
+                        if (!document.hidden) {
+                            loadStudents();
+                        }
+                    }, interval);
+                }
+            })
+            .catch(err => console.error("Error fetching refresh intervals:", err));
     });
 
     // Function to render students (add QR Code button)
@@ -77,9 +217,9 @@ document.addEventListener('DOMContentLoaded', function () {
           <td>${student.note}</td>
           <td>${(student.counting_classes || []).join(', ')}</td>
           <td>
-            <button class="class-button" onclick="window.location.href='student-is-counting.html?code=${encodeURIComponent(student.code)}&day=${encodeURIComponent(dayFromUrl)}'">Edit Classes</button>
-            <button class="class-button" onclick="showQrCode('${student.code}')">QR Code</button>
-            <button class="class-button" onclick="removeStudent('${student.code}', '${student.note?.replace(/'/g, "\\'") || ''}', '${student.class}')">Remove</button>
+            <button class="class-button" onclick="window.location.href='student-is-counting.html?code=${encodeURIComponent(student.code)}&day=${encodeURIComponent(dayFromUrl || '')}&class=${encodeURIComponent(classFromUrl || '')}'">${translations.editClassesBtnText?.[currentLanguage] || 'Edit Classes'}</button>
+            <button class="class-button" onclick="showQrCode('${student.code}')">${translations.qrCodeBtnText?.[currentLanguage] || 'QR Code'}</button>
+            <button class="class-button" onclick="removeStudent('${student.code}', '${student.note?.replace(/'/g, "\\'") || ''}', '${student.class}')">${translations.removeBtnText?.[currentLanguage] || 'Remove'}</button>
           </td>
         `;
             tbody.appendChild(tr);
@@ -114,7 +254,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Make functions globally accessible
     window.removeStudent = function (studentCode, studentNote, studentClass) {
-        if (!confirm(`Are you sure you want to remove the student configuration:\nCode: ${studentCode}\nClass: ${studentClass}\nNote: ${studentNote || '(No note)'}?`)) {
+        if (!confirm(`${(translations.confirmRemoveStudent?.[currentLanguage] || 'Are you sure you want to remove the student configuration:\nCode: {code}\nClass: {class}').replace('{code}', studentCode).replace('{class}', studentClass)}\n${translations.noteHeader?.[currentLanguage] || 'Note'}: ${studentNote || (translations.noNoteText?.[currentLanguage] || '(No note)')}?`)) {
             return;
         }
 
@@ -124,10 +264,10 @@ document.addEventListener('DOMContentLoaded', function () {
             .then(response => response.json().then(data => ({ ok: response.ok, data })))
             .then(({ ok, data }) => {
                 if (ok && data.success) {
-                    alert(data.message || 'Student configuration removed successfully.');
+                    alert(data.message || (translations.studentRemovedSuccess?.[currentLanguage] || 'Student configuration removed successfully.'));
                     loadStudents(); // Reload the table
                 } else {
-                    alert(`Error removing student configuration: ${data.error || 'Unknown error'}`);
+                    alert(`${translations.errorRemovingStudent?.[currentLanguage] || 'Error removing student configuration: '}${data.error || 'Unknown error'}`);
                 }
             })
             .catch(error => {
@@ -150,8 +290,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
         addRow.innerHTML = `
             <td style="color: grey; font-style: italic;">Auto-generated</td>
-            <td><input type="text" id="newStudentClass" placeholder="Class (e.g. 9.A)" value="${classValue}" /></td>
-            <td><input type="text" id="newStudentNote" placeholder="Note" /></td>
+            <td><input type="text" id="newStudentClass" placeholder="${translations.classPlaceholderText?.[currentLanguage] || 'Class (e.g. 9.A)'}" value="${classValue}" /></td>
+            <td><input type="text" id="newStudentNote" placeholder="${translations.notePlaceholderText?.[currentLanguage] || 'Note'}" /></td>
             <td>-</td>
             <td>
                 <button class="class-button" onclick="saveNewStudent()">Save</button>
@@ -184,7 +324,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const note = noteInput.value.trim();
 
         if (!className) {
-            alert("Class name is required.");
+            alert((translations.classNameRequiredText?.[currentLanguage] || "Class name is required."));
             return;
         }
 
@@ -218,3 +358,14 @@ document.addEventListener('DOMContentLoaded', function () {
     // Alias for backward compatibility if needed, though we will change HTML
     window.addStudentConfiguration = window.handleAddStudentRow;
 });
+
+function goBackToClasses() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const dayFromUrl = urlParams.get('day');
+
+    let url = 'classes.html';
+    if (dayFromUrl) {
+        url += '?day=' + encodeURIComponent(dayFromUrl);
+    }
+    window.location.href = url;
+}

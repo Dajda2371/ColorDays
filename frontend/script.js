@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
     currentDayIdentifier = urlParams.get('day'); // Store day globally
 
     if (!currentClassName || !currentDayIdentifier) {
-        alert("No class selected. Redirecting to the menu.");
+        alert((translations.noClassSelectedAlert?.[currentLanguage] || "No class selected. Redirecting to the menu."));
         window.location.href = 'menu.html'; // Redirect if no class
         return; // Stop further execution
     }
@@ -19,7 +19,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const classTeacherElement = document.getElementById('classTeacher');
     if (classNameElement) {
         // Find if we have translations loaded somewhere, else fallback correctly
-        classNameElement.textContent = `${decodeURIComponent(currentClassName)} | ${currentDayIdentifier.charAt(0).toUpperCase() + currentDayIdentifier.slice(1)}`;
+        let dayKey = '';
+        const dayLower = currentDayIdentifier.toLowerCase();
+        if (dayLower === 'monday' || dayLower === '1') dayKey = 'dayMonday';
+        else if (dayLower === 'tuesday' || dayLower === '2') dayKey = 'dayTuesday';
+        else if (dayLower === 'wednesday' || dayLower === '3') dayKey = 'dayWednesday';
+
+        let dayDisplay = currentDayIdentifier.charAt(0).toUpperCase() + currentDayIdentifier.slice(1);
+
+        if (dayKey) {
+            classNameElement.innerHTML = `${decodeURIComponent(currentClassName)} | <span data-translate-key="${dayKey}">${dayDisplay}</span>`;
+        } else {
+            classNameElement.textContent = `${decodeURIComponent(currentClassName)} | ${dayDisplay}`;
+        }
+        classNameElement.removeAttribute('data-translate-key');
     } else {
         console.error("Element with ID 'className' not found.");
     }
@@ -40,7 +53,149 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Fetch initial data for the table
     fetchData();
+
+    // Call localization and header loading logic
+    currentLanguage = getCookie("language") || 'en';
+    fetchTranslations().then(() => {
+        setToggleState(currentLanguage);
+        displayLoggedInUser();
+
+        // Fetch refresh interval and setup auto-refresh
+        fetch('/api/config/refresh_intervals')
+            .then(res => res.json())
+            .then(intervals => {
+                const interval = intervals['index.html'];
+                if (interval && interval > 0) {
+                    setInterval(() => {
+                        if (!document.hidden) {
+                            fetchData();
+                        }
+                    }, interval);
+                }
+            })
+            .catch(err => console.error("Error fetching refresh intervals:", err));
+    });
 });
+
+// --- NAVBAR LOGIC ADDED ---
+const logoutButton = document.getElementById('logoutButton');
+const languageToggle = document.getElementById('languageToggle');
+const toggleCs = document.getElementById('toggleCs');
+const toggleEn = document.getElementById('toggleEn');
+
+let translations = {};
+let currentLanguage = 'en';
+
+async function handleLogout() {
+    try {
+        const response = await fetch('/logout', {
+            method: 'POST',
+            credentials: 'include'
+        });
+        if (response.ok) {
+            window.location.href = '/login.html';
+        } else {
+            alert((translations.logoutFailedAlert?.[currentLanguage] || 'Logout failed'));
+        }
+    } catch (error) {
+        alert((translations.logoutErrorAlert?.[currentLanguage] || 'An error occurred during logout.'));
+    }
+}
+
+if (logoutButton) {
+    logoutButton.addEventListener('click', handleLogout);
+}
+
+async function fetchTranslations() {
+    try {
+        const response = await fetch('/api/translations');
+        if (!response.ok) return;
+        translations = await response.json();
+        applyTranslations();
+    } catch (error) {
+        console.error('Error fetching translations:', error);
+    }
+}
+
+function applyTranslations() {
+    document.querySelectorAll('[data-translate-key]').forEach(element => {
+        const key = element.getAttribute('data-translate-key');
+        const text = translations[key]?.[currentLanguage] || translations[key]?.['en'];
+        if (text) {
+            if (element.tagName === 'INPUT') {
+                element.placeholder = text;
+            } else {
+                element.textContent = text;
+            }
+        }
+    });
+}
+
+function displayLoggedInUser() {
+    const cookies = document.cookie.split('; ');
+    const usernameCookie = cookies.find(row => row.startsWith('ColorDaysUser='));
+    const usernameTextSpan = document.getElementById('usernameText');
+    if (usernameCookie && usernameTextSpan) {
+        const username = usernameCookie.split('=')[1];
+        usernameTextSpan.textContent = decodeURIComponent(username);
+    } else if (usernameTextSpan) {
+        usernameTextSpan.textContent = translations.usernameNotLoggedIn?.[currentLanguage] || (translations.usernameNotLoggedIn?.[currentLanguage] || 'Not Logged In');
+    }
+}
+
+function getCookie(name) {
+    const nameEQ = name + "=";
+    const ca = document.cookie.split(';');
+    for (let i = 0; i < ca.length; i++) {
+        let c = ca[i];
+        while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+        if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+    }
+    return null;
+}
+
+async function setLanguagePreference(lang) {
+    try {
+        const response = await fetch('/api/language/set', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ language: lang }),
+            credentials: 'include'
+        });
+        if (response.ok) {
+            currentLanguage = lang;
+            applyTranslations(); window.location.reload(); window.location.reload();
+            displayLoggedInUser();
+        }
+    } catch (error) {
+        console.error('Error setting language:', error);
+    }
+}
+
+function setToggleState(lang) {
+    if (toggleCs && toggleEn) {
+        if (lang === 'cs') {
+            toggleCs.classList.add('active');
+            toggleEn.classList.remove('active');
+        } else {
+            toggleEn.classList.add('active');
+            toggleCs.classList.remove('active');
+        }
+    }
+}
+
+if (languageToggle) {
+    languageToggle.addEventListener('click', (event) => {
+        const target = event.target;
+        if (target.tagName === 'SPAN' && target.dataset.lang) {
+            const selectedLang = target.dataset.lang;
+            setLanguagePreference(selectedLang);
+            setToggleState(selectedLang);
+        }
+    });
+}
+// --- END NAVBAR LOGIC ---
+
 
 // --- Fetch data from the backend ---
 async function fetchData() {
@@ -216,7 +371,7 @@ function createButtons() {
 async function handleCountChange(action, type, points) {
     if (!currentClassName || !currentDayIdentifier) {
         console.error("Cannot change count, className or dayIdentifier is not set.");
-        alert("Error: Class context lost. Please refresh or go back to menu.");
+        alert((translations.classContextLostAlert?.[currentLanguage] || "Error: Class context lost. Please refresh or go back to menu."));
         return;
     }
 
@@ -264,6 +419,9 @@ async function handleCountChange(action, type, points) {
 
     } catch (error) {
         console.error(`Error during ${action}:`, error);
-        alert(`Failed to ${action} count. ${error.message}`); // Inform the user
+        const actionTranslation = action === 'increment'
+            ? (translations.failedToIncrementAlert?.[currentLanguage] || 'Failed to increment count.')
+            : (translations.failedToDecrementAlert?.[currentLanguage] || 'Failed to decrement count.');
+        alert(`${actionTranslation} ${error.message}`);
     }
 }

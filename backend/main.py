@@ -5,7 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from config import (
     FRONTEND_DIR, ADMIN_ROLE, SESSION_COOKIE_NAME, VALID_SESSION_VALUE,
-    SQL_AUTH_USER_STUDENT_COOKIE_NAME, DATABASE_FILE, YEAR_DATABASE_FILE, BACKEND_DIR
+    SQL_AUTH_USER_STUDENT_COOKIE_NAME, DATABASE_FILE, YEAR_DATABASE_FILE, BACKEND_DIR,
+    PORT, DOMAIN
 )
 from data_manager import (
     load_user_data_from_db,
@@ -50,10 +51,12 @@ app = FastAPI(lifespan=lifespan)
 
 # CORS configuration
 origins = [
-    "http://localhost:443",
-    "http://127.0.0.1:443",
-    "https://localhost",
-    "https://127.0.0.1",
+    f"http://localhost:{PORT}",
+    f"http://127.0.0.1:{PORT}",
+    f"https://localhost:{PORT}" if PORT != 443 else "https://localhost",
+    f"https://127.0.0.1:{PORT}" if PORT != 443 else "https://127.0.0.1",
+    f"http://{DOMAIN}:{PORT}",
+    f"https://{DOMAIN}" if PORT == 443 else f"https://{DOMAIN}:{PORT}",
 ]
 
 app.add_middleware(

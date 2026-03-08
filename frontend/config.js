@@ -1,3 +1,123 @@
+
+// --- NAVBAR LOGIC ADDED ---
+const logoutButton = document.getElementById('logoutButton');
+const languageToggle = document.getElementById('languageToggle');
+const toggleCs = document.getElementById('toggleCs');
+const toggleEn = document.getElementById('toggleEn');
+
+let translations = {};
+let currentLanguage = 'en';
+
+async function handleLogout() {
+    try {
+        const response = await fetch('/logout', {
+            method: 'POST',
+            credentials: 'include'
+        });
+        if (response.ok) {
+            window.location.href = '/login.html';
+        } else {
+            alert((translations.logoutFailedAlert?.[currentLanguage] || 'Logout failed'));
+        }
+    } catch (error) {
+        alert((translations.logoutErrorAlert?.[currentLanguage] || 'An error occurred during logout.'));
+    }
+}
+
+if (logoutButton) {
+    logoutButton.addEventListener('click', handleLogout);
+}
+
+async function fetchTranslations() {
+    try {
+        const response = await fetch('/api/translations');
+        if (!response.ok) return;
+        translations = await response.json();
+        applyTranslations();
+    } catch (error) {
+        console.error('Error fetching translations:', error);
+    }
+}
+
+function applyTranslations() {
+    document.querySelectorAll('[data-translate-key]').forEach(element => {
+        const key = element.getAttribute('data-translate-key');
+        const text = translations[key]?.[currentLanguage] || translations[key]?.['en'];
+        if (text) {
+            if (element.tagName === 'INPUT') {
+                element.placeholder = text;
+            } else {
+                element.textContent = text;
+            }
+        }
+    });
+}
+
+function displayLoggedInUser() {
+    const cookies = document.cookie.split('; ');
+    const usernameCookie = cookies.find(row => row.startsWith('ColorDaysUser='));
+    const usernameTextSpan = document.getElementById('usernameText');
+    if (usernameCookie && usernameTextSpan) {
+        const username = usernameCookie.split('=')[1];
+        usernameTextSpan.textContent = decodeURIComponent(username);
+    } else if (usernameTextSpan) {
+        usernameTextSpan.textContent = translations.usernameNotLoggedIn?.[currentLanguage] || (translations.usernameNotLoggedIn?.[currentLanguage] || 'Not Logged In');
+    }
+}
+
+function getCookie(name) {
+    const nameEQ = name + "=";
+    const ca = document.cookie.split(';');
+    for (let i = 0; i < ca.length; i++) {
+        let c = ca[i];
+        while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+        if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+    }
+    return null;
+}
+
+async function setLanguagePreference(lang) {
+    try {
+        const response = await fetch('/api/language/set', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ language: lang }),
+            credentials: 'include'
+        });
+        if (response.ok) {
+            currentLanguage = lang;
+            applyTranslations(); window.location.reload(); window.location.reload();
+            displayLoggedInUser();
+        }
+    } catch (error) {
+        console.error('Error setting language:', error);
+    }
+}
+
+function setToggleState(lang) {
+    if (toggleCs && toggleEn) {
+        if (lang === 'cs') {
+            toggleCs.classList.add('active');
+            toggleEn.classList.remove('active');
+        } else {
+            toggleEn.classList.add('active');
+            toggleCs.classList.remove('active');
+        }
+    }
+}
+
+if (languageToggle) {
+    languageToggle.addEventListener('click', (event) => {
+        const target = event.target;
+        if (target.tagName === 'SPAN' && target.dataset.lang) {
+            const selectedLang = target.dataset.lang;
+            setLanguagePreference(selectedLang);
+            setToggleState(selectedLang);
+        }
+    });
+}
+// --- END NAVBAR LOGIC ---
+
 let users = {};
 let currentClasses = []; // For storing class data
 
@@ -23,13 +143,13 @@ function renderUsers() {
     let status;
 
     if (!info.password) {
-      status = "not set";
+      status = (translations.notSetStatus?.[currentLanguage] || "not set");
     } else if (info.password === "not_set") {
-      status = "not set";
-    } else if (info.password === "set") {
-      status = "set";
+      status = (translations.notSetStatus?.[currentLanguage] || "not set");
+    } else if (info.password === (translations.setStatus?.[currentLanguage] || "set")) {
+      status = (translations.setStatus?.[currentLanguage] || "set");
     } else if (info.password === "google_auth_user") {
-      status = "Google Auth";
+      status = (translations.googleAuthStatus?.[currentLanguage] || "Google Auth");
     } else {
       status = info.password;
     }
@@ -38,14 +158,14 @@ function renderUsers() {
       <td>${username}</td>
       <td>${status}</td>
       <td>
-        ${status === "not set" && status !== "Google Auth" // || /^[a-zA-Z0-9]{10}$/.test(info.password)
-        ? `<button onclick="setPassword('${username}')">Set Password</button>`
-        : status === "Google Auth"
+        ${status === (translations.notSetStatus?.[currentLanguage] || "not set") && status !== (translations.googleAuthStatus?.[currentLanguage] || "Google Auth") // || /^[a-zA-Z0-9]{10}$/.test(info.password)
+        ? `<button onclick="setPassword('${username}')">${translations.setPasswordBtnText?.[currentLanguage] || 'Set Password'}</button>`
+        : status === (translations.googleAuthStatus?.[currentLanguage] || "Google Auth")
           ? ``
-          : `<button onclick="resetPassword('${username}')">Reset Password</button>`
+          : `<button onclick="resetPassword('${username}')">${translations.resetPasswordBtnText?.[currentLanguage] || 'Reset Password'}</button>`
       }
         ${username !== "admin"
-        ? `<button onclick="removeUser('${username}')">Remove</button>`
+        ? `<button onclick="removeUser('${username}')">${translations.removeBtnText?.[currentLanguage] || 'Remove'}</button>`
         : ""
       }
       </td>
@@ -66,16 +186,16 @@ async function loadUsers() {
 }
 
 async function addUser() {
-  const username = prompt("Enter new username:");
+  const username = prompt((translations.enterNewUsernamePrompt?.[currentLanguage] || "Enter new username:"));
   // Basic validation for username
   if (!username) { // Check if prompt was cancelled or empty
-    alert("Username cannot be empty.");
+    alert((translations.usernameEmptyError?.[currentLanguage] || "Username cannot be empty."));
     return;
   }
   // Check if username already exists (using the locally loaded 'users' object)
   // Note: This check is based on the last 'loadUsers' call, might be slightly stale.
   if (users[username]) {
-    alert("Username already exists locally. Refresh if needed."); // Clarified message
+    alert((translations.usernameExistsError?.[currentLanguage] || "Username already exists locally. Refresh if needed.")); // Clarified message
     return;
   }
 
@@ -92,7 +212,7 @@ async function addUser() {
 
     // Improved response handling
     if (res.ok) {
-      let successMessage = "User added successfully!";
+      let successMessage = (translations.userAddedSuccess?.[currentLanguage] || "User added successfully!");
       try {
         const result = await res.json(); // Attempt to parse success response
         if (result && result.message) {
@@ -103,11 +223,11 @@ async function addUser() {
       loadUsers(); // Refresh the user list on success
     } else {
       // Attempt to get error message from backend
-      let errorMessage = "Failed to add user";
+      let errorMessage = (translations.failedAddUser?.[currentLanguage] || "Failed to add user");
       try {
         const errorData = await res.json();
         if (errorData && errorData.error) {
-          errorMessage = `Failed to add user: ${errorData.error}`;
+          errorMessage = `${translations.failedAddUserPrefix?.[currentLanguage] || "Failed to add user: "}${errorData.error}`;
         }
       } catch (e) { /* Ignore if response not JSON */ }
       alert(errorMessage + ` (Status: ${res.status})`);
@@ -119,13 +239,13 @@ async function addUser() {
 }
 
 async function removeUser(username) {
-  if (!confirm(`Remove user ${username}?`)) return;
+  if (!confirm(`${translations.confirmRemoveUser?.[currentLanguage] || "Remove user "}${username}?`)) return;
   const res = await fetch(`/api/users?username=${encodeURIComponent(username)}`, {
     method: "DELETE",
     headers: { "Content-Type": "application/json" }
   });
   if (res.ok) loadUsers();
-  else alert("Failed to remove user");
+  else alert((translations.failedRemoveUser?.[currentLanguage] || "Failed to remove user"));
 }
 
 function generatePassword(length = 10) {
@@ -141,7 +261,7 @@ async function setPassword(username) {
     body: JSON.stringify({ username, new_password: newPassword })
   });
   if (res.ok) loadUsers();
-  else alert("Failed to reset password");
+  else alert((translations.failedResetPassword?.[currentLanguage] || "Failed to reset password"));
 }
 
 async function resetPassword(username) {
@@ -152,14 +272,14 @@ async function resetPassword(username) {
     body: JSON.stringify({ username, new_password: newPassword })
   });
   if (res.ok) loadUsers();
-  else alert("Failed to reset password");
+  else alert((translations.failedResetPassword?.[currentLanguage] || "Failed to reset password"));
 }
 
 async function changePassword() {
   const username = document.getElementById('changeUsername').value.trim();
   const password = document.getElementById('changePassword').value;
 
-  if (!username || !password) return alert("Username and new password required.");
+  if (!username || !password) return alert((translations.usernamePasswordRequired?.[currentLanguage] || "Username and new password required."));
 
   const res = await fetch('/change_password', {
     method: 'POST',
@@ -183,10 +303,12 @@ function renderClasses() {
     tr.innerHTML = `
       <td>${cls.class}</td>
       <td>${cls.teacher}</td>
-      <td>
-        <input type="checkbox" ${cls.counts1 === 'T' ? 'checked' : ''} onchange="updateClassCount('${cls.class}', 'counts1', this.checked)" />
-        <input type="checkbox" ${cls.counts2 === 'T' ? 'checked' : ''} onchange="updateClassCount('${cls.class}', 'counts2', this.checked)" />
-        <input type="checkbox" ${cls.counts3 === 'T' ? 'checked' : ''} onchange="updateClassCount('${cls.class}', 'counts3', this.checked)" />
+      <td class="narrow-col">
+        <div style="display: flex; justify-content: center; align-items: center; white-space: nowrap;">
+          <input type="checkbox" ${cls.counts1 === 'T' ? 'checked' : ''} onchange="updateClassCount('${cls.class}', 'counts1', this.checked)" />
+          <input type="checkbox" ${cls.counts2 === 'T' ? 'checked' : ''} onchange="updateClassCount('${cls.class}', 'counts2', this.checked)" />
+          <input type="checkbox" ${cls.counts3 === 'T' ? 'checked' : ''} onchange="updateClassCount('${cls.class}', 'counts3', this.checked)" />
+        </div>
       </td>
       <td>
         <button onclick="promptRemoveClass('${cls.class}')">Remove</button>
@@ -204,13 +326,15 @@ function handleAddClassRow() {
   const addRow = document.createElement("tr");
   addRow.id = "addClassRow";
   addRow.innerHTML = `
-      <td><input type="text" id="newClassName" placeholder="New Class (e.g. 1.A)" /></td>
-      <td><input type="text" id="newClassTeacher" placeholder="Teacher Name" /></td>
-      <td>
+      <td><input type="text" id="newClassName" placeholder="${translations.newClassPlaceholder?.[currentLanguage] || 'New Class (e.g. 1.A)'}" /></td>
+      <td><input type="text" id="newClassTeacher" placeholder="${translations.teacherNamePlaceholder?.[currentLanguage] || 'Teacher Name'}" /></td>
+      <td class="narrow-col">
         <!-- Counts are always F initially, saved on click later if needed, but here we just create class -->
-        <input type="checkbox" disabled />
-        <input type="checkbox" disabled />
-        <input type="checkbox" disabled />
+        <div style="display: flex; justify-content: center; align-items: center; white-space: nowrap;">
+          <input type="checkbox" disabled />
+          <input type="checkbox" disabled />
+          <input type="checkbox" disabled />
+        </div>
       </td>
       <td>
         <button onclick="saveNewClass()">Save</button>
@@ -227,7 +351,7 @@ function cancelAddClass() {
 
 
 function prefillClasses() {
-  if (!confirm("Are you sure you want to scrape classes from the school website? This will add any new classes found.")) return;
+  if (!confirm((translations.confirmScrapeClasses?.[currentLanguage] || "Are you sure you want to scrape classes from the school website? This will add any new classes found."))) return;
 
   // Find the button if clicked, or just do general logic
   // Since we call this from onclick in HTML, we don't necessarily have the event object passed automatically unless we pass it.
@@ -281,7 +405,7 @@ async function saveNewClass() {
   const teacher = teacherInput.value.trim();
 
   if (!className) {
-    alert("Please enter a class name.");
+    alert((translations.pleaseEnterClassName?.[currentLanguage] || "Please enter a class name."));
     return;
   }
   // Allow empty teacher
@@ -328,7 +452,7 @@ async function saveNewClass() {
 const addClass = handleAddClassRow;
 
 async function promptRemoveClass(className) {
-  if (!confirm(`Are you sure you want to remove class "${className}"?`)) return;
+  if (!confirm(`${translations.confirmRemoveClass?.[currentLanguage] || "Are you sure you want to remove class "}"${className}"?`)) return;
 
   try {
     const res = await fetch(`/api/classes?class=${encodeURIComponent(className)}`, {
@@ -459,7 +583,7 @@ async function loadOauthConfig() {
 }
 
 function addGoogleOauthDomain() {
-  const domainName = prompt("Enter the new allowed domain (e.g., example.com):");
+  const domainName = prompt((translations.enterNewDomainPrompt?.[currentLanguage] || "Enter the new allowed domain (e.g., example.com):"));
   if (domainName && domainName.trim() !== "") {
     const googleOauthTableBody = document.getElementById('googleOauthTableBody');
     if (googleOauthTableBody) {
@@ -485,7 +609,7 @@ function addGoogleOauthDomain() {
       debouncedSaveGoogleOauth(); // Auto-save after adding a new domain row
     }
   } else if (domainName !== null) { // User pressed OK but field was empty
-    alert("Domain name cannot be empty.");
+    alert((translations.domainEmptyError?.[currentLanguage] || "Domain name cannot be empty."));
   }
 }
 
@@ -535,6 +659,14 @@ async function saveGoogleOauth() {
 // --- Initialization ---
 
 document.addEventListener("DOMContentLoaded", () => {
+
+    // Navbar Initialization
+    currentLanguage = getCookie("language") || 'en';
+    fetchTranslations().then(() => {
+        setToggleState(currentLanguage);
+        displayLoggedInUser();
+    });
+
   loadUsers();
   loadClasses();
   loadOauthConfig();

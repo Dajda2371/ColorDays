@@ -4,158 +4,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Classes</title>
+  <title data-translate-key="classesTitle">Classes</title>
   <link rel="stylesheet" href="style.css" />
-  <style>
-      /* Reuse styles from menu.html */
-      #leftSideContainer {
-      position: fixed;
-      top: 15px;
-      left: 15px;
-      padding: 15px;
-      border: 1px solid #e0e0e0;
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-      border-radius: 8px;
-      background-color: white;
-      z-index: 1000;
-    }
-
-    #languageToggle {
-      display: flex;
-      border: 1px solid #ced4da;
-      border-radius: 6px;
-      overflow: hidden;
-      margin-top: 10px;
-      background-color: #fff;
-    }
-
-    #languageToggle span {
-      flex-grow: 1;
-      text-align: center;
-      padding: 8px 12px;
-      cursor: pointer;
-      background-color: #f8f9fa;
-      color: #495057;
-      transition: all 0.2s ease;
-      user-select: none;
-      font-size: 0.9rem;
-    }
-
-    #languageToggle span.active {
-      background-color: #007bff;
-      color: white;
-      font-weight: 600;
-    }
-
-    #mainContent {
-      max-width: 800px;
-      padding: 20px;
-      position: absolute;
-      left: 50%;
-      transform: translateX(-50%);
-      text-align: center;
-      box-sizing: border-box;
-      width: 100%;
-    }
-
-    #headerButtons {
-      position: fixed;
-      top: 15px;
-      right: 15px;
-      display: flex;
-      gap: 10px;
-      z-index: 1000;
-      flex-wrap: wrap;
-      justify-content: flex-end;
-    }
-
-    .header-button {
-      padding: 10px 15px;
-      cursor: pointer;
-      background-color: #f8f9fa;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      transition: all 0.2s ease;
-      font-size: 0.9rem;
-      min-height: 40px;
-    }
-
-    .header-button:hover {
-      background-color: #007bff;
-    }
-
-    body {
-      padding-top: 100px;
-      padding-left: 0;
-      background-color: #fdfdfd;
-    }
-
-    #loggedInUser {
-      display: flex;
-      align-items: center;
-      font-weight: 600;
-      color: #333;
-      font-size: 0.95rem;
-    }
-
-    #profileCircle {
-      width: 32px;
-      height: 32px;
-      background-color: #adb5bd;
-      border-radius: 50%;
-      margin-right: 10px;
-      flex-shrink: 0;
-    }
-
-    @media (max-width: 768px) {
-      #leftSideContainer {
-        position: static;
-        margin: 0 auto 15px auto;
-        width: 90%;
-        max-width: 400px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-      }
-
-      #loggedInUser {
-        margin-bottom: 10px;
-        width: 100%;
-        justify-content: center;
-      }
-
-      #languageToggle {
-        width: 100%;
-      }
-
-      #headerButtons {
-        position: static;
-        flex-direction: column;
-        width: 90%;
-        margin: 0 auto 20px auto;
-        max-width: 400px;
-        gap: 8px;
-      }
-
-      .header-button {
-        width: 100%;
-        text-align: center;
-        padding: 12px;
-      }
-
-      #mainContent {
-        position: static;
-        transform: none;
-        width: 100%;
-        padding: 10px;
-      }
-
-      body {
-        padding-top: 10px;
-        padding-bottom: 30px;
-      }
-    }
-  </style>
 </head>
 
 <body>
@@ -182,50 +32,50 @@
 
   <!-- Main Content Container -->
   <div id="mainContent">
-  <h1>Classes</h1>
+    <!-- Header removed -->
 
-  <section style="margin-top: 3rem;">
-    <h2>Days</h2>
+    <section class="mt-3rem">
+      <h2 data-translate-key="daysHeading">Days</h2>
 
-    <section id="monday-classes">
-      <h3>Monday</h3>
-      <!-- Buttons for Monday classes will be dynamically added here -->
+      <section id="monday-classes">
+        <h3 data-translate-key="mondayHeader">Monday</h3>
+        <!-- Buttons for Monday classes will be dynamically added here -->
+      </section>
+
+      <section id="tuesday-classes">
+        <h3 data-translate-key="tuesdayHeader">Tuesday</h3>
+        <!-- Buttons for Tuesday classes will be dynamically added here -->
+      </section>
+
+      <section id="wednesday-classes">
+        <h3 data-translate-key="wednesdayHeader">Wednesday</h3>
+        <!-- Buttons for Wednesday classes will be dynamically added here -->
+      </section>
     </section>
 
-    <section id="tuesday-classes">
-      <h3>Tuesday</h3>
-      <!-- Buttons for Tuesday classes will be dynamically added here -->
+    <section class="mt-3rem">
+      <h2 data-translate-key="classCountingListHeading">Class Counting List</h2>
+      <div id="auto-assign-controls" class="mb-1rem">
+        <button id="split-evenly-btn" class="button" data-translate-key="splitEvenlyBtnText">Split Evenly</button>
+        <button id="split-randomly-btn" class="button" data-translate-key="splitRandomlyBtnText">Split Randomly</button>
+        <button id="clear-assignments-btn" class="button btn-danger" data-translate-key="clearAllBtnText">Clear All</button>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th data-translate-key="classHeader">Class</th>
+              <th data-translate-key="mondayHeader">Monday</th>
+              <th data-translate-key="tuesdayHeader">Tuesday</th>
+              <th data-translate-key="wednesdayHeader">Wednesday</th>
+            </tr>
+          </thead>
+          <tbody id="class-counting-tbody">
+            <!-- Class counting data will be dynamically added here -->
+          </tbody>
+        </table>
+      </div>
     </section>
-
-    <section id="wednesday-classes">
-      <h3>Wednesday</h3>
-      <!-- Buttons for Wednesday classes will be dynamically added here -->
-    </section>
-  </section>
-
-  <section style="margin-top: 3rem;">
-    <h2>Class Counting List</h2>
-    <div id="auto-assign-controls" style="margin-bottom: 1rem;">
-      <button id="split-evenly-btn" class="button">Split Evenly</button>
-      <button id="split-randomly-btn" class="button">Split Randomly</button>
-      <button id="clear-assignments-btn" class="button" style="background-color: #dc3545; color: white; border-color: #bd2130;">Clear All</button>
-    </div>
-    <div class="table-wrapper">
-    <table>
-      <thead>
-        <tr>
-          <th>Class</th>
-          <th>Monday</th>
-          <th>Tuesday</th>
-          <th>Wednesday</th>
-        </tr>
-      </thead>
-      <tbody id="class-counting-tbody">
-        <!-- Class counting data will be dynamically added here -->
-      </tbody>
-    </table>
-    </div>
-  </section>
   </div>
 
   <!-- Ensure classes.js is linked -->
