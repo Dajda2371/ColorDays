@@ -288,34 +288,73 @@ function updateUIState() {
     const lockBtn = document.getElementById('lockButton');
     const allCountButtons = document.querySelectorAll('.btn-count');
 
+    if (!markDoneBtn) return;
+
     // Reset common styles/states
     markDoneBtn.classList.remove('disabled');
     if (lockBtn) lockBtn.classList.remove('disabled');
-    allCountButtons.forEach(btn => btn.classList.remove('disabled', 'active'));
+    allCountButtons.forEach(btn => btn.classList.remove('disabled'));
 
     if (currentClassState === 'done') {
         allCountButtons.forEach(btn => btn.classList.add('disabled'));
-        markDoneBtn.classList.add('disabled');
-        // If we want to indicate it's active
-        markDoneBtn.style.backgroundColor = '#71dd8a';
-        markDoneBtn.style.color = '#fff';
+
+        // Mark as Done becomes EDIT, enabled, green
+        markDoneBtn.setAttribute('data-translate-key', 'editButtonText');
+        markDoneBtn.style.backgroundColor = '#d4edda';
+        markDoneBtn.style.color = '#155724';
+        markDoneBtn.classList.remove('disabled');
+
+        if (lockBtn) {
+            // Lock stays LOCK, enabled, red
+            lockBtn.setAttribute('data-translate-key', 'lockButtonText');
+            lockBtn.classList.remove('disabled');
+            lockBtn.style.backgroundColor = '#f8d7da';
+            lockBtn.style.color = '#721c24';
+            lockBtn.style.pointerEvents = 'auto'; // ensure clickable
+            lockBtn.style.opacity = '1';
+        }
+
     } else if (currentClassState === 'locked') {
         allCountButtons.forEach(btn => btn.classList.add('disabled'));
+
+        // Mark as Done becomes EDIT, disabled, green
+        markDoneBtn.setAttribute('data-translate-key', 'editButtonText');
         markDoneBtn.classList.add('disabled');
+        markDoneBtn.style.backgroundColor = '#d4edda';
+        markDoneBtn.style.color = '#155724';
+
         if (lockBtn) {
-            lockBtn.classList.add('disabled');
-            lockBtn.style.backgroundColor = '#f1b0b7';
-            lockBtn.style.color = '#fff';
+            // Lock becomes UNLOCK, enabled, red
+            lockBtn.setAttribute('data-translate-key', 'unlockButtonText');
+            lockBtn.classList.remove('disabled');
+            lockBtn.style.backgroundColor = '#f8d7da';
+            lockBtn.style.color = '#721c24';
+            lockBtn.style.pointerEvents = 'auto'; // ensure clickable
+            lockBtn.style.opacity = '1';
         }
     } else {
-        // Reset colors
+        // State EMPTY
+        allCountButtons.forEach(btn => btn.classList.remove('disabled'));
+
+        // Mark as Done stays MARK AS DONE, enabled, blue/default
+        markDoneBtn.setAttribute('data-translate-key', 'markAsDoneButtonText');
         markDoneBtn.style.backgroundColor = '';
         markDoneBtn.style.color = '';
+        markDoneBtn.classList.remove('disabled');
+
         if (lockBtn) {
+            // Lock button stays LOCK, but is DISABLED
+            lockBtn.setAttribute('data-translate-key', 'lockButtonText');
+            lockBtn.classList.add('disabled');
             lockBtn.style.backgroundColor = '';
             lockBtn.style.color = '';
+            lockBtn.style.pointerEvents = 'none';
+            lockBtn.style.opacity = '0.5';
         }
     }
+
+    // Refresh translations for the dynamically updated keys
+    applyTranslations();
 }
 
 // --- Update the table cells with fetched data ---

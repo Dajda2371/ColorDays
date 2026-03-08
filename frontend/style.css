@@ -570,13 +570,14 @@ input[type="checkbox"] {
 /* Styling for disabled buttons when done/locked */
 .btn-count.disabled,
 .btn-state.disabled {
-  background-color: #e9ecef !important;
-  color: #adb5bd !important;
-  border-color: #dee2e6 !important;
-  cursor: not-allowed !important;
+  background-color: #e9ecef;
+  color: #adb5bd;
+  border-color: #dee2e6;
+  cursor: not-allowed;
+  pointer-events: none;
   opacity: 0.65;
-  transform: none !important;
-  box-shadow: none !important;
+  transform: none;
+  box-shadow: none;
 }
 
 .classList {

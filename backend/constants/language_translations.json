@@ -666,5 +666,13 @@
   "stateUpdateFailedAlert": {
     "en": "Failed to update class state.",
     "cs": "Nepodařilo se aktualizovat stav třídy."
+  },
+  "editButtonText": {
+    "en": "Edit",
+    "cs": "Upravit"
+  },
+  "unlockButtonText": {
+    "en": "Unlock",
+    "cs": "Odemknout"
   }
 }
