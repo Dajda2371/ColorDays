@@ -77,4 +77,6 @@ def oauth2callback(code: str = None):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Google OAuth callback failed.")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Google OAuth callback failed: {str(e)}")
