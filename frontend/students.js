@@ -135,9 +135,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // Remove the hardcoded DOMAIN and PORT
-    // const DOMAIN = "barevnedny.davidbenes.cz";
-    // const PORT = 8000;
-
     let DOMAIN = '';
     let PORT = '';
 

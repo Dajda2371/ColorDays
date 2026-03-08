@@ -3,6 +3,7 @@ services:
     build: .
     container_name: colordays_app
     ports:
+      # Note: If you change PORT in backend/config.py, you must also change it here!
       - "443:443"
     volumes:
       - ./backend/data:/app/backend/data
