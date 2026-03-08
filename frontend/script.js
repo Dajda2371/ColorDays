@@ -255,8 +255,12 @@ async function fetchData() {
 }
 
 async function handleStateChange(newState) {
-    if (currentClassState === newState) {
-        // Toggle off if already active? (Reset to empty)
+    if (currentClassState === 'locked' && newState === 'locked') {
+        // Special case: Unlock (which is the lock button in locked state)
+        // should return the state to 'done'
+        newState = 'done';
+    } else if (currentClassState === newState) {
+        // Normal toggle: if clicking an active state button again, reset to empty
         newState = '';
     }
 
