@@ -195,9 +195,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 const interval = intervals['students.html'];
                 if (interval && interval > 0) {
                     setInterval(() => {
-                        if (!document.hidden) {
-                            loadStudents();
-                        }
+                        if (document.hidden) return;
+                        if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA' || document.getElementById('addStudentRow')) return;
+                        loadStudents();
                     }, interval);
                 }
             })

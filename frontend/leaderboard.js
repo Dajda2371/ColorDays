@@ -216,9 +216,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const interval = intervals['leaderboard.html'];
                 if (interval && interval > 0) {
                     setInterval(() => {
-                        if (!document.hidden) {
-                            loadLeaderboard(false);
-                        }
+                        if (document.hidden) return;
+                        if (document.activeElement.tagName === 'INPUT') return;
+                        loadLeaderboard(false);
                     }, interval);
                 }
             })

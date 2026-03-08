@@ -209,7 +209,11 @@ document.addEventListener('DOMContentLoaded', function () {
         .then(intervals => {
             const interval = intervals['student-is-counting.html'];
             if (interval && interval > 0) {
-                setInterval(loadStudentDetails, interval);
+                setInterval(() => {
+                    if (document.hidden) return;
+                    if (document.activeElement.tagName === 'INPUT') return;
+                    loadStudentDetails();
+                }, interval);
             }
         })
         .catch(err => console.error("Error fetching refresh intervals:", err));

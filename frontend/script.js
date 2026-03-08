@@ -87,9 +87,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const interval = intervals['index.html'];
                 if (interval && interval > 0) {
                     setInterval(() => {
-                        if (!document.hidden) {
-                            fetchData();
-                        }
+                        if (document.hidden) return;
+                        if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
+                        fetchData();
                     }, interval);
                 }
             })
