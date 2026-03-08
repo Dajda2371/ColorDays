@@ -1,7 +1,7 @@
 import uvicorn
 import sys
 import logging
-from config import HOST, PORT, LOG_FILENAME
+from config import HOST, PORT
 
 # Configure logging (basic setup, uvicorn will add its own)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -10,7 +10,6 @@ logger = logging.getLogger("ColorDaysLogger")
 def main():
     """Main function to run the FastAPI server."""
     print(f"Starting ColorDays server on {HOST}:{PORT} using FastAPI/Uvicorn...")
-    print(f"Logging to {LOG_FILENAME}")
 
     # Run Uvicorn
     # reload=True is useful for dev, but maybe not prod. Defaults to False usually.

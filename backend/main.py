@@ -13,7 +13,6 @@ from data_manager import (
     load_class_data_from_db,
     load_students_data_from_db,
     load_main_config_from_json,
-    ensure_year_data_directory_exists,
     create_tables
 )
 from dependencies import get_current_user_info, active_sessions
@@ -25,8 +24,6 @@ from pathlib import Path
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Startup: Loading data...")
-    # Ensure directories exist
-    ensure_year_data_directory_exists()
 
     # Initialize DBs
     try:

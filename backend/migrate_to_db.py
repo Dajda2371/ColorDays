@@ -13,7 +13,6 @@ This script:
 
 from pathlib import Path
 from data_manager import (
-    ensure_year_data_directory_exists,
     create_tables,
     migrate_logins_to_db,
     migrate_tokens_to_db,
@@ -27,9 +26,6 @@ def main():
     print("=" * 60)
     print("Starting database migration...")
     print("=" * 60)
-
-    # Ensure directories exist
-    ensure_year_data_directory_exists()
 
     # Create schemas if databases don't exist
     print("\n1. Creating database schemas...")

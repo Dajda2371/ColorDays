@@ -21,12 +21,6 @@ students_data_store = []
 user_password_store = {}
 server_config = {}
 
-def ensure_year_data_directory_exists():
-    """Creates the /data/<current year> directory if it doesn't exist."""
-    print(f"Ensuring year data directory exists: {CURRENT_YEAR_DIR}")
-    CURRENT_YEAR_DIR.mkdir(parents=True, exist_ok=True)
-    print("Year data directory check complete.")
-
 def is_student_allowed(student_code_from_cookie, requested_class_name, requested_day_identifier):
     """
     Checks if a student is allowed to access/modify data for a specific class and day.
