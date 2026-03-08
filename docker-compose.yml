@@ -4,7 +4,7 @@ services:
     container_name: colordays_app
     ports:
       # Note: If you change PORT in backend/config.py, you must also change it here!
-      - "443:443"
+      - "8000:8000"
     volumes:
       - ./backend/data:/app/backend/data
     restart: unless-stopped

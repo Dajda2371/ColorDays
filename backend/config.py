@@ -29,7 +29,7 @@ CURRENT_YEAR_DIR = DATA_DIR / str(datetime.datetime.now().year)
 LOGINS_SQL_FILE_PATH = DATA_DIR / 'logins.sql'
 DOMAIN = 'barevnedny.davidbenes.cz'
 HOST = '0.0.0.0'
-PORT = 443
+PORT = 8000
 SUPPORTED_CLASSES = []
 SQL_DAY_FILE_PATHS = {
     "monday": CURRENT_YEAR_DIR / 'tables-monday.sql',
