@@ -158,43 +158,61 @@ document.addEventListener('DOMContentLoaded', function () {
     const dayNames = { '1': 'Monday', '2': 'Tuesday', '3': 'Wednesday' };
     pageTitleElement.textContent = dayNames[day]; // Initial title
 
-    fetch(`/api/student/counting-details?code=${encodeURIComponent(studentCode)}&day=${encodeURIComponent(day)}`)
-        .then(response => {
-            if (!response.ok) {
-                return response.json().then(err => { throw new Error(err.error || `HTTP error! status: ${response.status}`) });
-            }
-            return response.json();
-        })
-        .then(apiResponse => {
-            currentStudentNoteForDisplay = apiResponse.student_note || studentCode; // Use note if available, else code
-            fetchedClassDetails = apiResponse.counting_details; // Store for later use
-            const studentClass = apiResponse.student_class; // Get the student's main class
+    function loadStudentDetails() {
+        if (!document.hidden || !window.hasLoadedStudentDetails) {
+            fetch(`/api/student/counting-details?code=${encodeURIComponent(studentCode)}&day=${encodeURIComponent(day)}`)
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => { throw new Error(err.error || `HTTP error! status: ${response.status}`) });
+                    }
+                    return response.json();
+                })
+                .then(apiResponse => {
+                    window.hasLoadedStudentDetails = true;
+                    currentStudentNoteForDisplay = apiResponse.student_note || studentCode; // Use note if available, else code
+                    fetchedClassDetails = apiResponse.counting_details; // Store for later use
+                    const studentClass = apiResponse.student_class; // Get the student's main class
 
-            // Update titles with the fetched note
-            // Update title with the day (instead of student note)
-            pageTitleElement.textContent = dayNames[day];
+                    // Update titles with the fetched note
+                    // Update title with the day (instead of student note)
+                    pageTitleElement.textContent = dayNames[day];
 
-            // Update the "Back to Students" button
-            const backBtn = document.getElementById('backButton');
-            if (backBtn) {
-                const prevClass = urlParams.get('class');
-                const targetClass = prevClass || studentClass;
-                let newHref = 'students.html';
-                if (targetClass || day) {
-                    newHref += '?';
-                    const params = new URLSearchParams();
-                    if (targetClass) params.set('class', targetClass);
-                    if (day) params.set('day', day);
-                    newHref += params.toString();
-                }
-                backBtn.onclick = function () { window.location.href = newHref; };
+                    // Update the "Back to Students" button
+                    const backBtn = document.getElementById('backButton');
+                    if (backBtn && !backBtn.onclick) { // only set onclick once
+                        const prevClass = urlParams.get('class');
+                        const targetClass = prevClass || studentClass;
+                        let newHref = 'students.html';
+                        if (targetClass || day) {
+                            newHref += '?';
+                            const params = new URLSearchParams();
+                            if (targetClass) params.set('class', targetClass);
+                            if (day) params.set('day', day);
+                            newHref += params.toString();
+                        }
+                        backBtn.onclick = function () { window.location.href = newHref; };
+                    }
+                    renderCountingDetailsTable(fetchedClassDetails);
+                })
+                .catch(error => {
+                    console.error('Error fetching student counting details:', error);
+                    studentIsCountingTableBody.innerHTML = `<tr><td colspan="3" style="color: red; text-align: center;">Error loading details: ${error.message}</td></tr>`;
+                });
+        }
+    }
+
+    loadStudentDetails();
+
+    // Fetch refresh interval and setup auto-refresh
+    fetch('/api/config/refresh_intervals')
+        .then(res => res.json())
+        .then(intervals => {
+            const interval = intervals['student-is-counting.html'];
+            if (interval && interval > 0) {
+                setInterval(loadStudentDetails, interval);
             }
-            renderCountingDetailsTable(fetchedClassDetails);
         })
-        .catch(error => {
-            console.error('Error fetching student counting details:', error);
-            studentIsCountingTableBody.innerHTML = `<tr><td colspan="3" style="color: red; text-align: center;">Error loading details: ${error.message}</td></tr>`;
-        });
+        .catch(err => console.error("Error fetching refresh intervals:", err));
 
     function renderCountingDetailsTable(details) {
         studentIsCountingTableBody.innerHTML = ''; // Clear existing rows
@@ -333,7 +351,7 @@ function goBackToStudents() {
     const urlParams = new URLSearchParams(window.location.search);
     const dayFromUrl = urlParams.get('day');
     const classFromUrl = urlParams.get('class');
-    
+
     let url = 'students.html';
     if (classFromUrl) {
         url += '?class=' + encodeURIComponent(classFromUrl);

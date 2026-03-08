@@ -192,7 +192,19 @@ document.addEventListener('DOMContentLoaded', () => {
         loadLeaderboard();
         displayLoggedInUser();
 
-        // Auto-refresh the leaderboard every 5 seconds
-        setInterval(() => loadLeaderboard(false), 5000);
+        // Fetch refresh interval and setup auto-refresh
+        fetch('/api/config/refresh_intervals')
+            .then(res => res.json())
+            .then(intervals => {
+                const interval = intervals['leaderboard.html'];
+                if (interval && interval > 0) {
+                    setInterval(() => {
+                        if (!document.hidden) {
+                            loadLeaderboard(false);
+                        }
+                    }, interval);
+                }
+            })
+            .catch(err => console.error("Error fetching refresh intervals:", err));
     });
 });

@@ -190,6 +190,21 @@ document.addEventListener('DOMContentLoaded', function () {
     // Call fetchDomainAndPort before loading students
     fetchDomainAndPort().then(() => {
         loadStudents();
+
+        // Fetch refresh interval and setup auto-refresh
+        fetch('/api/config/refresh_intervals')
+            .then(res => res.json())
+            .then(intervals => {
+                const interval = intervals['students.html'];
+                if (interval && interval > 0) {
+                    setInterval(() => {
+                        if (!document.hidden) {
+                            loadStudents();
+                        }
+                    }, interval);
+                }
+            })
+            .catch(err => console.error("Error fetching refresh intervals:", err));
     });
 
     // Function to render students (add QR Code button)
@@ -350,7 +365,7 @@ document.addEventListener('DOMContentLoaded', function () {
 function goBackToClasses() {
     const urlParams = new URLSearchParams(window.location.search);
     const dayFromUrl = urlParams.get('day');
-    
+
     let url = 'classes.html';
     if (dayFromUrl) {
         url += '?day=' + encodeURIComponent(dayFromUrl);

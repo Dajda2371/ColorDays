@@ -59,6 +59,21 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchTranslations().then(() => {
         setToggleState(currentLanguage);
         displayLoggedInUser();
+
+        // Fetch refresh interval and setup auto-refresh
+        fetch('/api/config/refresh_intervals')
+            .then(res => res.json())
+            .then(intervals => {
+                const interval = intervals['index.html'];
+                if (interval && interval > 0) {
+                    setInterval(() => {
+                        if (!document.hidden) {
+                            fetchData();
+                        }
+                    }, interval);
+                }
+            })
+            .catch(err => console.error("Error fetching refresh intervals:", err));
     });
 });
 

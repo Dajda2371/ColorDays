@@ -7,6 +7,16 @@ FRONTEND_DIR = (BACKEND_DIR.parent / 'frontend').resolve()
 DATA_DIR = (BACKEND_DIR / 'data').resolve()
 LOGS_DIR = DATA_DIR / 'logs'
 
+# --- Refresh Intervals ---
+# Keys are HTML file names to match the frontend, values are in milliseconds
+REFRESH_INTERVALS = {
+    "leaderboard.html": 5000,
+    "index.html": 5000,
+    "classes.html": 10000,
+    "students.html": 10000,
+    "student-is-counting.html": 10000
+}
+
 # --- Logger Setup ---
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
 LOG_FILENAME = datetime.datetime.now().strftime("%Y-%m-%d.log")
