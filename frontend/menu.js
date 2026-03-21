@@ -468,6 +468,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // applyTranslations has been called by fetchTranslations and used the currentLanguage set above.
         setToggleState(currentLanguage);
         loadAndDisplayClasses();
+        setInterval(loadAndDisplayClasses, 10000); // Auto-refresh classes every 10 seconds
         displayLoggedInUser();
         manageButtonVisibility();
     });
