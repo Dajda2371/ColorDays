@@ -6,6 +6,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title data-translate-key="loginTitle">Login - Color Days</title>
     <link rel="stylesheet" href="style.css">
+    <style>
+        body {
+            position: relative;
+            min-height: 100vh;
+            padding-bottom: 120px; /* Space for footer to prevent overlap */
+            box-sizing: border-box;
+        }
+    </style>
 </head>
 
 <body>
@@ -46,6 +54,13 @@
         </section>
     </div>
     <div id="error-message"></div>
+    <div
+        style="position: absolute; bottom: 10px; right: 10px; text-align: right; color: #888; font-size: 0.85rem; z-index: 1000;">
+        Made by David Beneš<br>
+        Email: <a href="mailto:david@davidbenes.cz">david@davidbenes.cz</a><br>
+        LinkedIn: <a href="https://www.linkedin.com/in/david-bene%C5%A1-3874b6371/">David Beneš</a><br>
+        GitHub: <a href="https://github.com/Dajda2371/ColorDays">Color Days</a>
+    </div>
     <script src="login.js"></script>
 </body>
 
