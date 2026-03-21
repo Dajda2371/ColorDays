@@ -173,22 +173,35 @@ function renderUsers() {
         `;
     }
 
+    const isGoogleAuth = status === (translations.googleAuthStatus?.[currentLanguage] || "Google Auth");
+    const isNotSet = status === (translations.notSetStatus?.[currentLanguage] || "not set");
+    
+    let actionButtons = "";
+    
+    // Password Actions
+    if (isGoogleAuth) {
+        // No password actions for Google Auth users
+    } else if (isNotSet) {
+        actionButtons += `<button onclick="setPassword('${username}')">${translations.setPasswordBtnText?.[currentLanguage] || 'Set Password'}</button> `;
+    } else {
+        // Reset Password button
+        // Logic: Only 'admin' can reset 'admin''s password.
+        if (username !== 'admin' || currentUser === 'admin') {
+            actionButtons += `<button onclick="resetPassword('${username}')">${translations.resetPasswordBtnText?.[currentLanguage] || 'Reset Password'}</button> `;
+        }
+    }
+    
+    // Remove Action
+    // Logic: Cannot remove the main 'admin', and cannot remove 'yourself'.
+    if (username !== "admin" && username !== currentUser) {
+        actionButtons += `<button onclick="removeUser('${username}')">${translations.removeBtnText?.[currentLanguage] || 'Remove'}</button>`;
+    }
+
     tr.innerHTML = `
       <td>${username}</td>
       <td>${status}</td>
       <td>${roleSelectHtml}</td>
-      <td>
-        ${status === (translations.notSetStatus?.[currentLanguage] || "not set") && status !== (translations.googleAuthStatus?.[currentLanguage] || "Google Auth") // || /^[a-zA-Z0-9]{10}$/.test(info.password)
-        ? `<button onclick="setPassword('${username}')">${translations.setPasswordBtnText?.[currentLanguage] || 'Set Password'}</button>`
-        : status === (translations.googleAuthStatus?.[currentLanguage] || "Google Auth")
-          ? ``
-          : `<button onclick="resetPassword('${username}')">${translations.resetPasswordBtnText?.[currentLanguage] || 'Reset Password'}</button>`
-      }
-        ${username !== "admin"
-        ? `<button onclick="removeUser('${username}')">${translations.removeBtnText?.[currentLanguage] || 'Remove'}</button>`
-        : ""
-      }
-      </td>
+      <td>${actionButtons}</td>
     `;
 
     tbody.appendChild(tr);
