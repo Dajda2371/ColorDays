@@ -10,6 +10,9 @@ let currentLanguage = 'en'; // Default language
 
 // --- Logout Functionality ---
 async function handleLogout() {
+    const confirmation = confirm(translations.logoutConfirmation?.[currentLanguage] || "Are you sure you want to log out?");
+    if (!confirmation) return;
+
     console.log("Attempting logout...");
     try {
         const response = await fetch('/logout', {

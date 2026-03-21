@@ -107,6 +107,9 @@ let translations = {};
 let currentLanguage = 'en';
 
 async function handleLogout() {
+    const confirmation = confirm(translations.logoutConfirmation?.[currentLanguage] || "Are you sure you want to log out?");
+    if (!confirmation) return;
+
     try {
         const response = await fetch('/logout', {
             method: 'POST',
