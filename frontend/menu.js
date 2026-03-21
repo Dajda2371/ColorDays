@@ -468,8 +468,18 @@ document.addEventListener('DOMContentLoaded', () => {
         // applyTranslations has been called by fetchTranslations and used the currentLanguage set above.
         setToggleState(currentLanguage);
         loadAndDisplayClasses();
-        setInterval(loadAndDisplayClasses, 10000); // Auto-refresh classes every 10 seconds
         displayLoggedInUser();
         manageButtonVisibility();
+
+        // Fetch refresh interval and setup auto-refresh
+        fetch('/api/config/refresh_intervals')
+            .then(res => res.json())
+            .then(intervals => {
+                const interval = intervals['menu.html'];
+                if (interval && interval > 0) {
+                    setInterval(loadAndDisplayClasses, interval);
+                }
+            })
+            .catch(err => console.error("Error fetching refresh intervals:", err));
     });
 });
