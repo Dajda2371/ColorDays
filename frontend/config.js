@@ -139,6 +139,10 @@ async function fetchUsers() {
 function renderUsers() {
   const tbody = document.getElementById("userTableBody");
   tbody.innerHTML = "";
+  
+  const cookies = document.cookie.split('; ');
+  const usernameCookie = cookies.find(row => row.startsWith('ColorDaysUser='));
+  let currentUser = usernameCookie ? decodeURIComponent(usernameCookie.split('=')[1]) : null;
 
   Object.entries(users).forEach(([username, info]) => {
     const tr = document.createElement("tr");
@@ -157,9 +161,22 @@ function renderUsers() {
       status = info.password;
     }
 
+    let roleSelectHtml = '';
+    if (username === 'admin' || username === currentUser) {
+        roleSelectHtml = `<select disabled><option>${info.role || 'teacher'}</option></select>`;
+    } else {
+        roleSelectHtml = `
+            <select onchange="changeRole('${username}', this.value)">
+                <option value="teacher" ${info.role === 'teacher' ? 'selected' : ''}>Teacher</option>
+                <option value="admin" ${info.role === 'admin' ? 'selected' : ''}>Admin</option>
+            </select>
+        `;
+    }
+
     tr.innerHTML = `
       <td>${username}</td>
       <td>${status}</td>
+      <td>${roleSelectHtml}</td>
       <td>
         ${status === (translations.notSetStatus?.[currentLanguage] || "not set") && status !== (translations.googleAuthStatus?.[currentLanguage] || "Google Auth") // || /^[a-zA-Z0-9]{10}$/.test(info.password)
         ? `<button onclick="setPassword('${username}')">${translations.setPasswordBtnText?.[currentLanguage] || 'Set Password'}</button>`
@@ -183,7 +200,7 @@ async function loadUsers() {
   const data = await res.json();
   users = {};
   data.forEach(user => {
-    users[user.username] = { password: user.password };
+    users[user.username] = { password: user.password, role: user.role };
   });
   renderUsers();
 }
@@ -292,6 +309,32 @@ async function changePassword() {
 
   const data = await res.json();
   alert(data.message);
+}
+
+async function changeRole(username, newRole) {
+  if (!confirm(`Are you sure you want to change role for ${username} to ${newRole}?`)) {
+    loadUsers(); // revert select UI if cancelled
+    return;
+  }
+  
+  try {
+    const res = await fetch("/api/users/role", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, role: newRole })
+    });
+    const result = await res.json();
+    if (res.ok && result.success) {
+      loadUsers();
+    } else {
+      alert(result.detail || result.error || "Failed to update role");
+      loadUsers();
+    }
+  } catch (err) {
+    console.error(err);
+    alert("Error updating role");
+    loadUsers();
+  }
 }
 
 // --- Class Management Functions ---
@@ -689,5 +732,6 @@ window.addUser = addUser;
 window.removeUser = removeUser;
 window.setPassword = setPassword;
 window.resetPassword = resetPassword;
+window.changeRole = changeRole;
 window.addGoogleOauthDomain = addGoogleOauthDomain;
 window.saveGoogleOauth = saveGoogleOauth;
