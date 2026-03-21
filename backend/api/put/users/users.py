@@ -26,6 +26,9 @@ def set_user_password(payload: UserSetPasswordRequest, admin_user: dict = Depend
     if not username or not new_password:
         raise HTTPException(status_code=400, detail="Missing username or new_password")
 
+    if username == "admin" and admin_user["username"] != "admin":
+        raise HTTPException(status_code=403, detail="Only the main admin user can reset their own password.")
+
     with data_lock:
         if username not in user_password_store:
              raise HTTPException(status_code=404, detail=f"User '{username}' not found.")

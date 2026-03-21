@@ -16,6 +16,9 @@ def remove_user(username: str, admin_user: dict = Depends(get_current_admin_user
     if username == 'admin':
         raise HTTPException(status_code=403, detail="Cannot remove the admin user.")
 
+    if username == admin_user["username"]:
+        raise HTTPException(status_code=403, detail="You cannot remove your own account.")
+
     with data_lock:
         if username not in user_password_store:
             # Case insensitive search logic
