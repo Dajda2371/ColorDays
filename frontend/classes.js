@@ -374,6 +374,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     // --- End Auto Assign Logic ---
                 }
 
+                isInitialLoad = false;
+
                 // Clear sections before repopulating
                 mondaySection.innerHTML = '';
                 tuesdaySection.innerHTML = '';
@@ -490,7 +492,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             });
 
-        isInitialLoad = false;
+
     }
 
     loadClassesData();
