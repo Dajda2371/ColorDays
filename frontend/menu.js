@@ -458,6 +458,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Set currentLanguage from cookie first, so it's available for all subsequent calls
     currentLanguage = getCookie("language") || 'cs';
 
+    // Check for forced password change
+    if (getCookie("ChangePasswordVerificationNotNeeded")) {
+        window.location.href = '/change-password.html';
+        return;
+    }
+
     fetchTranslations().then(() => { // Fetch translations first
         // applyTranslations has been called by fetchTranslations and used the currentLanguage set above.
         setToggleState(currentLanguage);

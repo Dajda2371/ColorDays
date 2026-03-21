@@ -125,6 +125,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Navbar Initialization
     currentLanguage = getCookie("language") || 'cs';
+
+    // Check for forced password change
+    if (getCookie("ChangePasswordVerificationNotNeeded")) {
+        window.location.href = '/change-password.html';
+        return;
+    }
     fetchTranslations().then(() => {
         setToggleState(currentLanguage);
         displayLoggedInUser();

@@ -139,11 +139,15 @@ document.addEventListener('DOMContentLoaded', (event) => {
         console.log("Cookie check PASSED."); // Add this log
         console.log(`Cookie '${cookieName}' found. Hiding old password field.`);
         const oldPasswordDiv = document.getElementById('oldPasswordContainer');
+        const backButton = document.getElementById('backButton');
         if (oldPasswordDiv) {
             console.log("Found element #oldPasswordContainer. Setting display to none."); // Log: Element found
             oldPasswordDiv.style.display = 'none';
         } else {
             console.error("ERROR: Could not find element with ID 'oldPasswordContainer'!"); // Log: Element NOT found
+        }
+        if (backButton) {
+            backButton.style.display = 'none';
         }
     }
     // --- End cookie check ---
@@ -170,6 +174,10 @@ document.addEventListener('DOMContentLoaded', (event) => {
             // Clear previous error messages
             errorMessageDiv.textContent = '';
 
+            const cookies = document.cookie.split('; ');
+            const usernameCookie = cookies.find(row => row.startsWith('ColorDaysUser='));
+            const currentUsername = usernameCookie ? decodeURIComponent(usernameCookie.split('=')[1]) : '';
+
             try {
                 const response = await fetch('/api/auth/change', { // Send request to the backend endpoint
                     method: 'POST',
@@ -178,7 +186,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
                         // Body should be outside the headers object
                     },
                     // Send old password, new password, and verification flag
-                    body: JSON.stringify({ oldPassword: oldPassword, newPassword: newPassword, verificationNeeded: verificationNeeded }),
+                    body: JSON.stringify({ username: currentUsername, old_password: oldPassword, new_password: newPassword }),
                 });
 
                 const result = await response.json(); // Parse the JSON response from the server

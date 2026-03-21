@@ -4,6 +4,11 @@ let currentDayIdentifier = null; // Added to store the day
 
 // --- Wait for the DOM to be fully loaded ---
 document.addEventListener('DOMContentLoaded', () => {
+    // Check for forced password change
+    if (getCookie("ChangePasswordVerificationNotNeeded")) {
+        window.location.href = '/change-password.html';
+        return;
+    }
     const urlParams = new URLSearchParams(window.location.search);
     currentClassName = urlParams.get('class'); // Store class name globally
     currentDayIdentifier = urlParams.get('day'); // Store day globally

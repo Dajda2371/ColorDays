@@ -174,7 +174,11 @@ document.addEventListener('DOMContentLoaded', function () {
             .then(data => {
                 if (data.success) {
                     console.log(`${userType} login successful:`, data);
-                    window.location.href = '/menu.html'; // Redirect on success
+                    if (data.force_change) {
+                        window.location.href = '/change-password.html';
+                    } else {
+                        window.location.href = '/menu.html'; // Redirect on success
+                    }
                 } else {
                     displayError(data.error || `${userType}${translations.loginFailedTryAgainError?.[currentLanguage] || " login failed. Please try again."}`);
                 }
