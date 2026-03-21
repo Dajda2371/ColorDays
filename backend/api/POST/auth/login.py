@@ -37,10 +37,8 @@ def login(response: Response, login_data: LoginRequest = Body(...)):
         response.set_cookie(key=USERNAME_COOKIE_NAME, value=username, path='/', httponly=False)
         response.set_cookie(key=SQL_COOKIE_NAME, value=username, path='/', httponly=True)
 
-        for name, value_header in extra_cookies:
-            # Check for the specific change-password value string from utils logic
-            if "change-password=not-required" in value_header:
-                response.set_cookie(key=CHANGE_PASSWORD_COOKIE_NAME, value="not-required", path='/', httponly=False)
+        if force_change:
+             response.set_cookie(key=CHANGE_PASSWORD_COOKIE_NAME, value="shared-secret-or-just-required", path='/', httponly=False)
 
         return {"success": True, "message": "Login successful", "force_change": force_change}
     else:

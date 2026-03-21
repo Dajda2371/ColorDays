@@ -175,7 +175,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (data.success) {
                     console.log(`${userType} login successful:`, data);
                     if (data.force_change) {
-                        window.location.href = '/change-password.html';
+                        window.location.href = '/change-password.html?forced=true';
                     } else {
                         window.location.href = '/menu.html'; // Redirect on success
                     }

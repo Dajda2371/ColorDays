@@ -71,6 +71,24 @@ async def language_cookie_middleware(request: Request, call_next):
     return await call_next(request)
 
 @app.middleware("http")
+async def force_password_change_middleware(request: Request, call_next):
+    from config import CHANGE_PASSWORD_COOKIE_NAME
+    if request.cookies.get(CHANGE_PASSWORD_COOKIE_NAME):
+        allowed_paths = ["/change-password.html", "/logout", "/api/logout", "/api/translations", "/api/language/set"]
+        is_allowed = request.url.path in allowed_paths or \
+                     request.url.path.startswith("/api/auth/") or \
+                     request.url.path.startswith("/oauth2callback") or \
+                     request.url.path.startswith("/api/translations") or \
+                     any(request.url.path.endswith(ext) for ext in [".css", ".js", ".png", ".jpg", ".svg", ".json", ".ico"])
+        
+        if not is_allowed:
+             if request.url.path.startswith("/api/"):
+                  return JSONResponse(status_code=403, content={"error": "Password change required."})
+             return RedirectResponse("/change-password.html?forced=true")
+        
+    return await call_next(request)
+
+@app.middleware("http")
 async def concurrency_lock_middleware(request: Request, call_next):
     if request.method in ["POST", "PUT", "DELETE", "PATCH"]:
         async with global_write_lock:
@@ -181,6 +199,11 @@ async def protected_pages(request: Request):
         return RedirectResponse("/login.html")
 
     user_key, user_role = get_current_user_info(request)
+
+    # Forced password change redirect
+    from config import CHANGE_PASSWORD_COOKIE_NAME
+    if request.cookies.get(CHANGE_PASSWORD_COOKIE_NAME) and path != "/change-password.html":
+        return RedirectResponse("/change-password.html?forced=true")
 
     if path == "/config.html":
         if user_role != ADMIN_ROLE:

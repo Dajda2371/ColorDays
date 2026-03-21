@@ -88,14 +88,8 @@ def verify_password(stored_password_info, provided_password, username):
     if password_hash.startswith('_') and password_hash.endswith('_'):
         _stored_actual_password_ = password_hash[1:-1]
         if _stored_actual_password_ == provided_password:
-            print(f"User '{username}' logged in with pregenerated password. Setting change password cookie.")
-            change_pw_cookie_headers = create_cookies(
-                CHANGE_PASSWORD_COOKIE_NAME,
-                "not-required",
-                path='/',
-                httponly=False
-            )
-            return True, change_pw_cookie_headers, True
+            print(f"User '{username}' logged in with pregenerated password. Setting change password flag.")
+            return True, [], True
         else:
             print(f"Pregenerated password verification failed for user: {username}")
             return False, [], False
