@@ -6,14 +6,15 @@ from contextlib import asynccontextmanager
 from config import (
     FRONTEND_DIR, ADMIN_ROLE, SESSION_COOKIE_NAME, VALID_SESSION_VALUE,
     SQL_AUTH_USER_STUDENT_COOKIE_NAME, DATABASE_FILE, YEAR_DATABASE_FILE, BACKEND_DIR,
-    PORT, DOMAIN
+    PORT, DOMAIN, LANGUAGE_COOKIE_NAME
 )
 from data_manager import (
     load_user_data_from_db,
     load_class_data_from_db,
     load_students_data_from_db,
     load_main_config_from_json,
-    create_tables
+    create_tables,
+    server_config
 )
 from dependencies import get_current_user_info, active_sessions
 import importlib.util
@@ -59,6 +60,15 @@ origins = [
 import asyncio
 
 global_write_lock = asyncio.Lock()
+
+@app.middleware("http")
+async def language_cookie_middleware(request: Request, call_next):
+    if LANGUAGE_COOKIE_NAME not in request.cookies:
+        response = await call_next(request)
+        default_lang = server_config.get("default_language", "en")
+        response.set_cookie(key=LANGUAGE_COOKIE_NAME, value=default_lang, max_age=31536000, path="/")
+        return response
+    return await call_next(request)
 
 @app.middleware("http")
 async def concurrency_lock_middleware(request: Request, call_next):

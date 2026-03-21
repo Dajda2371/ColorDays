@@ -6,7 +6,7 @@ const toggleCs = document.getElementById('toggleCs');
 const toggleEn = document.getElementById('toggleEn');
 
 let translations = {};
-let currentLanguage = 'en';
+let currentLanguage = 'cs';
 
 async function handleLogout() {
     const confirmation = confirm(translations.logoutConfirmation?.[currentLanguage] || "Are you sure you want to log out?");
@@ -123,7 +123,7 @@ if (languageToggle) {
 // Wait for the HTML document to be fully loaded before running the script
 document.addEventListener('DOMContentLoaded', (event) => {
     // Language Initialization
-    currentLanguage = getCookie("language") || 'en';
+    currentLanguage = getCookie("language") || 'cs';
     fetchTranslations().then(() => {
         setToggleState(currentLanguage);
         displayLoggedInUser();

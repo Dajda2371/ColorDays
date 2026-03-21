@@ -6,7 +6,7 @@ const toggleEn = document.getElementById('toggleEn');
 
 // --- Localization ---
 let translations = {};
-let currentLanguage = 'en'; // Default language
+let currentLanguage = 'cs'; // Default language
 
 // --- Logout Functionality ---
 async function handleLogout() {
@@ -205,7 +205,7 @@ if (languageToggle) {
 
 // Load on start
 document.addEventListener('DOMContentLoaded', () => {
-    currentLanguage = getCookie("language") || 'en';
+    currentLanguage = getCookie("language") || 'cs';
 
     fetchTranslations().then(() => {
         setToggleState(currentLanguage);

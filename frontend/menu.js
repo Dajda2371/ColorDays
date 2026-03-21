@@ -11,7 +11,7 @@ const toggleEn = document.getElementById('toggleEn');
 
 // --- Localization ---
 let translations = {};
-let currentLanguage = 'en'; // Default language
+let currentLanguage = 'cs'; // Default language
 
 // --- Logout Functionality (Keep this as is) ---
 async function handleLogout() {
@@ -456,7 +456,7 @@ if (languageToggle) {
 // Load classes when the page loads
 document.addEventListener('DOMContentLoaded', () => {
     // Set currentLanguage from cookie first, so it's available for all subsequent calls
-    currentLanguage = getCookie("language") || 'en';
+    currentLanguage = getCookie("language") || 'cs';
 
     fetchTranslations().then(() => { // Fetch translations first
         // applyTranslations has been called by fetchTranslations and used the currentLanguage set above.

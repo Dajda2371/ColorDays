@@ -6,7 +6,7 @@ const toggleCs = document.getElementById('toggleCs');
 const toggleEn = document.getElementById('toggleEn');
 
 let translations = {};
-let currentLanguage = 'en';
+let currentLanguage = 'cs';
 
 async function handleLogout() {
     const confirmation = confirm(translations.logoutConfirmation?.[currentLanguage] || "Are you sure you want to log out?");
@@ -124,7 +124,7 @@ if (languageToggle) {
 document.addEventListener('DOMContentLoaded', function () {
 
     // Navbar Initialization
-    currentLanguage = getCookie("language") || 'en';
+    currentLanguage = getCookie("language") || 'cs';
     fetchTranslations().then(() => {
         setToggleState(currentLanguage);
         displayLoggedInUser();

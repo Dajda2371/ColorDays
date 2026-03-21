@@ -75,7 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchData();
 
     // Call localization and header loading logic
-    currentLanguage = getCookie("language") || 'en';
+    currentLanguage = getCookie("language") || 'cs';
     fetchTranslations().then(() => {
         setToggleState(currentLanguage);
         displayLoggedInUser();
@@ -104,7 +104,7 @@ const toggleCs = document.getElementById('toggleCs');
 const toggleEn = document.getElementById('toggleEn');
 
 let translations = {};
-let currentLanguage = 'en';
+let currentLanguage = 'cs';
 
 async function handleLogout() {
     const confirmation = confirm(translations.logoutConfirmation?.[currentLanguage] || "Are you sure you want to log out?");
