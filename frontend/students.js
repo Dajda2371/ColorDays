@@ -134,24 +134,6 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
     }
 
-    // Remove the hardcoded DOMAIN and PORT
-    let DOMAIN = '';
-    let PORT = '';
-
-    // Fetch DOMAIN and PORT from backend config
-    function fetchDomainAndPort() {
-        return fetch('/api/data/config')
-            .then(res => res.json())
-            .then(config => {
-                DOMAIN = config.DOMAIN || window.location.hostname;
-                PORT = config.PORT || window.location.port || 80;
-            })
-            .catch(() => {
-                // fallback to current location if API fails
-                DOMAIN = window.location.hostname;
-                PORT = window.location.port || 80;
-            });
-    }
 
     // Get the 'day' parameter from the current URL if it exists
     const urlParams = new URLSearchParams(window.location.search);
@@ -180,29 +162,30 @@ document.addEventListener('DOMContentLoaded', function () {
             })
             .catch(error => {
                 console.error('Error fetching students:', error);
-                studentsTableBody.innerHTML = `<tr><td colspan="5" style="color: red; text-align: center;">Error loading students: ${error.message}</td></tr>`;
+                const tbody = document.getElementById('students-table-body');
+                if (tbody) {
+                    tbody.innerHTML = `<tr><td colspan="5" style="color: red; text-align: center;">Error loading students: ${error.message}</td></tr>`;
+                }
             });
     }
 
-    // Call fetchDomainAndPort before loading students
-    fetchDomainAndPort().then(() => {
-        loadStudents();
+    loadStudents();
 
-        // Fetch refresh interval and setup auto-refresh
-        fetch('/api/config/refresh_intervals')
-            .then(res => res.json())
-            .then(intervals => {
-                const interval = intervals['students.html'];
-                if (interval && interval > 0) {
-                    setInterval(() => {
-                        if (document.hidden) return;
-                        if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA' || document.getElementById('addStudentRow')) return;
-                        loadStudents();
-                    }, interval);
-                }
-            })
-            .catch(err => console.error("Error fetching refresh intervals:", err));
-    });
+    // Fetch refresh interval and setup auto-refresh
+    fetch('/api/config/refresh_intervals')
+        .then(res => res.json())
+        .then(intervals => {
+            const interval = intervals['students.html'];
+            if (interval && interval > 0) {
+                setInterval(() => {
+                    if (document.hidden) return;
+                    if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA' || document.getElementById('addStudentRow')) return;
+                    loadStudents();
+                }, interval);
+            }
+        })
+        .catch(err => console.error("Error fetching refresh intervals:", err));
+
 
     // Function to render students (add QR Code button)
     function renderStudentsTable(students) {
@@ -231,7 +214,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // Find the student object by code (assuming you have access to the students array)
         const student = (window.lastStudentsList || []).find(s => s.code === code);
         document.getElementById('qrNote').textContent = student && student.note ? student.note : '';
-        const url = `http://${DOMAIN}:${PORT}/login.html?code=${encodeURIComponent(code)}`;
+        const url = `${window.location.origin}/login.html?code=${encodeURIComponent(code)}`;
         document.getElementById('qrModal').style.display = 'flex';
         document.getElementById('qrUrl').textContent = code;
         document.getElementById('qrcode').innerHTML = '';
