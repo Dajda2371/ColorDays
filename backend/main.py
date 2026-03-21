@@ -176,7 +176,7 @@ async def protected_pages(request: Request):
         if user_role != ADMIN_ROLE:
              return JSONResponse(status_code=403, content={"error": "Forbidden: Administrator access required."})
 
-    if path == "/classes.html":
+    if path in ["/classes.html", "/change-password.html", "/leaderboard.html"]:
         if request.cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME):
              return JSONResponse(status_code=403, content={"error": "Forbidden: Access to this page is restricted for your account type."})
 

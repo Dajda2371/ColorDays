@@ -1,7 +1,9 @@
 const dynamicClassList = document.getElementById('dynamicClassList');
 const logoutButton = document.getElementById('logoutButton');
-const classesButton = document.getElementById('classesButton'); // Get the Classes button
-const configButton = document.getElementById('configButton'); // Get the Config button
+const classesButton = document.getElementById('classesButton');
+const configButton = document.getElementById('configButton');
+const leaderboardButton = document.getElementById('leaderboardButton');
+const changePasswordBtn = document.getElementById('changePasswordBtn');
 const languageToggle = document.getElementById('languageToggle');
 const toggleCs = document.getElementById('toggleCs');
 const toggleEn = document.getElementById('toggleEn');
@@ -182,27 +184,62 @@ async function loadAndDisplayClasses() {
                     daySectionDiv.className = 'day-section';
                     daySectionDiv.innerHTML = `<h2>${dayDisplayName}</h2>`;
 
-                    const ul = document.createElement('ul');
-                    ul.className = 'classList';
-                    classesStudentCounts.sort().forEach(className => { // Sort the class names
-                        const listItem = document.createElement('li');
-                        const link = document.createElement('a');
-                        link.href = `index.html?class=${encodeURIComponent(className)}&day=${day.defaultName.toLowerCase()}`;
-                        link.textContent = className;
+                    const studentClassesToDisplay = allClasses.filter(cls => classesStudentCounts.includes(cls.class));
+                    const stateKey = `state${day.iscountedbyFlag.slice(-1)}`;
 
-                        // Apply state color
-                        const clsObj = allClasses.find(c => c.class === className);
-                        if (clsObj) {
-                            const stateKey = `state${day.iscountedbyFlag.slice(-1)}`;
-                            const stateValue = clsObj[stateKey];
+                    // Smart Sorting Logic
+                    const classRegex = /^\d+\.[A-Za-z]+$/;
+                    const allMatch = studentClassesToDisplay.length > 0 && studentClassesToDisplay.every(cls => classRegex.test(cls.class));
+                    const useSmartSorting = smartSortingEnabled && allMatch;
+
+                    if (useSmartSorting) {
+                        const grouped = {};
+                        studentClassesToDisplay.forEach(cls => {
+                            const numberPart = cls.class.split('.')[0];
+                            if (!grouped[numberPart]) grouped[numberPart] = [];
+                            grouped[numberPart].push(cls);
+                        });
+
+                        const sortedGroupKeys = Object.keys(grouped).sort((a, b) => parseInt(a) - parseInt(b));
+
+                        sortedGroupKeys.forEach(key => {
+                            const groupDiv = document.createElement('div');
+                            groupDiv.style.marginBottom = "10px";
+
+                            grouped[key].sort((a, b) => a.class.localeCompare(b.class));
+
+                            grouped[key].forEach(cls => {
+                                const link = document.createElement('a');
+                                link.href = `index.html?class=${encodeURIComponent(cls.class)}&day=${day.defaultName.toLowerCase()}`;
+                                link.textContent = cls.class;
+                                link.className = 'class-button';
+
+                                const stateValue = cls[stateKey];
+                                if (stateValue === 'done') link.classList.add('class-button-done');
+                                else if (stateValue === 'locked') link.classList.add('class-button-locked');
+
+                                groupDiv.appendChild(link);
+                            });
+                            daySectionDiv.appendChild(groupDiv);
+                        });
+                    } else {
+                        const ul = document.createElement('ul');
+                        ul.className = 'classList';
+                        studentClassesToDisplay.sort((a, b) => a.class.localeCompare(b.class)).forEach(cls => {
+                            const listItem = document.createElement('li');
+                            const link = document.createElement('a');
+                            link.href = `index.html?class=${encodeURIComponent(cls.class)}&day=${day.defaultName.toLowerCase()}`;
+                            link.textContent = cls.class;
+
+                            const stateValue = cls[stateKey];
                             if (stateValue === 'done') link.classList.add('class-button-done');
                             else if (stateValue === 'locked') link.classList.add('class-button-locked');
-                        }
 
-                        listItem.appendChild(link);
-                        ul.appendChild(listItem);
-                    });
-                    daySectionDiv.appendChild(ul);
+                            listItem.appendChild(link);
+                            ul.appendChild(listItem);
+                        });
+                        daySectionDiv.appendChild(ul);
+                    }
                     dynamicClassList.appendChild(daySectionDiv);
                 }
             }
@@ -322,9 +359,11 @@ function manageStudentButtonVisibility() {
     console.log(`SQLAuthUserStudent cookie exists: ${isStudent}`);
 
     if (isStudent) {
-        console.log("Student session detected. Hiding Classes and Config buttons.");
+        console.log("Student session detected. Hiding Classes, Config, Leaderboard and Change Password buttons.");
         if (classesButton) classesButton.style.display = 'none';
         if (configButton) configButton.style.display = 'none';
+        if (leaderboardButton) leaderboardButton.style.display = 'none';
+        if (changePasswordBtn) changePasswordBtn.style.display = 'none';
     }
     console.log("--- End manageStudentButtonVisibility ---");
 }

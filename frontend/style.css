@@ -750,15 +750,6 @@ body {
 
   #languageToggle {
     width: 100%;
-    min-height: 60px;
-  }
-
-  #languageToggle span {
-    padding: 15px 20px;
-    font-size: 1.1rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
   }
 
   #languageToggle span {
@@ -783,13 +774,7 @@ body {
     width: 100%;
     /* Full width buttons */
     text-align: center;
-    padding: 20px 25px;
-    font-size: 1.25rem;
-    font-weight: 700;
-    min-height: 64px;
-    margin: 6px 0;
-    border-width: 2px;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    padding: 12px;
   }
 
   #mainContent {
