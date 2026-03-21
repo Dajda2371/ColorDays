@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from dependencies import get_current_admin_user
 from auth import is_user_using_oauth
 from data_manager import user_password_store, data_lock, save_user_data_to_db
+from config import ADMIN_ROLE, TEACHER_ROLE
 
 router = APIRouter()
 
@@ -45,7 +46,7 @@ def set_user_role(payload: UserSetRoleRequest, admin_user: dict = Depends(get_cu
     if not username or not new_role:
         raise HTTPException(status_code=400, detail="Missing username or role")
 
-    if new_role not in ["admin", "teacher"]:
+    if new_role not in [ADMIN_ROLE, TEACHER_ROLE]:
         raise HTTPException(status_code=400, detail="Invalid role")
 
     if username == "admin":

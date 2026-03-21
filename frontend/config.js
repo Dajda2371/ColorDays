@@ -168,7 +168,7 @@ function renderUsers() {
         roleSelectHtml = `
             <select onchange="changeRole('${username}', this.value)">
                 <option value="teacher" ${info.role === 'teacher' ? 'selected' : ''}>Teacher</option>
-                <option value="admin" ${info.role === 'admin' ? 'selected' : ''}>Admin</option>
+                <option value="administrator" ${info.role === 'administrator' ? 'selected' : ''}>Admin</option>
             </select>
         `;
     }
