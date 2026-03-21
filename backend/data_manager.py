@@ -405,7 +405,32 @@ def load_students_data_from_db():
     with get_db_connection(YEAR_DATABASE_FILE) as conn:
         rows = conn.execute("SELECT * FROM students").fetchall()
         for row in rows:
-            students_data_store.append(dict(row))
+            student_dict = dict(row)
+            
+            # Migrate old `[1.A, 1.B]` string formats to valid JSON
+            counts_str = student_dict.get('counts_classes', '[]')
+            if counts_str:
+                import json
+                try:
+                    # Attempt standard JSON parse
+                    parsed = json.loads(counts_str)
+                    if not isinstance(parsed, list):
+                        student_dict['counts_classes'] = '[]'
+                except json.JSONDecodeError:
+                    # Fallback for old custom comma-delimited list format
+                    if counts_str.startswith('[') and counts_str.endswith(']'):
+                        content = counts_str[1:-1]
+                        if content.strip():
+                            parsed_list = [c.strip(' \'"') for c in content.split(',') if c.strip()]
+                            student_dict['counts_classes'] = json.dumps(parsed_list)
+                        else:
+                            student_dict['counts_classes'] = '[]'
+                    else:
+                        student_dict['counts_classes'] = '[]'
+            else:
+                student_dict['counts_classes'] = '[]'
+                
+            students_data_store.append(student_dict)
     print("Student data loaded.")
 
 def save_students_data_to_db():

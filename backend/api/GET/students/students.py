@@ -27,12 +27,12 @@ def get_students(request: Request, user_info=Depends(get_current_user_info)):
 
             if found_student_data_item:
                 counting_classes_list = []
+                import json
                 try:
                     s_str = found_student_data_item.get('counts_classes', '[]')
-                    if s_str.startswith('[') and s_str.endswith(']'):
-                        s_content = s_str[1:-1]
-                        if s_content.strip():
-                            counting_classes_list = [item.strip() for item in s_content.split(',')]
+                    personal_counts = json.loads(s_str)
+                    if isinstance(personal_counts, list):
+                        counting_classes_list = [str(item) for item in personal_counts]
                 except Exception as e:
                     print(f"Error parsing counts_classes: {e}")
 
@@ -44,12 +44,12 @@ def get_students(request: Request, user_info=Depends(get_current_user_info)):
 
             for student_data_item in students_data_store:
                 counting_classes_list = []
+                import json
                 try:
                     s_str = student_data_item.get('counts_classes', '[]')
-                    if s_str.startswith('[') and s_str.endswith(']'):
-                        s_content = s_str[1:-1]
-                        if s_content.strip():
-                            counting_classes_list = [item.strip() for item in s_content.split(',')]
+                    personal_counts = json.loads(s_str)
+                    if isinstance(personal_counts, list):
+                        counting_classes_list = [str(item) for item in personal_counts]
                 except Exception as e:
                     print(f"Error parsing counts_classes: {e}")
                 response_payload.append({**student_data_item, "counting_classes": counting_classes_list})
