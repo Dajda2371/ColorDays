@@ -351,52 +351,39 @@ function getCookie(name) {
     return null; // Cookie not found
 }
 
-// --- Function to manage visibility of Admin/Teacher buttons for students ---
-function manageStudentButtonVisibility() {
-    console.log("--- manageStudentButtonVisibility ---");
-    const studentAuthCookie = getCookie("SQLAuthUserStudent");
-    const isStudent = studentAuthCookie !== null;
-    console.log(`SQLAuthUserStudent cookie exists: ${isStudent}`);
+// --- Function to manage visibility of header buttons based on role ---
+async function manageButtonVisibility() {
+    console.log("--- manageButtonVisibility ---");
+    const isStudent = getCookie("SQLAuthUserStudent") !== null;
 
     if (isStudent) {
-        console.log("Student session detected. Hiding Classes, Config, Leaderboard and Change Password buttons.");
-        if (classesButton) classesButton.style.display = 'none';
-        if (configButton) configButton.style.display = 'none';
-        if (leaderboardButton) leaderboardButton.style.display = 'none';
-        if (changePasswordBtn) changePasswordBtn.style.display = 'none';
-    }
-    console.log("--- End manageStudentButtonVisibility ---");
-}
-
-// --- Function to manage visibility of Config button for non-admins ---
-async function manageConfigButtonVisibility() {
-    console.log("--- manageConfigButtonVisibility ---");
-
-    // Students are already handled by manageStudentButtonVisibility
-    const studentAuthCookie = getCookie("SQLAuthUserStudent");
-    if (studentAuthCookie) {
-        console.log("Student session - config button already hidden.");
+        console.log("Student session detected. Keeping Classes, Config, Leaderboard and Change Password buttons hidden.");
+        // They are already hidden by default in HTML (style="display: none;")
         return;
     }
 
-    // Check if user is admin by trying to access an admin-only endpoint
+    // Teachers/Admins reach here. Show the basic teacher buttons.
+    console.log("Non-student session. Showing Classes, Leaderboard and Change Password buttons.");
+    if (classesButton) classesButton.style.display = 'inline-block';
+    if (leaderboardButton) leaderboardButton.style.display = 'inline-block';
+    if (changePasswordBtn) changePasswordBtn.style.display = 'inline-block';
+
+    // Now check specifically for Config (only for administrators)
     try {
         const response = await fetch('/api/users', { credentials: 'include' });
-        if (response.status === 403) {
-            // User is not an admin (likely a teacher)
-            console.log("User is not an admin. Hiding Config button.");
-            if (configButton) configButton.style.display = 'none';
-        } else if (response.ok) {
-            // User is an admin
-            console.log("User is an admin. Config button remains visible.");
+        if (response.ok) {
+            console.log("User is an admin. Showing Config button.");
+            if (configButton) configButton.style.display = 'inline-block';
         } else {
-            console.warn("Unexpected response when checking admin status:", response.status);
+            console.log("User is not an admin. Config button remains hidden.");
+            if (configButton) configButton.style.display = 'none';
         }
     } catch (error) {
         console.error("Error checking admin status:", error);
     }
-    console.log("--- End manageConfigButtonVisibility ---");
+    console.log("--- End manageButtonVisibility ---");
 }
+
 
 
 
@@ -473,8 +460,6 @@ document.addEventListener('DOMContentLoaded', () => {
         setToggleState(currentLanguage);
         loadAndDisplayClasses();
         displayLoggedInUser();
-        manageStudentButtonVisibility();
-
-        manageConfigButtonVisibility(); // Check if user is admin and hide config button if not
+        manageButtonVisibility();
     });
 });
