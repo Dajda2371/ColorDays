@@ -381,15 +381,17 @@ input[type="checkbox"] {
 
   #dynamicClassList .class-button,
   #dynamicClassList .classList a {
-    flex: 0 1 calc(25% - 8px);
-    /* up to 4 per row, scaled down */
-    max-width: 90px;
+    flex: 0 1 calc(33.33% - 10px);
+    /* up to 3 per row on smaller mobile, scaled up */
+    max-width: 120px;
     aspect-ratio: 1 / 1;
     display: flex;
     align-items: center;
     justify-content: center;
     margin: 0;
-    padding: 0;
+    padding: 10px;
+    font-size: 1.1rem;
+    font-weight: 600;
   }
 
   h1 {
@@ -746,6 +748,15 @@ body {
 
   #languageToggle {
     width: 100%;
+    min-height: 50px;
+  }
+
+  #languageToggle span {
+    padding: 12px 15px;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   #headerButtons {
@@ -762,7 +773,11 @@ body {
     width: 100%;
     /* Full width buttons */
     text-align: center;
-    padding: 12px;
+    padding: 16px 20px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    min-height: 52px;
+    margin: 4px 0;
   }
 
   #mainContent {
