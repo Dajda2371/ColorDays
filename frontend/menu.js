@@ -394,10 +394,30 @@ async function manageButtonVisibility() {
     }
 
     // Teachers/Admins reach here. Show the basic teacher buttons.
-    console.log("Non-student session. Showing Classes, Leaderboard and Change Password buttons.");
+    console.log("Non-student session. Showing Classes, Leaderboard and Change Password buttons (initially).");
     if (classesButton) classesButton.style.display = 'inline-block';
     if (leaderboardButton) leaderboardButton.style.display = 'inline-block';
-    if (changePasswordBtn) changePasswordBtn.style.display = 'inline-block';
+    
+    // Check user info to see if we should show Change Password
+    try {
+        const meResponse = await fetch('/api/auth/me', { credentials: 'include' });
+        if (meResponse.ok) {
+            const meData = await meResponse.json();
+            if (meData.is_oauth_user) {
+                console.log("User is authenticated via Google OAuth. Hiding Change Password button.");
+                if (changePasswordBtn) changePasswordBtn.style.display = 'none';
+            } else {
+                console.log("User is a regular user. Showing Change Password button.");
+                if (changePasswordBtn) changePasswordBtn.style.display = 'inline-block';
+            }
+        } else {
+             // Fallback if /api/auth/me fails
+             if (changePasswordBtn) changePasswordBtn.style.display = 'inline-block';
+        }
+    } catch (error) {
+        console.error("Error fetching user info for button visibility:", error);
+        if (changePasswordBtn) changePasswordBtn.style.display = 'inline-block';
+    }
 
     // Now check specifically for Config (only for administrators)
     try {
