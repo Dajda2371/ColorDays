@@ -5,6 +5,7 @@ import datetime
 import traceback
 import collections
 import threading
+import time
 from config import (
     DATA_DIR,
     CURRENT_YEAR_DIR,
@@ -20,6 +21,13 @@ class_data_store = []
 students_data_store = []
 user_password_store = {}
 server_config = {}
+data_version = int(time.time())
+
+def increment_data_version():
+    """Increments the global data version counter."""
+    global data_version
+    with data_lock:
+        data_version += 1
 
 def is_student_allowed(student_code_from_cookie, requested_class_name, requested_day_identifier):
     """
@@ -140,6 +148,7 @@ def migrate_logins_to_db():
                                 )
                             )
         conn.commit()
+    increment_data_version()  # Signal that data has changed
     print("Logins migrated.")
 
 def migrate_tokens_to_db():
@@ -179,6 +188,7 @@ def migrate_tokens_to_db():
                                 )
                             )
         conn.commit()
+    increment_data_version()  # Signal that data has changed
     print("Tokens migrated.")
 
 def migrate_classes_to_db():
@@ -224,6 +234,7 @@ def migrate_classes_to_db():
                                 )
                             )
         conn.commit()
+    increment_data_version()  # Signal that data has changed
     print("Classes migrated.")
 
 def migrate_students_to_db():
@@ -265,6 +276,7 @@ def migrate_students_to_db():
                                 )
                             )
         conn.commit()
+    increment_data_version()  # Signal that data has changed
     print("Students migrated.")
 
 def migrate_counts_to_db():
@@ -333,6 +345,7 @@ def migrate_counts_to_db():
                                     )
                                 )
         conn.commit()
+    increment_data_version()  # Signal that data has changed
     print("Counts migrated.")
 
 def load_user_data_from_db():
@@ -368,6 +381,7 @@ def save_user_data_to_db():
                     )
                 )
             conn.commit()
+        increment_data_version()  # Signal that data has changed
         print("User data saved.")
         return True
     except Exception as e:
@@ -410,6 +424,7 @@ def save_class_data_to_db():
                     )
                 )
             conn.commit()
+        increment_data_version()  # Signal that data has changed
         print("Class data saved.")
         return True
     except Exception as e:
@@ -469,6 +484,7 @@ def save_students_data_to_db():
                     )
                 )
             conn.commit()
+        increment_data_version()  # Signal that data has changed
         print("Student data saved.")
         return True
     except Exception as e:
@@ -503,6 +519,7 @@ def save_counts_to_db(day, day_data_to_save):
                                 (class_name, type_val, points_val, count_val)
                             )
             conn.commit()
+        increment_data_version()  # Signal that data has changed
         print(f"Counts for {day} saved.")
         return True
     except Exception as e:
@@ -541,6 +558,7 @@ def save_main_config_to_json(config_data):
     try:
         with open(config_file_path, 'w', encoding='utf-8') as f:
             json.dump(config_data, f, indent=4)
+        increment_data_version()  # Signal that data has changed
         print(f"Server configuration saved to {config_file_path}.")
         return True
     except Exception as e:

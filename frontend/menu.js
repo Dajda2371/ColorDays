@@ -8,6 +8,7 @@ const languageToggle = document.getElementById('languageToggle');
 const toggleCs = document.getElementById('toggleCs');
 const toggleEn = document.getElementById('toggleEn');
 // No need to get configButton unless you add specific JS logic for it
+let currentDataVersion = -1;
 
 // --- Localization ---
 let translations = {};
@@ -79,6 +80,18 @@ function applyTranslations() {
 async function loadAndDisplayClasses() {
     const loadingMessage = translations.loadingClassesText?.[currentLanguage] || translations.loadingClassesText?.['en'] || 'Loading classes...'; // Added English fallback
     dynamicClassList.innerHTML = `<p>${loadingMessage}</p>`;
+
+    // Update currentDataVersion whenever we fetch the classes
+    try {
+        const versionResponse = await fetch('/api/data/version');
+        if (versionResponse.ok) {
+            const versionData = await versionResponse.json();
+            currentDataVersion = versionData.version;
+        }
+    } catch (e) {
+        console.warn("Failed to fetch data version during full reload:", e);
+    }
+
     const studentCode = getCookie("SQLAuthUserStudent");
     let allClasses = [];
     let currentStudentData = null; // To store the specific student's record
@@ -477,7 +490,20 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(intervals => {
                 const interval = intervals['menu.html'];
                 if (interval && interval > 0) {
-                    setInterval(loadAndDisplayClasses, interval);
+                    setInterval(async () => {
+                        try {
+                            const response = await fetch('/api/data/version');
+                            if (response.ok) {
+                                const data = await response.json();
+                                if (data.version !== currentDataVersion) {
+                                    console.log(`Data version changed from ${currentDataVersion} to ${data.version}. Refreshing classes.`);
+                                    loadAndDisplayClasses();
+                                }
+                            }
+                        } catch (error) {
+                            console.error("Error checking for data updates:", error);
+                        }
+                    }, interval);
                 }
             })
             .catch(err => console.error("Error fetching refresh intervals:", err));
