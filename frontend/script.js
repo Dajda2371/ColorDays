@@ -269,8 +269,8 @@ async function fetchData() {
 }
 
 async function handleStateChange(newState) {
-    if (currentClassState === 'locked' && !(['administrator', 'teacher'].includes(userRole))) {
-        alert(translations.stateUpdateFailedAlert?.[currentLanguage] || "You cannot change the state when it is locked by a teacher.");
+    if ((currentClassState === 'locked' || newState === 'locked') && !(['administrator', 'teacher'].includes(userRole))) {
+        alert(translations.stateUpdateFailedAlert?.[currentLanguage] || "You cannot modify or set the lock state.");
         return;
     }
 

@@ -46,7 +46,7 @@ def update_state(request: Request, payload: StateRequest):
     is_student = request.cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME) is not None
 
     if new_state == 'locked':
-        if user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
+        if is_student or user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
             raise HTTPException(status_code=403, detail="Only teachers and admins can lock a class.")
     elif new_state in ['done', '']:
         # If it is currently locked, students can NEVER change it
