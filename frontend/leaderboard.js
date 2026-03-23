@@ -6,10 +6,13 @@ const toggleEn = document.getElementById('toggleEn');
 
 // --- Localization ---
 let translations = {};
-let currentLanguage = 'en'; // Default language
+let currentLanguage = 'cs'; // Default language
 
 // --- Logout Functionality ---
 async function handleLogout() {
+    const confirmation = confirm(translations.logoutConfirmation?.[currentLanguage] || "Are you sure you want to log out?");
+    if (!confirmation) return;
+
     console.log("Attempting logout...");
     try {
         const response = await fetch('/logout', {
@@ -202,7 +205,13 @@ if (languageToggle) {
 
 // Load on start
 document.addEventListener('DOMContentLoaded', () => {
-    currentLanguage = getCookie("language") || 'en';
+    currentLanguage = getCookie("language") || 'cs';
+
+    // Check for forced password change
+    if (getCookie("ChangePasswordVerificationNotNeeded")) {
+        window.location.href = '/change-password.html';
+        return;
+    }
 
     fetchTranslations().then(() => {
         setToggleState(currentLanguage);

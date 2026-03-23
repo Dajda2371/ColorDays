@@ -6,9 +6,12 @@ const toggleCs = document.getElementById('toggleCs');
 const toggleEn = document.getElementById('toggleEn');
 
 let translations = {};
-let currentLanguage = 'en';
+let currentLanguage = 'cs';
 
 async function handleLogout() {
+    const confirmation = confirm(translations.logoutConfirmation?.[currentLanguage] || "Are you sure you want to log out?");
+    if (!confirmation) return;
+
     try {
         const response = await fetch('/logout', {
             method: 'POST',
@@ -121,7 +124,13 @@ if (languageToggle) {
 document.addEventListener('DOMContentLoaded', function () {
 
     // Navbar Initialization
-    currentLanguage = getCookie("language") || 'en';
+    currentLanguage = getCookie("language") || 'cs';
+
+    // Check for forced password change
+    if (getCookie("ChangePasswordVerificationNotNeeded")) {
+        window.location.href = '/change-password.html';
+        return;
+    }
     fetchTranslations().then(() => {
         setToggleState(currentLanguage);
         displayLoggedInUser();
@@ -374,6 +383,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     // --- End Auto Assign Logic ---
                 }
 
+                isInitialLoad = false;
+
                 // Clear sections before repopulating
                 mondaySection.innerHTML = '';
                 tuesdaySection.innerHTML = '';
@@ -490,7 +501,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             });
 
-        isInitialLoad = false;
+
     }
 
     loadClassesData();

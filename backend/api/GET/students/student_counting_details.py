@@ -40,11 +40,11 @@ def get_student_counting_details(
 
         target_student_personal_counts_str = target_student_config.get('counts_classes', '[]')
         student_personal_counts_set = set()
+        import json
         try:
-            if target_student_personal_counts_str.startswith('[') and target_student_personal_counts_str.endswith(']'):
-                content = target_student_personal_counts_str[1:-1]
-                if content.strip():
-                    student_personal_counts_set = {c.strip() for c in content.split(',') if c.strip()}
+            parsed = json.loads(target_student_personal_counts_str)
+            if isinstance(parsed, list):
+                student_personal_counts_set = {str(c) for c in parsed}
         except Exception:
             pass
 
@@ -57,12 +57,12 @@ def get_student_counting_details(
                     if other_student_config.get('code') == code:
                         continue
                     other_student_counts_classes_str = other_student_config.get('counts_classes', '[]')
+                    import json
                     try:
-                        if other_student_counts_classes_str.startswith('[') and other_student_counts_classes_str.endswith(']'):
-                            other_content = other_student_counts_classes_str[1:-1]
-                            if other_content.strip():
-                                if class_to_display_name in {c.strip() for c in other_content.split(',') if c.strip()}:
-                                    also_counted_by_notes.append(other_student_config.get('note', 'Unknown Note'))
+                        other_parsed = json.loads(other_student_counts_classes_str)
+                        if isinstance(other_parsed, list):
+                            if class_to_display_name in {str(c) for c in other_parsed}:
+                                also_counted_by_notes.append(other_student_config.get('note', 'Unknown Note'))
                     except Exception:
                         pass
 

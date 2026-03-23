@@ -61,10 +61,13 @@ def hash_password(password):
     return f"{salt_hex}:{key_hex}"
 
 def verify_password(stored_password_info, provided_password, username):
+    """Verifies a provided password against the stored salt and hash.
+    Returns: (is_valid, extra_cookie_headers, force_change)
+    """
     """Verifies a provided password against the stored salt and hash."""
     if not isinstance(stored_password_info, dict) or 'password_hash' not in stored_password_info:
         print(f"Error: Invalid stored_password_info structure for user '{username}'. Expected a dict with 'password_hash'.")
-        return False, []
+        return False, [], False
     
     password_hash = stored_password_info['password_hash']
     extra_cookie_headers = []
@@ -80,26 +83,20 @@ def verify_password(stored_password_info, provided_password, username):
             print(f"Login attempt for user '{username}' with unset, null, or 'NOT_SET' password state.")
         else:
             print(f"Login attempt for user '{username}' with an unhandled special password state: {password_hash}")
-        return False, []
+        return False, [], False
 
     if password_hash.startswith('_') and password_hash.endswith('_'):
         _stored_actual_password_ = password_hash[1:-1]
         if _stored_actual_password_ == provided_password:
-            print(f"User '{username}' logged in with pregenerated password. Setting change password cookie.")
-            change_pw_cookie_headers = create_cookies(
-                CHANGE_PASSWORD_COOKIE_NAME,
-                "not-required",
-                path='/',
-                httponly=False
-            )
-            return True, change_pw_cookie_headers
+            print(f"User '{username}' logged in with pregenerated password. Setting change password flag.")
+            return True, [], True
         else:
             print(f"Pregenerated password verification failed for user: {username}")
-            return False, []
+            return False, [], False
 
     if ':' not in password_hash:
         print(f"Error: Unrecognized or invalid password_hash format ('{password_hash}') for user '{username}'. Expected 'salt:key'.")
-        return False, []
+        return False, [], False
 
     try:
         salt_hex, key_hex = password_hash.split(':')
@@ -107,7 +104,7 @@ def verify_password(stored_password_info, provided_password, username):
         stored_key = binascii.unhexlify(key_hex)
     except (ValueError, binascii.Error):
         print(f"Error: Invalid stored password format for hash starting with '{salt_hex[:8]}...' for user '{username}'")
-        return False, []
+        return False, [], False
 
     provided_pwd_bytes = provided_password.encode('utf-8')
     new_key = hashlib.pbkdf2_hmac(
@@ -120,7 +117,7 @@ def verify_password(stored_password_info, provided_password, username):
     is_match = hmac.compare_digest(stored_key, new_key)
     if not is_match:
         print(f"Password hash mismatch for user '{username}'.")
-    return is_match, []
+    return is_match, [], False
 
 def create_cookies(name, value, path='/', expires=None, max_age=None, httponly=True, samesite='Lax'):
     """Creates a list of ('Set-Cookie', header_value) tuples for a single cookie."""

@@ -12,7 +12,8 @@ REFRESH_INTERVALS = {
     "index.html": 5000,
     "classes.html": 10000,
     "students.html": 10000,
-    "student-is-counting.html": 10000
+    "student-is-counting.html": 10000,
+    "menu.html": 10000
 }
 
 # --- Dynamic Data Directory based on Year ---

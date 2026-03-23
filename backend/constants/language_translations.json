@@ -143,6 +143,10 @@
     "en": "An error occurred during logout.",
     "cs": "Během odhlášení došlo k chybě."
   },
+  "logoutConfirmation": {
+    "en": "Are you sure you want to log out?",
+    "cs": "Opravdu se chcete odhlásit?"
+  },
   "classContextLostAlert": {
     "en": "Error: Class context lost. Please refresh or go back to menu.",
     "cs": "Chyba: Ztratil se kontext třídy. Obnovte stránku nebo se vraťte do menu."

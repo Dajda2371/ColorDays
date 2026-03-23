@@ -27,7 +27,9 @@ def login(response: Response, login_data: LoginRequest = Body(...)):
     with data_lock:
         stored_user_data = user_password_store.get(username)
         if stored_user_data:
-            is_valid, extra_cookies = verify_password(stored_user_data, password, username)
+            is_valid, extra_cookies, force_change = verify_password(stored_user_data, password, username)
+        else:
+            force_change = False
 
     if is_valid:
         # Set cookies
@@ -35,11 +37,9 @@ def login(response: Response, login_data: LoginRequest = Body(...)):
         response.set_cookie(key=USERNAME_COOKIE_NAME, value=username, path='/', httponly=False)
         response.set_cookie(key=SQL_COOKIE_NAME, value=username, path='/', httponly=True)
 
-        for name, value_header in extra_cookies:
-            # Check for the specific change-password value string from utils logic
-            if "change-password=not-required" in value_header:
-                response.set_cookie(key=CHANGE_PASSWORD_COOKIE_NAME, value="not-required", path='/', httponly=False)
+        if force_change:
+             response.set_cookie(key=CHANGE_PASSWORD_COOKIE_NAME, value="shared-secret-or-just-required", path='/', httponly=False)
 
-        return {"success": True, "message": "Login successful"}
+        return {"success": True, "message": "Login successful", "force_change": force_change}
     else:
         raise HTTPException(status_code=401, detail="Invalid username or password")

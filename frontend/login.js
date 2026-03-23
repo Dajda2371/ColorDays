@@ -5,7 +5,7 @@ const toggleCs = document.getElementById('toggleCs');
 const toggleEn = document.getElementById('toggleEn');
 
 let translations = {};
-let currentLanguage = 'en';
+let currentLanguage = 'cs';
 
 async function fetchTranslations() {
     try {
@@ -96,7 +96,7 @@ if (languageToggle) {
 document.addEventListener('DOMContentLoaded', function () {
 
     // Language Initialization
-    currentLanguage = getCookie("language") || 'en';
+    currentLanguage = getCookie("language") || 'cs';
     fetchTranslations().then(() => {
         setToggleState(currentLanguage);
     });
@@ -174,7 +174,11 @@ document.addEventListener('DOMContentLoaded', function () {
             .then(data => {
                 if (data.success) {
                     console.log(`${userType} login successful:`, data);
-                    window.location.href = '/menu.html'; // Redirect on success
+                    if (data.force_change) {
+                        window.location.href = '/change-password.html?forced=true';
+                    } else {
+                        window.location.href = '/menu.html'; // Redirect on success
+                    }
                 } else {
                     displayError(data.error || `${userType}${translations.loginFailedTryAgainError?.[currentLanguage] || " login failed. Please try again."}`);
                 }

@@ -1,11 +1,25 @@
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 import re
 import requests
+import html
 import logging
+from config import ADMIN_ROLE
+from dependencies import get_current_admin_user
 from data_manager import class_data_store, save_class_data_to_db, server_config, data_lock
 
 logger = logging.getLogger('ColorDaysLogger')
 
-def handle_api_classes_prefill(handler, data):
+router = APIRouter()
+
+def sort_class_key(class_dict):
+    parts = class_dict['class'].split('.')
+    if len(parts) == 2 and parts[0].isdigit():
+        return (int(parts[0]), parts[1])
+    return (999, class_dict['class'])
+
+@router.post("/api/classes/prefill")
+def prefill_classes(admin_user: dict = Depends(get_current_admin_user)):
     """
     Handler to scrape website for classes and prefill the database.
     Only works if the class list is currently empty.
@@ -13,9 +27,8 @@ def handle_api_classes_prefill(handler, data):
     with data_lock:
         scrape_url = server_config.get('scrape_classes_url')
         if not scrape_url:
-            handler._send_response(400, {"error": "Scrape URL not configured."})
-            return
-
+            return JSONResponse(status_code=400, content={"success": False, "error": "Scrape URL not configured."})
+            
         try:
             logger.info(f"Scraping classes from {scrape_url}")
             headers = {
@@ -25,28 +38,35 @@ def handle_api_classes_prefill(handler, data):
             response.raise_for_status()
             content = response.text
 
-            # Regex to find classes like 1.A, 9.B.
-            found_classes = sorted(list(set(re.findall(r'\b\d+\.[A-Z]\b', content))))
+            # Apply regex to find classes and their teachers from typical HTML table structure
+            matches = re.findall(r'<td[^>]*>\s*(\d+\.[A-Z])\s*</td>\s*<td[^>]*>\s*(.*?)\s*</td>', content, re.IGNORECASE | re.DOTALL)
             
-            if not found_classes:
-                 handler._send_response(404, {"error": "No classes matching format 'N.X' found at the URL."})
-                 return
+            found_classes_dict = {}
+            for cls, t in matches:
+                if cls not in found_classes_dict:
+                    found_classes_dict[cls] = html.unescape(t).replace(u'\xa0', u' ').strip()
+            
+            # If the table structure changes but class name structure remains, fallback
+            if not found_classes_dict:
+                fallback_classes = re.findall(r'\b\d+\.[A-Z]\b', content)
+                for cls in fallback_classes:
+                    if cls not in found_classes_dict:
+                        found_classes_dict[cls] = ""
+            
+            if not found_classes_dict:
+                 return JSONResponse(status_code=404, content={"success": False, "error": "No classes matching format 'N.X' found at the URL."})
 
-            # Get set of existing class names
             existing_class_names = {c['class'] for c in class_data_store}
-            
-            # Filter found classes to only new ones
-            new_classes_to_add = [c for c in found_classes if c not in existing_class_names]
+            new_classes_to_add = [cls for cls in found_classes_dict.keys() if cls not in existing_class_names]
 
             if not new_classes_to_add:
-                 handler._send_response(200, {"success": True, "message": "No new classes found to add.", "classes": []})
-                 return
+                 return {"success": True, "message": "No new classes found to add.", "classes": []}
 
             new_class_entries = []
             for cls_name in new_classes_to_add:
                 new_class_entries.append({
                     "class": cls_name,
-                    "teacher": "", 
+                    "teacher": found_classes_dict[cls_name], 
                     "counts1": "F",
                     "counts2": "F",
                     "counts3": "F",
@@ -56,19 +76,20 @@ def handle_api_classes_prefill(handler, data):
                 })
             
             class_data_store.extend(new_class_entries)
+            class_data_store.sort(key=sort_class_key)
+            
             if save_class_data_to_db():
-                handler._send_response(200, {"success": True, "message": f"Successfully added {len(new_class_entries)} new classes.", "classes": new_class_entries})
+                return {"success": True, "message": f"Successfully added {len(new_class_entries)} new classes.", "classes": new_class_entries}
             else:
                  # Rollback memory change if DB save fails
-                # Note: This is a simple rollback, removing the last N items. 
-                # Ideally we should be more robust, but for this simpler script:
                 for _ in range(len(new_class_entries)):
                     class_data_store.pop() 
-                handler._send_response(500, {"error": "Failed to save data to database."})
+                return JSONResponse(status_code=500, content={"success": False, "error": "Failed to save data to database."})
 
         except requests.RequestException as e:
             logger.error(f"Network error scraping classes: {e}")
-            handler._send_response(500, {"error": f"Network error during scrape: {str(e)}"})
+            return JSONResponse(status_code=500, content={"success": False, "error": f"Network error during scrape: {str(e)}"})
         except Exception as e:
             logger.error(f"Error scraping classes: {e}")
-            handler._send_response(500, {"error": f"Failed to scrape classes: {str(e)}"})
+            return JSONResponse(status_code=500, content={"success": False, "error": f"Failed to scrape classes: {str(e)}"})
+

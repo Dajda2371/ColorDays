@@ -1,7 +1,9 @@
 const dynamicClassList = document.getElementById('dynamicClassList');
 const logoutButton = document.getElementById('logoutButton');
-const classesButton = document.getElementById('classesButton'); // Get the Classes button
-const configButton = document.getElementById('configButton'); // Get the Config button
+const classesButton = document.getElementById('classesButton');
+const configButton = document.getElementById('configButton');
+const leaderboardButton = document.getElementById('leaderboardButton');
+const changePasswordBtn = document.getElementById('changePasswordBtn');
 const languageToggle = document.getElementById('languageToggle');
 const toggleCs = document.getElementById('toggleCs');
 const toggleEn = document.getElementById('toggleEn');
@@ -9,10 +11,13 @@ const toggleEn = document.getElementById('toggleEn');
 
 // --- Localization ---
 let translations = {};
-let currentLanguage = 'en'; // Default language
+let currentLanguage = 'cs'; // Default language
 
 // --- Logout Functionality (Keep this as is) ---
 async function handleLogout() {
+    const confirmation = confirm(translations.logoutConfirmation?.[currentLanguage] || "Are you sure you want to log out?");
+    if (!confirmation) return;
+
     console.log("Attempting logout...");
     try {
         const response = await fetch('/logout', {
@@ -182,27 +187,62 @@ async function loadAndDisplayClasses() {
                     daySectionDiv.className = 'day-section';
                     daySectionDiv.innerHTML = `<h2>${dayDisplayName}</h2>`;
 
-                    const ul = document.createElement('ul');
-                    ul.className = 'classList';
-                    classesStudentCounts.sort().forEach(className => { // Sort the class names
-                        const listItem = document.createElement('li');
-                        const link = document.createElement('a');
-                        link.href = `index.html?class=${encodeURIComponent(className)}&day=${day.defaultName.toLowerCase()}`;
-                        link.textContent = className;
+                    const studentClassesToDisplay = allClasses.filter(cls => classesStudentCounts.includes(cls.class));
+                    const stateKey = `state${day.iscountedbyFlag.slice(-1)}`;
 
-                        // Apply state color
-                        const clsObj = allClasses.find(c => c.class === className);
-                        if (clsObj) {
-                            const stateKey = `state${day.iscountedbyFlag.slice(-1)}`;
-                            const stateValue = clsObj[stateKey];
+                    // Smart Sorting Logic
+                    const classRegex = /^\d+\.[A-Za-z]+$/;
+                    const allMatch = studentClassesToDisplay.length > 0 && studentClassesToDisplay.every(cls => classRegex.test(cls.class));
+                    const useSmartSorting = smartSortingEnabled && allMatch;
+
+                    if (useSmartSorting) {
+                        const grouped = {};
+                        studentClassesToDisplay.forEach(cls => {
+                            const numberPart = cls.class.split('.')[0];
+                            if (!grouped[numberPart]) grouped[numberPart] = [];
+                            grouped[numberPart].push(cls);
+                        });
+
+                        const sortedGroupKeys = Object.keys(grouped).sort((a, b) => parseInt(a) - parseInt(b));
+
+                        sortedGroupKeys.forEach(key => {
+                            const groupDiv = document.createElement('div');
+                            groupDiv.style.marginBottom = "10px";
+
+                            grouped[key].sort((a, b) => a.class.localeCompare(b.class));
+
+                            grouped[key].forEach(cls => {
+                                const link = document.createElement('a');
+                                link.href = `index.html?class=${encodeURIComponent(cls.class)}&day=${day.defaultName.toLowerCase()}`;
+                                link.textContent = cls.class;
+                                link.className = 'class-button';
+
+                                const stateValue = cls[stateKey];
+                                if (stateValue === 'done') link.classList.add('class-button-done');
+                                else if (stateValue === 'locked') link.classList.add('class-button-locked');
+
+                                groupDiv.appendChild(link);
+                            });
+                            daySectionDiv.appendChild(groupDiv);
+                        });
+                    } else {
+                        const ul = document.createElement('ul');
+                        ul.className = 'classList';
+                        studentClassesToDisplay.sort((a, b) => a.class.localeCompare(b.class)).forEach(cls => {
+                            const listItem = document.createElement('li');
+                            const link = document.createElement('a');
+                            link.href = `index.html?class=${encodeURIComponent(cls.class)}&day=${day.defaultName.toLowerCase()}`;
+                            link.textContent = cls.class;
+
+                            const stateValue = cls[stateKey];
                             if (stateValue === 'done') link.classList.add('class-button-done');
                             else if (stateValue === 'locked') link.classList.add('class-button-locked');
-                        }
 
-                        listItem.appendChild(link);
-                        ul.appendChild(listItem);
-                    });
-                    daySectionDiv.appendChild(ul);
+                            listItem.appendChild(link);
+                            ul.appendChild(listItem);
+                        });
+                        daySectionDiv.appendChild(ul);
+                    }
                     dynamicClassList.appendChild(daySectionDiv);
                 }
             }
@@ -314,50 +354,39 @@ function getCookie(name) {
     return null; // Cookie not found
 }
 
-// --- Function to manage visibility of Admin/Teacher buttons for students ---
-function manageStudentButtonVisibility() {
-    console.log("--- manageStudentButtonVisibility ---");
-    const studentAuthCookie = getCookie("SQLAuthUserStudent");
-    const isStudent = studentAuthCookie !== null;
-    console.log(`SQLAuthUserStudent cookie exists: ${isStudent}`);
+// --- Function to manage visibility of header buttons based on role ---
+async function manageButtonVisibility() {
+    console.log("--- manageButtonVisibility ---");
+    const isStudent = getCookie("SQLAuthUserStudent") !== null;
 
     if (isStudent) {
-        console.log("Student session detected. Hiding Classes and Config buttons.");
-        if (classesButton) classesButton.style.display = 'none';
-        if (configButton) configButton.style.display = 'none';
-    }
-    console.log("--- End manageStudentButtonVisibility ---");
-}
-
-// --- Function to manage visibility of Config button for non-admins ---
-async function manageConfigButtonVisibility() {
-    console.log("--- manageConfigButtonVisibility ---");
-
-    // Students are already handled by manageStudentButtonVisibility
-    const studentAuthCookie = getCookie("SQLAuthUserStudent");
-    if (studentAuthCookie) {
-        console.log("Student session - config button already hidden.");
+        console.log("Student session detected. Keeping Classes, Config, Leaderboard and Change Password buttons hidden.");
+        // They are already hidden by default in HTML (style="display: none;")
         return;
     }
 
-    // Check if user is admin by trying to access an admin-only endpoint
+    // Teachers/Admins reach here. Show the basic teacher buttons.
+    console.log("Non-student session. Showing Classes, Leaderboard and Change Password buttons.");
+    if (classesButton) classesButton.style.display = 'inline-block';
+    if (leaderboardButton) leaderboardButton.style.display = 'inline-block';
+    if (changePasswordBtn) changePasswordBtn.style.display = 'inline-block';
+
+    // Now check specifically for Config (only for administrators)
     try {
         const response = await fetch('/api/users', { credentials: 'include' });
-        if (response.status === 403) {
-            // User is not an admin (likely a teacher)
-            console.log("User is not an admin. Hiding Config button.");
-            if (configButton) configButton.style.display = 'none';
-        } else if (response.ok) {
-            // User is an admin
-            console.log("User is an admin. Config button remains visible.");
+        if (response.ok) {
+            console.log("User is an admin. Showing Config button.");
+            if (configButton) configButton.style.display = 'inline-block';
         } else {
-            console.warn("Unexpected response when checking admin status:", response.status);
+            console.log("User is not an admin. Config button remains hidden.");
+            if (configButton) configButton.style.display = 'none';
         }
     } catch (error) {
         console.error("Error checking admin status:", error);
     }
-    console.log("--- End manageConfigButtonVisibility ---");
+    console.log("--- End manageButtonVisibility ---");
 }
+
 
 
 
@@ -427,15 +456,30 @@ if (languageToggle) {
 // Load classes when the page loads
 document.addEventListener('DOMContentLoaded', () => {
     // Set currentLanguage from cookie first, so it's available for all subsequent calls
-    currentLanguage = getCookie("language") || 'en';
+    currentLanguage = getCookie("language") || 'cs';
+
+    // Check for forced password change
+    if (getCookie("ChangePasswordVerificationNotNeeded")) {
+        window.location.href = '/change-password.html';
+        return;
+    }
 
     fetchTranslations().then(() => { // Fetch translations first
         // applyTranslations has been called by fetchTranslations and used the currentLanguage set above.
         setToggleState(currentLanguage);
         loadAndDisplayClasses();
         displayLoggedInUser();
-        manageStudentButtonVisibility();
+        manageButtonVisibility();
 
-        manageConfigButtonVisibility(); // Check if user is admin and hide config button if not
+        // Fetch refresh interval and setup auto-refresh
+        fetch('/api/config/refresh_intervals')
+            .then(res => res.json())
+            .then(intervals => {
+                const interval = intervals['menu.html'];
+                if (interval && interval > 0) {
+                    setInterval(loadAndDisplayClasses, interval);
+                }
+            })
+            .catch(err => console.error("Error fetching refresh intervals:", err));
     });
 });

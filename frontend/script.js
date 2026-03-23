@@ -4,6 +4,11 @@ let currentDayIdentifier = null; // Added to store the day
 
 // --- Wait for the DOM to be fully loaded ---
 document.addEventListener('DOMContentLoaded', () => {
+    // Check for forced password change
+    if (getCookie("ChangePasswordVerificationNotNeeded")) {
+        window.location.href = '/change-password.html';
+        return;
+    }
     const urlParams = new URLSearchParams(window.location.search);
     currentClassName = urlParams.get('class'); // Store class name globally
     currentDayIdentifier = urlParams.get('day'); // Store day globally
@@ -75,7 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchData();
 
     // Call localization and header loading logic
-    currentLanguage = getCookie("language") || 'en';
+    currentLanguage = getCookie("language") || 'cs';
     fetchTranslations().then(() => {
         setToggleState(currentLanguage);
         displayLoggedInUser();
@@ -104,9 +109,12 @@ const toggleCs = document.getElementById('toggleCs');
 const toggleEn = document.getElementById('toggleEn');
 
 let translations = {};
-let currentLanguage = 'en';
+let currentLanguage = 'cs';
 
 async function handleLogout() {
+    const confirmation = confirm(translations.logoutConfirmation?.[currentLanguage] || "Are you sure you want to log out?");
+    if (!confirmation) return;
+
     try {
         const response = await fetch('/logout', {
             method: 'POST',

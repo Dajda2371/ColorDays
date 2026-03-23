@@ -6,9 +6,12 @@ const toggleCs = document.getElementById('toggleCs');
 const toggleEn = document.getElementById('toggleEn');
 
 let translations = {};
-let currentLanguage = 'en';
+let currentLanguage = 'cs';
 
 async function handleLogout() {
+    const confirmation = confirm(translations.logoutConfirmation?.[currentLanguage] || "Are you sure you want to log out?");
+    if (!confirmation) return;
+
     try {
         const response = await fetch('/logout', {
             method: 'POST',
@@ -136,6 +139,10 @@ async function fetchUsers() {
 function renderUsers() {
   const tbody = document.getElementById("userTableBody");
   tbody.innerHTML = "";
+  
+  const cookies = document.cookie.split('; ');
+  const usernameCookie = cookies.find(row => row.startsWith('ColorDaysUser='));
+  let currentUser = usernameCookie ? decodeURIComponent(usernameCookie.split('=')[1]) : null;
 
   Object.entries(users).forEach(([username, info]) => {
     const tr = document.createElement("tr");
@@ -154,21 +161,47 @@ function renderUsers() {
       status = info.password;
     }
 
+    let roleSelectHtml = '';
+    if (username === 'admin' || username === currentUser) {
+        roleSelectHtml = `<select disabled><option>${info.role || 'teacher'}</option></select>`;
+    } else {
+        roleSelectHtml = `
+            <select onchange="changeRole('${username}', this.value)">
+                <option value="teacher" ${info.role === 'teacher' ? 'selected' : ''}>Teacher</option>
+                <option value="administrator" ${info.role === 'administrator' ? 'selected' : ''}>Admin</option>
+            </select>
+        `;
+    }
+
+    const isGoogleAuth = status === (translations.googleAuthStatus?.[currentLanguage] || "Google Auth");
+    const isNotSet = status === (translations.notSetStatus?.[currentLanguage] || "not set");
+    
+    let actionButtons = "";
+    
+    // Password Actions
+    if (isGoogleAuth) {
+        // No password actions for Google Auth users
+    } else if (isNotSet) {
+        actionButtons += `<button onclick="setPassword('${username}')">${translations.setPasswordBtnText?.[currentLanguage] || 'Set Password'}</button> `;
+    } else {
+        // Reset Password button
+        // Logic: Only 'admin' can reset 'admin''s password.
+        if (username !== 'admin' || currentUser === 'admin') {
+            actionButtons += `<button onclick="resetPassword('${username}')">${translations.resetPasswordBtnText?.[currentLanguage] || 'Reset Password'}</button> `;
+        }
+    }
+    
+    // Remove Action
+    // Logic: Cannot remove the main 'admin', and cannot remove 'yourself'.
+    if (username !== "admin" && username !== currentUser) {
+        actionButtons += `<button onclick="removeUser('${username}')">${translations.removeBtnText?.[currentLanguage] || 'Remove'}</button>`;
+    }
+
     tr.innerHTML = `
       <td>${username}</td>
       <td>${status}</td>
-      <td>
-        ${status === (translations.notSetStatus?.[currentLanguage] || "not set") && status !== (translations.googleAuthStatus?.[currentLanguage] || "Google Auth") // || /^[a-zA-Z0-9]{10}$/.test(info.password)
-        ? `<button onclick="setPassword('${username}')">${translations.setPasswordBtnText?.[currentLanguage] || 'Set Password'}</button>`
-        : status === (translations.googleAuthStatus?.[currentLanguage] || "Google Auth")
-          ? ``
-          : `<button onclick="resetPassword('${username}')">${translations.resetPasswordBtnText?.[currentLanguage] || 'Reset Password'}</button>`
-      }
-        ${username !== "admin"
-        ? `<button onclick="removeUser('${username}')">${translations.removeBtnText?.[currentLanguage] || 'Remove'}</button>`
-        : ""
-      }
-      </td>
+      <td>${roleSelectHtml}</td>
+      <td>${actionButtons}</td>
     `;
 
     tbody.appendChild(tr);
@@ -180,7 +213,7 @@ async function loadUsers() {
   const data = await res.json();
   users = {};
   data.forEach(user => {
-    users[user.username] = { password: user.password };
+    users[user.username] = { password: user.password, role: user.role };
   });
   renderUsers();
 }
@@ -289,6 +322,32 @@ async function changePassword() {
 
   const data = await res.json();
   alert(data.message);
+}
+
+async function changeRole(username, newRole) {
+  if (!confirm(`Are you sure you want to change role for ${username} to ${newRole}?`)) {
+    loadUsers(); // revert select UI if cancelled
+    return;
+  }
+  
+  try {
+    const res = await fetch("/api/users/role", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, role: newRole })
+    });
+    const result = await res.json();
+    if (res.ok && result.success) {
+      loadUsers();
+    } else {
+      alert(result.detail || result.error || "Failed to update role");
+      loadUsers();
+    }
+  } catch (err) {
+    console.error(err);
+    alert("Error updating role");
+    loadUsers();
+  }
 }
 
 // --- Class Management Functions ---
@@ -661,7 +720,13 @@ async function saveGoogleOauth() {
 document.addEventListener("DOMContentLoaded", () => {
 
     // Navbar Initialization
-    currentLanguage = getCookie("language") || 'en';
+    currentLanguage = getCookie("language") || 'cs';
+
+    // Check for forced password change
+    if (getCookie("ChangePasswordVerificationNotNeeded")) {
+        window.location.href = '/change-password.html';
+        return;
+    }
     fetchTranslations().then(() => {
         setToggleState(currentLanguage);
         displayLoggedInUser();
@@ -686,5 +751,6 @@ window.addUser = addUser;
 window.removeUser = removeUser;
 window.setPassword = setPassword;
 window.resetPassword = resetPassword;
+window.changeRole = changeRole;
 window.addGoogleOauthDomain = addGoogleOauthDomain;
 window.saveGoogleOauth = saveGoogleOauth;

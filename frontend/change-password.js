@@ -6,9 +6,12 @@ const toggleCs = document.getElementById('toggleCs');
 const toggleEn = document.getElementById('toggleEn');
 
 let translations = {};
-let currentLanguage = 'en';
+let currentLanguage = 'cs';
 
 async function handleLogout() {
+    const confirmation = confirm(translations.logoutConfirmation?.[currentLanguage] || "Are you sure you want to log out?");
+    if (!confirmation) return;
+
     try {
         const response = await fetch('/logout', {
             method: 'POST',
@@ -120,27 +123,33 @@ if (languageToggle) {
 // Wait for the HTML document to be fully loaded before running the script
 document.addEventListener('DOMContentLoaded', (event) => {
     // Language Initialization
-    currentLanguage = getCookie("language") || 'en';
+    currentLanguage = getCookie("language") || 'cs';
     fetchTranslations().then(() => {
         setToggleState(currentLanguage);
         displayLoggedInUser();
     });
 
     console.log("DOM fully loaded. Checking for cookie..."); // Log: DOM ready
-    // --- Check for the password change cookie on page load ---
+    // --- Check for the password change cookie or URL parameter on page load ---
     const cookieName = "ChangePasswordVerificationNotNeeded";
     console.log("Current document.cookie:", document.cookie); // Log the raw cookie string
 
-    // Try a simpler check first:
-    if (document.cookie.indexOf(cookieName + '=') !== -1) {
-        console.log("Cookie check PASSED."); // Add this log
-        console.log(`Cookie '${cookieName}' found. Hiding old password field.`);
+    const urlParams = new URLSearchParams(window.location.search);
+    const forcedByUrl = urlParams.get('forced') === 'true';
+    const forcedByCookie = getCookie(cookieName) !== null;
+
+    if (forcedByUrl || forcedByCookie) {
+        console.log("Forced password change detected. Hiding old password field.");
         const oldPasswordDiv = document.getElementById('oldPasswordContainer');
+        const backButton = document.getElementById('backButton');
         if (oldPasswordDiv) {
-            console.log("Found element #oldPasswordContainer. Setting display to none."); // Log: Element found
+            console.log("Found element #oldPasswordContainer. Setting display to none.");
             oldPasswordDiv.style.display = 'none';
         } else {
-            console.error("ERROR: Could not find element with ID 'oldPasswordContainer'!"); // Log: Element NOT found
+            console.error("ERROR: Could not find element with ID 'oldPasswordContainer'!");
+        }
+        if (backButton) {
+            backButton.style.display = 'none';
         }
     }
     // --- End cookie check ---
@@ -167,6 +176,10 @@ document.addEventListener('DOMContentLoaded', (event) => {
             // Clear previous error messages
             errorMessageDiv.textContent = '';
 
+            const cookies = document.cookie.split('; ');
+            const usernameCookie = cookies.find(row => row.startsWith('ColorDaysUser='));
+            const currentUsername = usernameCookie ? decodeURIComponent(usernameCookie.split('=')[1]) : '';
+
             try {
                 const response = await fetch('/api/auth/change', { // Send request to the backend endpoint
                     method: 'POST',
@@ -175,7 +188,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
                         // Body should be outside the headers object
                     },
                     // Send old password, new password, and verification flag
-                    body: JSON.stringify({ oldPassword: oldPassword, newPassword: newPassword, verificationNeeded: verificationNeeded }),
+                    body: JSON.stringify({ username: currentUsername, old_password: oldPassword, new_password: newPassword }),
                 });
 
                 const result = await response.json(); // Parse the JSON response from the server

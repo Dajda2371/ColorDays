@@ -31,12 +31,17 @@ def update_student_counting_class(payload: StudentUpdateCountingRequest, user_in
 
         student_note = target_student_config.get('note', student_code)
         
-        counts_str = target_student_config.get('counts_classes', '[]') 
-        current_counts_set = set()
-        if counts_str.startswith('[') and counts_str.endswith(']'):
-            content = counts_str[1:-1]
-            if content.strip():
-                current_counts_set = {c.strip() for c in content.split(',') if c.strip()}
+        import json
+        
+        counts_str = target_student_config.get('counts_classes', '[]')
+        try:
+            personal_counts = json.loads(counts_str)
+            if not isinstance(personal_counts, list):
+                personal_counts = []
+        except json.JSONDecodeError:
+            personal_counts = []
+            
+        current_counts_set = set(personal_counts)
 
         if is_counting:
             current_counts_set.add(class_name)
@@ -44,9 +49,7 @@ def update_student_counting_class(payload: StudentUpdateCountingRequest, user_in
             current_counts_set.discard(class_name)
 
         sorted_list = sorted(list(current_counts_set))
-        new_counts_str = f"[{', '.join(sorted_list)}]" if sorted_list else "[]"
-
-        target_student_config['counts_classes'] = new_counts_str
+        target_student_config['counts_classes'] = json.dumps(sorted_list)
 
         if save_students_data_to_db():
             action = "added to" if is_counting else "removed from"
