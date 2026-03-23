@@ -272,17 +272,17 @@ document.addEventListener('DOMContentLoaded', function () {
         const tbody = document.getElementById('students-table-body');
         if (document.getElementById('addStudentRow')) return;
 
+        if (!classFromUrl) {
+            alert(translations.noClassSelectedAlert?.[currentLanguage] || "Please select a class first.");
+            return;
+        }
+
         const addRow = document.createElement('tr');
         addRow.id = 'addStudentRow';
 
-        let classValue = '';
-        if (classFromUrl) {
-            classValue = classFromUrl;
-        }
-
         addRow.innerHTML = `
             <td style="color: grey; font-style: italic;">Auto-generated</td>
-            <td><input type="text" id="newStudentClass" placeholder="${translations.classPlaceholderText?.[currentLanguage] || 'Class (e.g. 9.A)'}" value="${classValue}" /></td>
+            <td><input type="text" id="newStudentClass" value="${classFromUrl}" readonly /></td>
             <td><input type="text" id="newStudentNote" placeholder="${translations.notePlaceholderText?.[currentLanguage] || 'Note'}" /></td>
             <td>-</td>
             <td>
@@ -295,12 +295,8 @@ document.addEventListener('DOMContentLoaded', function () {
         // But table usually appends.
         tbody.appendChild(addRow);
 
-        // Focus the input
-        if (classValue) {
-            document.getElementById('newStudentNote').focus();
-        } else {
-            document.getElementById('newStudentClass').focus();
-        }
+        // Focus the note input since class is readonly
+        document.getElementById('newStudentNote').focus();
     };
 
     window.cancelAddStudent = function () {

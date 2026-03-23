@@ -170,6 +170,19 @@ select:focus {
   box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.15);
 }
 
+input[readonly] {
+  background-color: #f0f0f0;
+  cursor: not-allowed;
+  border-color: #ddd;
+  color: #666;
+}
+
+input[readonly]:focus {
+  box-shadow: none;
+  border-color: #ddd;
+  outline: none;
+}
+
 input[type="checkbox"] {
   width: 20px;
   height: 20px;

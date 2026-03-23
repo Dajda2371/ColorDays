@@ -212,6 +212,11 @@ async def protected_pages(request: Request):
     if path in ["/classes.html", "/change-password.html", "/leaderboard.html"]:
         if request.cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME):
              return JSONResponse(status_code=403, content={"error": "Forbidden: Access to this page is restricted for your account type."})
+    
+    if path == "/change-password.html":
+        from data_manager import is_user_using_oauth
+        if user_key and is_user_using_oauth(user_key):
+             return JSONResponse(status_code=403, content={"error": "Forbidden: Password change not allowed for Google OAuth users."})
 
     file_path = FRONTEND_DIR / path.lstrip('/')
     if file_path.is_file():

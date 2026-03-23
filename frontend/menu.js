@@ -8,6 +8,7 @@ const languageToggle = document.getElementById('languageToggle');
 const toggleCs = document.getElementById('toggleCs');
 const toggleEn = document.getElementById('toggleEn');
 // No need to get configButton unless you add specific JS logic for it
+let currentDataVersion = -1;
 
 // --- Localization ---
 let translations = {};
@@ -77,8 +78,23 @@ function applyTranslations() {
 
 // --- Function to fetch and display classes ---
 async function loadAndDisplayClasses() {
-    const loadingMessage = translations.loadingClassesText?.[currentLanguage] || translations.loadingClassesText?.['en'] || 'Loading classes...'; // Added English fallback
-    dynamicClassList.innerHTML = `<p>${loadingMessage}</p>`;
+    // Only show loading message if the list is currently empty
+    if (!dynamicClassList.innerHTML.trim()) {
+        const loadingMessage = translations.loadingClassesText?.[currentLanguage] || translations.loadingClassesText?.['en'] || 'Loading classes...'; 
+        dynamicClassList.innerHTML = `<p>${loadingMessage}</p>`;
+    }
+
+    // Update currentDataVersion whenever we fetch the classes
+    try {
+        const versionResponse = await fetch('/api/data/version');
+        if (versionResponse.ok) {
+            const versionData = await versionResponse.json();
+            currentDataVersion = versionData.version;
+        }
+    } catch (e) {
+        console.warn("Failed to fetch data version during full reload:", e);
+    }
+
     const studentCode = getCookie("SQLAuthUserStudent");
     let allClasses = [];
     let currentStudentData = null; // To store the specific student's record
@@ -143,12 +159,14 @@ async function loadAndDisplayClasses() {
         relevantClassesForDisplay = []; // Clear classes on major error
     }
 
-    dynamicClassList.innerHTML = ''; // Clear any existing items
+    // Create a DocumentFragment to build the new content off-screen
+    const fragment = document.createDocumentFragment();
+
     if (errorMessage) {
         const errorPara = document.createElement('p');
         errorPara.style.color = 'red';
         errorPara.textContent = errorMessage;
-        dynamicClassList.appendChild(errorPara);
+        fragment.appendChild(errorPara);
     }
 
     const days = [
@@ -167,7 +185,11 @@ async function loadAndDisplayClasses() {
 
         if (!studentMainClass) {
             if (!errorMessage) errorMessage = (translations.errorMainClassNotSet?.[currentLanguage] || "Your main class is not set. Cannot determine days to display.");
-            dynamicClassList.innerHTML = `<p style="color:red;">${errorMessage}</p>`;
+            const errorPara = document.createElement('p');
+            errorPara.style.color = 'red';
+            errorPara.textContent = errorMessage;
+            fragment.appendChild(errorPara);
+            dynamicClassList.replaceChildren(fragment);
             return;
         }
 
@@ -243,12 +265,14 @@ async function loadAndDisplayClasses() {
                         });
                         daySectionDiv.appendChild(ul);
                     }
-                    dynamicClassList.appendChild(daySectionDiv);
+                    fragment.appendChild(daySectionDiv);
                 }
             }
         });
         if (!contentRendered && !errorMessage) {
-            dynamicClassList.innerHTML = `<p>${translations.noClassesToCountStudentText?.[currentLanguage] || translations.noClassesToCountStudentText?.['en'] || 'You have no classes to count...'}</p>`; // Added English fallback
+            const noClassesPara = document.createElement('p');
+            noClassesPara.textContent = translations.noClassesToCountStudentText?.[currentLanguage] || translations.noClassesToCountStudentText?.['en'] || 'You have no classes to count...';
+            fragment.appendChild(noClassesPara);
         }
 
     } else if (!studentCode) {
@@ -318,14 +342,18 @@ async function loadAndDisplayClasses() {
                 });
                 daySectionDiv.appendChild(ul);
             }
-            dynamicClassList.appendChild(daySectionDiv);
+            fragment.appendChild(daySectionDiv);
         });
     }
 
     // Final check if nothing was rendered and no specific error message was already set for students
-    if (!contentRendered && !errorMessage && dynamicClassList.innerHTML === '') {
-        dynamicClassList.innerHTML = `<p>${translations.noClassesScheduledAdminText?.[currentLanguage] || translations.noClassesScheduledAdminText?.['en'] || 'No classes are scheduled...'}</p>`; // Added English fallback
+    if (!contentRendered && !errorMessage && !fragment.hasChildNodes()) {
+        const lastResortPara = document.createElement('p');
+        lastResortPara.textContent = translations.noClassesScheduledAdminText?.[currentLanguage] || translations.noClassesScheduledAdminText?.['en'] || 'No classes are scheduled...';
+        fragment.appendChild(lastResortPara);
     }
+
+    dynamicClassList.replaceChildren(fragment);
 }
 
 // --- Function to display logged-in username ---
@@ -366,10 +394,30 @@ async function manageButtonVisibility() {
     }
 
     // Teachers/Admins reach here. Show the basic teacher buttons.
-    console.log("Non-student session. Showing Classes, Leaderboard and Change Password buttons.");
+    console.log("Non-student session. Showing Classes, Leaderboard and Change Password buttons (initially).");
     if (classesButton) classesButton.style.display = 'inline-block';
     if (leaderboardButton) leaderboardButton.style.display = 'inline-block';
-    if (changePasswordBtn) changePasswordBtn.style.display = 'inline-block';
+    
+    // Check user info to see if we should show Change Password
+    try {
+        const meResponse = await fetch('/api/auth/me', { credentials: 'include' });
+        if (meResponse.ok) {
+            const meData = await meResponse.json();
+            if (meData.is_oauth_user) {
+                console.log("User is authenticated via Google OAuth. Hiding Change Password button.");
+                if (changePasswordBtn) changePasswordBtn.style.display = 'none';
+            } else {
+                console.log("User is a regular user. Showing Change Password button.");
+                if (changePasswordBtn) changePasswordBtn.style.display = 'inline-block';
+            }
+        } else {
+             // Fallback if /api/auth/me fails
+             if (changePasswordBtn) changePasswordBtn.style.display = 'inline-block';
+        }
+    } catch (error) {
+        console.error("Error fetching user info for button visibility:", error);
+        if (changePasswordBtn) changePasswordBtn.style.display = 'inline-block';
+    }
 
     // Now check specifically for Config (only for administrators)
     try {
@@ -477,7 +525,20 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(intervals => {
                 const interval = intervals['menu.html'];
                 if (interval && interval > 0) {
-                    setInterval(loadAndDisplayClasses, interval);
+                    setInterval(async () => {
+                        try {
+                            const response = await fetch('/api/data/version');
+                            if (response.ok) {
+                                const data = await response.json();
+                                if (data.version !== currentDataVersion) {
+                                    console.log(`Data version changed from ${currentDataVersion} to ${data.version}. Refreshing classes.`);
+                                    loadAndDisplayClasses();
+                                }
+                            }
+                        } catch (error) {
+                            console.error("Error checking for data updates:", error);
+                        }
+                    }, interval);
                 }
             })
             .catch(err => console.error("Error fetching refresh intervals:", err));

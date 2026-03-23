@@ -43,21 +43,26 @@ def update_state(request: Request, payload: StateRequest):
         raise HTTPException(status_code=404, detail="Class not found")
 
     # Permission check
-    if new_state == 'locked':
-        if user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
-            raise HTTPException(status_code=403, detail="Only teachers and admins can lock.")
-    elif new_state == 'done' or new_state == '':
-        # If it is currently locked and they try to set it to '' or 'done', only teachers can do that
-        if current_state == 'locked' and user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
-            raise HTTPException(status_code=403, detail="Only teachers and admins can unlock a class.")
+    is_student = request.cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME) is not None
 
-        # Everyone can mark as done or edit (reset) if they have access to count
+    if new_state == 'locked':
+        if is_student or user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
+            raise HTTPException(status_code=403, detail="Only teachers and admins can lock a class.")
+    elif new_state in ['done', '']:
+        # If it is currently locked, students can NEVER change it
+        if current_state == 'locked':
+            if is_student or user_role not in [ADMIN_ROLE, TEACHER_ROLE]:
+                raise HTTPException(status_code=403, detail="Only teachers and admins can unlock a locked class.")
+
+        # Everyone else (verified students or all teachers/admins) can mark as done or edit if not locked
         allowed = False
         if user_role in [ADMIN_ROLE, TEACHER_ROLE]:
             allowed = True
-        elif student_auth_cookie:
-            if is_student_allowed(student_auth_cookie, class_name, day_identifier.lower()):
+        elif is_student:
+             student_auth_cookie = request.cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME)
+             if is_student_allowed(student_auth_cookie, class_name, day_identifier.lower()):
                 allowed = True
+        
         if not allowed:
             raise HTTPException(status_code=403, detail="Forbidden: You are not authorized to modify this class's state.")
 

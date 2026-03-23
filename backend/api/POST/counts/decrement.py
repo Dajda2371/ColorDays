@@ -39,7 +39,10 @@ def decrement_count(request: Request, payload: IncrementRequest):
     state_key = f"state{day_num}"
     cls_info = next((c for c in class_data_store if c['class'] == class_name), None)
     if cls_info and cls_info.get(state_key):
-         raise HTTPException(status_code=400, detail=f"Cannot modify data because it is marked as {cls_info[state_key]}.")
+        current_state = cls_info.get(state_key)
+        if current_state == 'locked' and student_auth_cookie:
+             raise HTTPException(status_code=403, detail="Forbidden: This class is locked by a teacher and cannot be modified.")
+        raise HTTPException(status_code=400, detail=f"Cannot modify data because it is marked as {current_state}.")
     
     try:
         with data_lock:

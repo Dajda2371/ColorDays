@@ -1,6 +1,7 @@
-// --- Global variable to store the current class name ---
 let currentClassName = null;
-let currentDayIdentifier = null; // Added to store the day
+let currentDayIdentifier = null;
+let userRole = null;
+let isStudent = false;
 
 // --- Wait for the DOM to be fully loaded ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -19,11 +20,12 @@ document.addEventListener('DOMContentLoaded', () => {
         return; // Stop further execution
     }
 
-    // Update the heading with the class name
     const classNameElement = document.getElementById('className');
     const classTeacherElement = document.getElementById('classTeacher');
+    const markAsDoneBtn = document.getElementById('markAsDoneButton');
+    const lockBtn = document.getElementById('lockButton');
+
     if (classNameElement) {
-        // Find if we have translations loaded somewhere, else fallback correctly
         let dayKey = '';
         const dayLower = currentDayIdentifier.toLowerCase();
         if (dayLower === 'monday' || dayLower === '1') dayKey = 'dayMonday';
@@ -38,12 +40,7 @@ document.addEventListener('DOMContentLoaded', () => {
             classNameElement.textContent = `${decodeURIComponent(currentClassName)} | ${dayDisplay}`;
         }
         classNameElement.removeAttribute('data-translate-key');
-    } else {
-        console.error("Element with ID 'className' not found.");
     }
-
-    const markAsDoneBtn = document.getElementById('markAsDoneButton');
-    const lockBtn = document.getElementById('lockButton');
 
     if (markAsDoneBtn) {
         markAsDoneBtn.addEventListener('click', () => handleStateChange('done'));
@@ -52,15 +49,27 @@ document.addEventListener('DOMContentLoaded', () => {
         lockBtn.addEventListener('click', () => handleStateChange('locked'));
     }
 
-    // Role check for Lock button
+    // Role check for Lock button and general permissions
     fetch('/api/auth/me')
         .then(res => res.json())
         .then(data => {
-            if (data.role === 'administrator' || data.role === 'teacher') {
-                if (lockBtn) lockBtn.style.display = 'inline-block';
+            userRole = data.role;
+            isStudent = data.is_student;
+            
+            if (lockBtn) {
+                if (!isStudent && (userRole === 'administrator' || userRole === 'teacher')) {
+                    lockBtn.style.display = 'inline-block';
+                } else {
+                    lockBtn.style.display = 'none';
+                }
             }
+            // Update UI once role is known
+            updateUIState();
         })
-        .catch(err => console.error("Error fetching user info:", err));
+        .catch(err => {
+            console.error("Error fetching user info:", err);
+            updateUIState();
+        });
 
     // Fetch class teacher
     fetch('/api/classes')
@@ -263,6 +272,11 @@ async function fetchData() {
 }
 
 async function handleStateChange(newState) {
+    if ((currentClassState === 'locked' || newState === 'locked') && !(['administrator', 'teacher'].includes(userRole))) {
+        alert(translations.stateUpdateFailedAlert?.[currentLanguage] || "You cannot modify or set the lock state.");
+        return;
+    }
+
     if (currentClassState === 'locked' && newState === 'locked') {
         // Special case: Unlock (which is the lock button in locked state)
         // should return the state to 'done'
@@ -304,7 +318,15 @@ function updateUIState() {
 
     // Reset common styles/states
     markDoneBtn.classList.remove('disabled');
-    if (lockBtn) lockBtn.classList.remove('disabled');
+    if (lockBtn) {
+        lockBtn.classList.remove('disabled');
+        // Strictly control Lock button visibility based on role
+        if (!isStudent && (userRole === 'administrator' || userRole === 'teacher')) {
+            lockBtn.style.display = 'inline-block';
+        } else {
+            lockBtn.style.display = 'none';
+        }
+    }
     allCountButtons.forEach(btn => btn.classList.remove('disabled'));
 
     if (currentClassState === 'done') {
@@ -316,7 +338,7 @@ function updateUIState() {
         markDoneBtn.style.color = '#155724';
         markDoneBtn.classList.remove('disabled');
 
-        if (lockBtn) {
+        if (lockBtn && lockBtn.style.display !== 'none') {
             // Lock stays LOCK, enabled, red
             lockBtn.setAttribute('data-translate-key', 'lockButtonText');
             lockBtn.classList.remove('disabled');
@@ -335,7 +357,7 @@ function updateUIState() {
         markDoneBtn.style.backgroundColor = '#d4edda';
         markDoneBtn.style.color = '#155724';
 
-        if (lockBtn) {
+        if (lockBtn && lockBtn.style.display !== 'none') {
             // Lock becomes UNLOCK, enabled, red
             lockBtn.setAttribute('data-translate-key', 'unlockButtonText');
             lockBtn.classList.remove('disabled');
@@ -354,7 +376,7 @@ function updateUIState() {
         markDoneBtn.style.color = '';
         markDoneBtn.classList.remove('disabled');
 
-        if (lockBtn) {
+        if (lockBtn && lockBtn.style.display !== 'none') {
             // Lock button stays LOCK, but is DISABLED
             lockBtn.setAttribute('data-translate-key', 'lockButtonText');
             lockBtn.classList.add('disabled');
