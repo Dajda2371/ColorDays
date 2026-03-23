@@ -55,10 +55,13 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(data => {
             userRole = data.role;
             isStudent = data.is_student;
-            if (userRole === 'administrator' || userRole === 'teacher') {
-                if (lockBtn) lockBtn.style.display = 'inline-block';
-            } else {
-                if (lockBtn) lockBtn.style.display = 'none';
+            
+            if (lockBtn) {
+                if (!isStudent && (userRole === 'administrator' || userRole === 'teacher')) {
+                    lockBtn.style.display = 'inline-block';
+                } else {
+                    lockBtn.style.display = 'none';
+                }
             }
             // Update UI once role is known
             updateUIState();
@@ -318,7 +321,7 @@ function updateUIState() {
     if (lockBtn) {
         lockBtn.classList.remove('disabled');
         // Strictly control Lock button visibility based on role
-        if (userRole === 'administrator' || userRole === 'teacher') {
+        if (!isStudent && (userRole === 'administrator' || userRole === 'teacher')) {
             lockBtn.style.display = 'inline-block';
         } else {
             lockBtn.style.display = 'none';
