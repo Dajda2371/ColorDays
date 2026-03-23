@@ -27,6 +27,11 @@ def is_student_allowed(student_code_from_cookie, requested_class_name, requested
     """
     global students_data_store, class_data_store
 
+    if not student_code_from_cookie:
+        return False
+    
+    student_code_from_cookie = student_code_from_cookie.strip(' \'"')
+
     current_student_data = None
     for s_data in students_data_store:
         if s_data.get('code') == student_code_from_cookie:
@@ -41,13 +46,20 @@ def is_student_allowed(student_code_from_cookie, requested_class_name, requested
     if not student_main_class:
         print(f"Security Check Failed: Student '{student_code_from_cookie}' has no main class assigned.")
         return False
+    
+    student_main_class = student_main_class.strip()
 
     student_personal_counting_list_str = current_student_data.get('counts_classes', '[]')
     student_personal_counting_set = set()
-    if student_personal_counting_list_str.startswith('[') and student_personal_counting_list_str.endswith(']'):
-        content = student_personal_counting_list_str[1:-1]
-        if content.strip():
-            student_personal_counting_set = {c.strip() for c in content.split(',') if c.strip()}
+    try:
+        parsed_list = json.loads(student_personal_counting_list_str)
+        if isinstance(parsed_list, list):
+            student_personal_counting_set = {str(c).strip() for c in parsed_list if str(c).strip()}
+    except json.JSONDecodeError:
+        if student_personal_counting_list_str.startswith('[') and student_personal_counting_list_str.endswith(']'):
+            content = student_personal_counting_list_str[1:-1]
+            if content.strip():
+                student_personal_counting_set = {c.strip(' \'"') for c in content.split(',') if c.strip()}
 
     day_map_to_iscountedby_flag = {"monday": "iscountedby1", "tuesday": "iscountedby2", "wednesday": "iscountedby3"}
     iscountedby_flag_for_day = day_map_to_iscountedby_flag.get(requested_day_identifier.lower())
@@ -56,11 +68,17 @@ def is_student_allowed(student_code_from_cookie, requested_class_name, requested
         print(f"Security Check Failed: Invalid day identifier '{requested_day_identifier}' for student '{student_code_from_cookie}'.")
         return False
 
-    if not any(cls_data.get(iscountedby_flag_for_day) == student_main_class for cls_data in class_data_store):
+    # Check if this student's class is assigned to count ANYTHING today (supervision check)
+    is_class_on_duty = any(
+        str(cls_data.get(iscountedby_flag_for_day, "")).strip() == student_main_class 
+        for cls_data in class_data_store
+    )
+    if not is_class_on_duty:
         print(f"Security Check Failed: Student '{student_code_from_cookie}' (main class: {student_main_class}) is not assigned to supervise counting on day '{requested_day_identifier}'.")
         return False
 
-    if requested_class_name not in student_personal_counting_set:
+    normalized_requested_class = str(requested_class_name).strip()
+    if normalized_requested_class not in student_personal_counting_set:
         print(f"Security Check Failed: Student '{student_code_from_cookie}' is not assigned to count class '{requested_class_name}'. Allowed: {student_personal_counting_set}")
         return False
 
