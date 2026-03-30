@@ -24,29 +24,61 @@ server_config = {}
 overrides_store = {}
 data_version = int(time.time())
 
-def load_overrides_from_json():
+def load_overrides_from_db():
     global overrides_store
-    config_file_path = DATA_DIR / 'overrides.json'
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    temp_config = {}
-    if config_file_path.is_file():
-        try:
-            with open(config_file_path, 'r', encoding='utf-8') as f:
-                temp_config = json.load(f)
-        except Exception:
-            pass
-    overrides_store.clear()
-    overrides_store.update(temp_config)
-
-def save_overrides_to_json():
-    config_file_path = DATA_DIR / 'overrides.json'
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    print("Loading overrides from database...")
     try:
-        with open(config_file_path, 'w', encoding='utf-8') as f:
-            json.dump(overrides_store, f, indent=4)
+        with get_db_connection(YEAR_DATABASE_FILE) as conn:
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS overrides (
+                    class_name TEXT,
+                    day TEXT,
+                    config_json TEXT,
+                    PRIMARY KEY (class_name, day)
+                )
+            ''')
+            rows = conn.execute("SELECT * FROM overrides").fetchall()
+            overrides_store.clear()
+            for row in rows:
+                c_name = row['class_name']
+                day = row['day']
+                try:
+                    config = json.loads(row['config_json'])
+                except Exception:
+                    config = {}
+                if c_name not in overrides_store:
+                    overrides_store[c_name] = {}
+                overrides_store[c_name][day] = config
+        print("Overrides loaded from database.")
+    except Exception as e:
+        print(f"Error loading overrides: {e}")
+
+def save_overrides_to_db():
+    global overrides_store
+    print("Saving overrides to database...")
+    try:
+        with get_db_connection(YEAR_DATABASE_FILE) as conn:
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS overrides (
+                    class_name TEXT,
+                    day TEXT,
+                    config_json TEXT,
+                    PRIMARY KEY (class_name, day)
+                )
+            ''')
+            conn.execute("DELETE FROM overrides")
+            for c_name, days_data in overrides_store.items():
+                for day, config in days_data.items():
+                    conn.execute(
+                        "INSERT INTO overrides (class_name, day, config_json) VALUES (?, ?, ?)",
+                        (c_name, day, json.dumps(config))
+                    )
+            conn.commit()
         increment_data_version()
+        print("Overrides saved to database.")
         return True
-    except Exception:
+    except Exception as e:
+        print(f"Error saving overrides: {e}")
         return False
 
 def increment_data_version():

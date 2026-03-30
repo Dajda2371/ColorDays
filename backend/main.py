@@ -13,11 +13,11 @@ from data_manager import (
     load_class_data_from_db,
     load_students_data_from_db,
     load_main_config_from_json,
-    load_overrides_from_json,
+    load_overrides_from_db,
     create_tables,
     server_config,
     overrides_store,
-    save_overrides_to_json
+    save_overrides_to_db
 )
 from dependencies import get_current_user_info, active_sessions
 import importlib.util
@@ -42,7 +42,7 @@ async def lifespan(app: FastAPI):
         load_class_data_from_db()
         load_students_data_from_db()
         load_main_config_from_json()
-        load_overrides_from_json()
+        load_overrides_from_db()
     except Exception as e:
         print(f"Error loading initial data: {e}")
 
