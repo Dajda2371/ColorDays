@@ -27,7 +27,7 @@ def get_leaderboard(request: Request, user_info=Depends(get_current_user_info)):
         if class_name in overrides_store:
             for day in days:
                 day_override = overrides_store[class_name].get(day, {})
-                not_checked = not day_override.get('checkbox', True)
+                is_checked = day_override.get('checkbox', False)
                 try:
                     sp = int(day_override.get('student_points', ''))
                     ns = int(day_override.get('number_of_students', ''))
@@ -37,7 +37,7 @@ def get_leaderboard(request: Request, user_info=Depends(get_current_user_info)):
                 except ValueError:
                     valid_ints = False
                 
-                if not_checked and valid_ints:
+                if is_checked and valid_ints:
                     # Override active! Replace the normal score with this one.
                     scores[class_name]['score'] += sp + (tp * 2)
                     scores[class_name]['students'] += ns

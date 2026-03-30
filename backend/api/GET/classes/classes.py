@@ -27,7 +27,7 @@ def get_classes(request: Request, user_info=Depends(get_current_user_info)):
                 is_override_active = False
                 if class_name in overrides_store:
                     day_override = overrides_store[class_name].get(day, {})
-                    not_checked = not day_override.get('checkbox', True)
+                    is_checked = day_override.get('checkbox', False)
                     try:
                         int(day_override.get('student_points', ''))
                         int(day_override.get('number_of_students', ''))
@@ -36,7 +36,7 @@ def get_classes(request: Request, user_info=Depends(get_current_user_info)):
                         valid_ints = True
                     except ValueError:
                         valid_ints = False
-                    if not_checked and valid_ints:
+                    if is_checked and valid_ints:
                         is_override_active = True
                 cls_copy[f'override_{day}'] = is_override_active
             response_data.append(cls_copy)

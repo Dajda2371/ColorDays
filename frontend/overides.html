@@ -28,17 +28,14 @@
 <body>
     <div id="leftSideContainer">
         <button class="header-button" onclick="window.location.href='menu.html'">Back to Menu</button>
+        <button id="saveButton" class="header-button" style="display:none; margin-top: 10px;">Save Overrides</button>
     </div>
     
     <div id="mainContent" style="max-width: 1000px; padding: 20px;">
         <h1>Overrides Management</h1>
-        <p>If "Override" is <b>unchecked</b> and all int inputs are filled, the leaderboard uses these numbers instead.</p>
+        <p>If "Override" is <b>checked</b> and all int inputs are filled, the leaderboard uses these numbers instead.</p>
         
         <div id="tablesContainer">Loading...</div>
-        
-        <div class="controls">
-            <button id="saveButton" class="header-button" style="display:none; margin: 0 auto; padding: 10px 40px;">Save Overrides</button>
-        </div>
     </div>
 
     <script src="overides.js"></script>
