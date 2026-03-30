@@ -21,7 +21,33 @@ class_data_store = []
 students_data_store = []
 user_password_store = {}
 server_config = {}
+overrides_store = {}
 data_version = int(time.time())
+
+def load_overrides_from_json():
+    global overrides_store
+    config_file_path = DATA_DIR / 'overrides.json'
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    temp_config = {}
+    if config_file_path.is_file():
+        try:
+            with open(config_file_path, 'r', encoding='utf-8') as f:
+                temp_config = json.load(f)
+        except Exception:
+            pass
+    overrides_store.clear()
+    overrides_store.update(temp_config)
+
+def save_overrides_to_json():
+    config_file_path = DATA_DIR / 'overrides.json'
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(config_file_path, 'w', encoding='utf-8') as f:
+            json.dump(overrides_store, f, indent=4)
+        increment_data_version()
+        return True
+    except Exception:
+        return False
 
 def increment_data_version():
     """Increments the global data version counter."""
