@@ -34,6 +34,22 @@ def increment_count(request: Request, payload: IncrementRequest):
         if not is_student_allowed(student_code, class_name, day_identifier.lower()):
              raise HTTPException(status_code=403, detail="Forbidden: You are not authorized to modify counts for this class/day.")
 
+    # Override Check
+    from data_manager import overrides_store
+    day_override = overrides_store.get(class_name, {}).get(day_identifier.lower(), {})
+    is_checked = day_override.get('checkbox', False)
+    try:
+        int(day_override.get('student_points', ''))
+        int(day_override.get('number_of_students', ''))
+        int(day_override.get('teacher_points', ''))
+        int(day_override.get('number_of_teachers', ''))
+        valid_ints = True
+    except ValueError:
+        valid_ints = False
+    
+    if is_checked and valid_ints:
+        raise HTTPException(status_code=403, detail="Class is overridden by admin for this day. Edits are disabled.")
+
     # State Check
     from data_manager import class_data_store
     day_num = {'monday': '1', 'tuesday': '2', 'wednesday': '3'}.get(day_identifier.lower(), '1')

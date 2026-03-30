@@ -76,8 +76,18 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(response => response.json())
         .then(classes => {
             const currentClassInfo = classes.find(c => c.class === decodeURIComponent(currentClassName));
-            if (currentClassInfo && classTeacherElement) {
-                classTeacherElement.textContent = currentClassInfo.teacher || '';
+            if (currentClassInfo) {
+                if (classTeacherElement) classTeacherElement.textContent = currentClassInfo.teacher || '';
+                
+                const dayLower = currentDayIdentifier.toLowerCase();
+                const dayMapped = dayLower === '1' ? 'monday' : dayLower === '2' ? 'tuesday' : dayLower === '3' ? 'wednesday' : dayLower;
+                const overrideKey = 'override_' + dayMapped;
+                
+                if (currentClassInfo[overrideKey]) {
+                    alert(translations.overrideActiveAlert?.[currentLanguage] || "This class is currently overridden by an Administrator. Editing is disabled.");
+                    window.location.href = 'menu.html';
+                    return;
+                }
             }
         })
         .catch(error => console.error("Error fetching class details:", error));
