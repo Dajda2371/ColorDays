@@ -103,6 +103,9 @@ async function loadLeaderboard(showLoading = true) {
                 } else if (state === 'locked') {
                     color = '#f8d7da'; // light red
                     content = '🔒';
+                } else if (state === 'overridden') {
+                    color = '#cce5ff'; // light blue
+                    content = '⚙️';
                 }
                 return `<td style="background-color: ${color}; text-align: center; font-size: 0.8em; min-width: 30px;">${content}</td>`;
             };

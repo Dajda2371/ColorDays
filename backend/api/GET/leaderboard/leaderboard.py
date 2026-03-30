@@ -88,15 +88,19 @@ def get_leaderboard(request: Request, user_info=Depends(get_current_user_info)):
             percentage = 0
             
         states = class_states.get(k, ('', '', ''))
+        
+        state1 = 'overridden' if v.get('override_monday', False) else states[0]
+        state2 = 'overridden' if v.get('override_tuesday', False) else states[1]
+        state3 = 'overridden' if v.get('override_wednesday', False) else states[2]
 
         leaderboard_data.append({
             "class": k,
             "score": score,
             "people": students + teachers,
             "percentage": f"{percentage}%",
-            "state1": states[0],
-            "state2": states[1],
-            "state3": states[2]
+            "state1": state1,
+            "state2": state2,
+            "state3": state3
         })
 
     leaderboard_data.sort(key=lambda x: float(x["percentage"].replace('%', '')), reverse=True)
