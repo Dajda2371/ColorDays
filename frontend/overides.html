@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Color Days - Overrides</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .override-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        .override-table th, .override-table td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: center;
+        }
+        .day-heading {
+            margin-top: 30px;
+        }
+        .controls {
+            margin: 20px 0;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div id="leftSideContainer">
+        <button class="header-button" onclick="window.location.href='menu.html'">Back to Menu</button>
+        <button id="saveButton" class="header-button" style="display:none; margin-top: 10px;">Save Overrides</button>
+    </div>
+    
+    <div id="mainContent" style="max-width: 1000px; padding: 20px;">
+        <h1>Overrides Management</h1>
+        <p>If "Override" is <b>checked</b> and all int inputs are filled, the leaderboard uses these numbers instead.</p>
+        
+        <div id="tablesContainer">Loading...</div>
+    </div>
+
+    <script src="overides.js"></script>
+</body>
+</html>

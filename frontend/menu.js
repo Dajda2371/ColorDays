@@ -243,6 +243,15 @@ async function loadAndDisplayClasses() {
                                 if (stateValue === 'done') link.classList.add('class-button-done');
                                 else if (stateValue === 'locked') link.classList.add('class-button-locked');
 
+                                const overrideKey = 'override_' + day.defaultName.toLowerCase();
+                                if (cls[overrideKey]) {
+                                    link.classList.add('class-button-locked');
+                                    link.style.pointerEvents = 'none';
+                                    link.style.opacity = '0.5';
+                                    link.removeAttribute('href');
+                                    link.title = 'Overridden by Admin';
+                                }
+
                                 groupDiv.appendChild(link);
                             });
                             daySectionDiv.appendChild(groupDiv);
@@ -259,6 +268,15 @@ async function loadAndDisplayClasses() {
                             const stateValue = cls[stateKey];
                             if (stateValue === 'done') link.classList.add('class-button-done');
                             else if (stateValue === 'locked') link.classList.add('class-button-locked');
+
+                            const overrideKey = 'override_' + day.defaultName.toLowerCase();
+                            if (cls[overrideKey]) {
+                                link.classList.add('class-button-locked');
+                                link.style.pointerEvents = 'none';
+                                link.style.opacity = '0.5';
+                                link.removeAttribute('href');
+                                link.title = 'Overridden by Admin';
+                            }
 
                             listItem.appendChild(link);
                             ul.appendChild(listItem);
@@ -319,6 +337,15 @@ async function loadAndDisplayClasses() {
                         if (stateValue === 'done') link.classList.add('class-button-done');
                         else if (stateValue === 'locked') link.classList.add('class-button-locked');
 
+                        const overrideKey = 'override_' + day.defaultName.toLowerCase();
+                        if (cls[overrideKey]) {
+                            link.classList.add('class-button-locked');
+                            link.style.pointerEvents = 'none';
+                            link.style.opacity = '0.5';
+                            link.removeAttribute('href');
+                            link.title = 'Overridden by Admin';
+                        }
+
                         groupDiv.appendChild(link);
                     });
                     daySectionDiv.appendChild(groupDiv);
@@ -336,6 +363,15 @@ async function loadAndDisplayClasses() {
                     const stateValue = cls[stateKey];
                     if (stateValue === 'done') link.classList.add('class-button-done');
                     else if (stateValue === 'locked') link.classList.add('class-button-locked');
+
+                    const overrideKey = 'override_' + day.defaultName.toLowerCase();
+                    if (cls[overrideKey]) {
+                        link.classList.add('class-button-locked');
+                        link.style.pointerEvents = 'none';
+                        link.style.opacity = '0.5';
+                        link.removeAttribute('href');
+                        link.title = 'Overridden by Admin';
+                    }
 
                     listItem.appendChild(link);
                     ul.appendChild(listItem);
@@ -425,9 +461,13 @@ async function manageButtonVisibility() {
         if (response.ok) {
             console.log("User is an admin. Showing Config button.");
             if (configButton) configButton.style.display = 'inline-block';
+            const overridesButton = document.getElementById('overridesButton');
+            if (overridesButton) overridesButton.style.display = 'inline-block';
         } else {
             console.log("User is not an admin. Config button remains hidden.");
             if (configButton) configButton.style.display = 'none';
+            const overridesButton = document.getElementById('overridesButton');
+            if (overridesButton) overridesButton.style.display = 'none';
         }
     } catch (error) {
         console.error("Error checking admin status:", error);

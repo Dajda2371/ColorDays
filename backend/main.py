@@ -13,8 +13,11 @@ from data_manager import (
     load_class_data_from_db,
     load_students_data_from_db,
     load_main_config_from_json,
+    load_overrides_from_db,
     create_tables,
-    server_config
+    server_config,
+    overrides_store,
+    save_overrides_to_db
 )
 from dependencies import get_current_user_info, active_sessions
 import importlib.util
@@ -39,6 +42,7 @@ async def lifespan(app: FastAPI):
         load_class_data_from_db()
         load_students_data_from_db()
         load_main_config_from_json()
+        load_overrides_from_db()
     except Exception as e:
         print(f"Error loading initial data: {e}")
 
@@ -182,6 +186,7 @@ include_routers_recursively(app, BACKEND_DIR / "api")
 @app.get("/menu.html")
 @app.get("/classes.html")
 @app.get("/config.html")
+@app.get("/overides.html")
 @app.get("/students.html")
 @app.get("/change-password.html")
 @app.get("/leaderboard.html")
@@ -205,7 +210,7 @@ async def protected_pages(request: Request):
     if request.cookies.get(CHANGE_PASSWORD_COOKIE_NAME) and path != "/change-password.html":
         return RedirectResponse("/change-password.html?forced=true")
 
-    if path == "/config.html":
+    if path in ["/config.html", "/overides.html"]:
         if user_role != ADMIN_ROLE:
              return JSONResponse(status_code=403, content={"error": "Forbidden: Administrator access required."})
 

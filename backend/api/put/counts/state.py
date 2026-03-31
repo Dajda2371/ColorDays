@@ -25,6 +25,22 @@ def update_state(request: Request, payload: StateRequest):
     user_key, user_role = get_current_user_info(request)
     student_auth_cookie = request.cookies.get(SQL_AUTH_USER_STUDENT_COOKIE_NAME)
 
+    # Override Check
+    from data_manager import overrides_store
+    day_override = overrides_store.get(class_name, {}).get(day_identifier.lower(), {})
+    is_checked = day_override.get('checkbox', False)
+    try:
+        int(day_override.get('student_points', ''))
+        int(day_override.get('number_of_students', ''))
+        int(day_override.get('teacher_points', ''))
+        int(day_override.get('number_of_teachers', ''))
+        valid_ints = True
+    except ValueError:
+        valid_ints = False
+    
+    if is_checked and valid_ints:
+        raise HTTPException(status_code=403, detail="Class is overridden by admin for this day. Edits are disabled.")
+
     # Find the class first to get current state
     day_num = {'monday': '1', 'tuesday': '2', 'wednesday': '3'}[day_identifier.lower()]
     state_key = f'state{day_num}'
