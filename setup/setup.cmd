@@ -1,1 +1,0 @@
-echo ERROR: Windows is not supported yet
